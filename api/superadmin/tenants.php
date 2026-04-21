@@ -1,0 +1,292 @@
+<?php
+declare(strict_types=1);
+
+/**
+ * Super-Admin: Tenants CRUD Endpoint
+ * GET  /api/superadmin/tenants              - List all tenants
+ * GET  /api/superadmin/tenants?id=X         - Get tenant detail + stats
+ * POST /api/superadmin/tenants              - Create tenant (+ admin user)
+ * POST /api/superadmin/tenants action=update - Update tenant (incl NAW)
+ * POST /api/superadmin/tenants action=delete - Delete tenant
+ * POST /api/superadmin/tenants action=update_role - Change user role
+ */
+
+require_once __DIR__ . '/../../models/Tenant.php';
+require_once __DIR__ . '/../../models/User.php';
+
+$db = Database::getInstance()->getConnection();
+$tenantModel = new Tenant($db);
+$userModel = new User($db);
+$method = $_SERVER['REQUEST_METHOD'];
+
+switch ($method) {
+    case 'GET':
+        // Detail view: ?id=X
+        $tenantId = (int) ($_GET['id'] ?? 0);
+        if ($tenantId > 0) {
+            handleDetail($tenantModel, $tenantId);
+        } else {
+            // List all tenants
+            $tenants = $tenantModel->getAll();
+            $safeTenants = array_map(function ($t) {
+                unset($t['secret_key'], $t['mollie_api_key']);
+                return $t;
+            }, $tenants);
+            Response::success(['tenants' => $safeTenants]);
+        }
+        break;
+
+    case 'POST':
+        $input = getJsonInput();
+        $action = $input['action'] ?? 'create';
+
+        switch ($action) {
+            case 'create':
+                handleCreate($tenantModel, $userModel, $input, $db);
+                break;
+            case 'update':
+                handleUpdate($tenantModel, $input, $db);
+                break;
+            case 'delete':
+                handleDelete($tenantModel, $input, $db);
+                break;
+            case 'update_role':
+                handleUpdateRole($userModel, $input, $db);
+                break;
+            default:
+                Response::error('Invalid action. Use: create, update, delete, update_role', 'INVALID_ACTION', 400);
+        }
+        break;
+
+    default:
+        Response::error('Method not allowed', 'METHOD_NOT_ALLOWED', 405);
+}
+
+function handleDetail(Tenant $model, int $tenantId): void
+{
+    $tenant = $model->findById($tenantId);
+    if (!$tenant) {
+        Response::notFound('Tenant niet gevonden');
+    }
+    unset($tenant['secret_key']);
+
+    $stats = $model->getTenantStats($tenantId);
+    $users = $model->getUsersWithWallets($tenantId);
+
+    // Remove sensitive data from users
+    $safeUsers = array_map(function ($u) {
+        unset($u['password_hash']);
+        return $u;
+    }, $users);
+
+    Response::success([
+        'tenant' => $tenant,
+        'stats'  => $stats,
+        'users'  => $safeUsers,
+    ]);
+}
+
+function handleCreate(Tenant $model, User $userModel, array $input, PDO $db): void
+{
+    $v = new Validator();
+    $v->string('name', $input['name'] ?? '', 2, 255)
+      ->slug('slug', $input['slug'] ?? '');
+
+    if (isset($input['brand_color'])) {
+        $v->hexColor('brand_color', $input['brand_color']);
+    }
+    if (isset($input['secondary_color'])) {
+        $v->hexColor('secondary_color', $input['secondary_color']);
+    }
+    // Validate NAW fields if present
+    if (isset($input['contact_email']) && !empty($input['contact_email'])) {
+        if (!isValidEmail($input['contact_email'])) {
+            Response::error('Ongeldig contact e-mailadres', 'INVALID_EMAIL', 400);
+        }
+    }
+    $v->validate();
+
+    // Check slug uniqueness
+    $existing = $model->findBySlug($input['slug']);
+    if ($existing) {
+        Response::error('Slug already in use', 'SLUG_EXISTS', 409);
+    }
+
+    $tenantId = $model->create($input);
+
+    // Auto-create admin user for the new tenant
+    $adminEmail = $input['contact_email'] ?? ($input['slug'] . '@stamgast.nl');
+    $adminPassword = substr(bin2hex(random_bytes(12)), 0, 16); // 16-char random password
+    $adminFirstName = $input['contact_name'] ?? 'Admin';
+    $nameParts = explode(' ', trim($adminFirstName), 2);
+    $firstName = $nameParts[0];
+    $lastName = $nameParts[1] ?? $input['name'];
+
+    $userModel->create([
+        'tenant_id'     => $tenantId,
+        'email'         => $adminEmail,
+        'password_hash' => password_hash($adminPassword, PASSWORD_ARGON2ID),
+        'role'          => 'admin',
+        'first_name'    => $firstName,
+        'last_name'     => $lastName,
+    ]);
+
+    // Create wallet for admin user
+    $adminUserId = (int) $db->lastInsertId();
+    $stmt = $db->prepare(
+        'INSERT INTO `wallets` (`user_id`, `tenant_id`, `balance_cents`, `points_cents`)
+         VALUES (:uid, :tid, 0, 0)'
+    );
+    $stmt->execute([':uid' => $adminUserId, ':tid' => $tenantId]);
+
+    // Send email with credentials to contact_email
+    $contactEmail = $input['contact_email'] ?? null;
+    if ($contactEmail && isValidEmail($contactEmail)) {
+        $subject = 'STAMGAST - Jouw inloggegevens voor ' . $input['name'];
+        $body = "<h2>Welkom bij STAMGAST!</h2>"
+              . "<p>Er is een account aangemaakt voor <strong>" . htmlspecialchars($input['name']) . "</strong>.</p>"
+              . "<p><strong>Inloggegevens:</strong></p>"
+              . "<ul>"
+              . "<li>E-mail: <code>" . htmlspecialchars($adminEmail) . "</code></li>"
+              . "<li>Wachtwoord: <code>" . htmlspecialchars($adminPassword) . "</code></li>"
+              . "</ul>"
+              . "<p>Log in op jouw STAMGAST omgeving om te beginnen.</p>"
+              . "<p><em>Verander je wachtwoord na het eerste inloggen!</em></p>";
+
+        $stmt = $db->prepare(
+            'INSERT INTO `email_queue` (`tenant_id`, `user_id`, `subject`, `body_html`, `status`)
+             VALUES (:tid, :uid, :subject, :body, \'pending\')'
+        );
+        $stmt->execute([
+            ':tid'     => $tenantId,
+            ':uid'     => $adminUserId,
+            ':subject' => $subject,
+            ':body'    => $body,
+        ]);
+
+        // Also try to send directly
+        $headers = "From: noreply@stamgast.nl\r\nContent-Type: text/html; charset=UTF-8\r\n";
+        @mail($contactEmail, $subject, $body, $headers);
+    }
+
+    // Audit log
+    $audit = new Audit($db);
+    $audit->log(
+        0,
+        currentUserId(),
+        'tenant.created',
+        'tenant',
+        $tenantId,
+        ['name' => $input['name'], 'slug' => $input['slug'], 'admin_email' => $adminEmail]
+    );
+
+    $tenant = $model->findById($tenantId);
+    unset($tenant['secret_key']);
+
+    Response::success([
+        'tenant'         => $tenant,
+        'admin_email'    => $adminEmail,
+        'admin_password' => $adminPassword,
+    ], 201);
+}
+
+function handleUpdate(Tenant $model, array $input, PDO $db): void
+{
+    $tenantId = (int) ($input['tenant_id'] ?? 0);
+    if ($tenantId <= 0) {
+        Response::error('tenant_id is required', 'MISSING_FIELD', 400);
+    }
+
+    $existing = $model->findById($tenantId);
+    if (!$existing) {
+        Response::notFound('Tenant not found');
+    }
+
+    // Validate fields if present
+    $v = new Validator();
+    if (isset($input['name'])) $v->string('name', $input['name'], 2, 255);
+    if (isset($input['slug'])) $v->slug('slug', $input['slug']);
+    if (isset($input['brand_color'])) $v->hexColor('brand_color', $input['brand_color']);
+    if (isset($input['secondary_color'])) $v->hexColor('secondary_color', $input['secondary_color']);
+    if (isset($input['mollie_status'])) $v->enum('mollie_status', $input['mollie_status'], ['mock', 'test', 'live']);
+    if (isset($input['contact_email']) && !empty($input['contact_email'])) {
+        if (!isValidEmail($input['contact_email'])) {
+            Response::error('Ongeldig contact e-mailadres', 'INVALID_EMAIL', 400);
+        }
+    }
+    $v->validate();
+
+    // Check slug uniqueness if changing
+    if (isset($input['slug']) && $input['slug'] !== $existing['slug']) {
+        $slugCheck = $model->findBySlug($input['slug']);
+        if ($slugCheck) {
+            Response::error('Slug already in use', 'SLUG_EXISTS', 409);
+        }
+    }
+
+    $model->update($tenantId, $input);
+
+    $audit = new Audit($db);
+    $audit->log(0, currentUserId(), 'tenant.updated', 'tenant', $tenantId, $input);
+
+    $updated = $model->findById($tenantId);
+    unset($updated['secret_key']);
+
+    Response::success(['tenant' => $updated]);
+}
+
+function handleDelete(Tenant $model, array $input, PDO $db): void
+{
+    $tenantId = (int) ($input['tenant_id'] ?? 0);
+    if ($tenantId <= 0) {
+        Response::error('tenant_id is required', 'MISSING_FIELD', 400);
+    }
+
+    $existing = $model->findById($tenantId);
+    if (!$existing) {
+        Response::notFound('Tenant not found');
+    }
+
+    $audit = new Audit($db);
+    $audit->log(0, currentUserId(), 'tenant.deleted', 'tenant', $tenantId, ['name' => $existing['name']]);
+
+    $model->delete($tenantId);
+
+    Response::success(['deleted' => true]);
+}
+
+function handleUpdateRole(User $userModel, array $input, PDO $db): void
+{
+    $userId = (int) ($input['user_id'] ?? 0);
+    $newRole = $input['role'] ?? '';
+    $allowedRoles = ['admin', 'bartender', 'guest'];
+
+    if ($userId <= 0) {
+        Response::error('user_id is required', 'MISSING_FIELD', 400);
+    }
+    if (!in_array($newRole, $allowedRoles, true)) {
+        Response::error('Ongeldige rol. Gebruik: admin, bartender, guest', 'INVALID_ROLE', 400);
+    }
+
+    $user = $userModel->findById($userId);
+    if (!$user) {
+        Response::notFound('Gebruiker niet gevonden');
+    }
+    if ($user['role'] === 'superadmin') {
+        Response::error('Kan superadmin rol niet wijzigen', 'FORBIDDEN', 403);
+    }
+
+    $userModel->updateRole($userId, $newRole);
+
+    $audit = new Audit($db);
+    $audit->log(
+        (int) $user['tenant_id'],
+        currentUserId(),
+        'user.role_changed',
+        'user',
+        $userId,
+        ['old_role' => $user['role'], 'new_role' => $newRole]
+    );
+
+    Response::success(['user_id' => $userId, 'new_role' => $newRole]);
+}

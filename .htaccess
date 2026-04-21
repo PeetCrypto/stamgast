@@ -1,0 +1,83 @@
+# ==========================================================================
+# STAMGAST - Apache Configuration
+# Security headers, rewrite rules, and access restrictions
+# ==========================================================================
+
+# --- ENABLE REWRITE ENGINE ---
+RewriteEngine On
+
+# --- SET BASE PATH (adjust if in subdirectory) ---
+RewriteBase /
+
+# --- SECURITY HEADERS ---
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set X-XSS-Protection "1; mode=block"
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+    Header set Permissions-Policy "camera=(self), geolocation=()"
+    # Remove server signature
+    Header unset Server
+    ServerSignature Off
+</IfModule>
+
+# --- BLOCK ACCESS TO SENSITIVE FILES ---
+# Block direct access to config, models, services, middleware, utils, views, sql
+RewriteRule ^config/ - [F,L]
+RewriteRule ^models/ - [F,L]
+RewriteRule ^services/ - [F,L]
+RewriteRule ^middleware/ - [F,L]
+RewriteRule ^utils/ - [F,L]
+RewriteRule ^views/ - [F,L]
+RewriteRule ^sql/ - [F,L]
+
+# Block hidden files (.env, .git, .htaccess itself from listing)
+<FilesMatch "^\.">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Block access to sensitive file types
+<FilesMatch "\.(sql|log|env|yml|yaml|json|lock|md)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Allow manifest.json.php for PWA
+<FilesMatch "manifest\.json\.php$">
+    Order allow,deny
+    Allow from all
+</FilesMatch>
+
+# --- ROUTING ---
+# Route all requests (except existing files and public/) through index.php
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_URI} !^/public/
+RewriteRule ^(.*)$ index.php?route=$1 [QSA,L]
+
+# --- PHP SETTINGS (if allowed by host) ---
+<IfModule mod_php.c>
+    php_value session.cookie_httponly 1
+    php_value session.cookie_secure 1
+    php_value session.use_strict_mode 1
+    php_value session.cookie_samesite "Strict"
+    php_value expose_php 0
+</IfModule>
+
+# --- DEFAULT CHARSET ---
+AddDefaultCharset UTF-8
+
+# --- GZIP COMPRESSION ---
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/css application/json application/javascript text/xml
+</IfModule>
+
+# --- BROWSER CACHING for static assets ---
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css "access plus 1 week"
+    ExpiresByType application/javascript "access plus 1 week"
+    ExpiresByType image/png "access plus 1 month"
+    ExpiresByType image/svg+xml "access plus 1 month"
+</IfModule>

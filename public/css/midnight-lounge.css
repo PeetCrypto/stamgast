@@ -1,0 +1,319 @@
+/* ==========================================================================
+ * MIDNIGHT LOUNGE - Design System Framework
+ * STAMGAST Loyalty Platform
+ *
+ * Hoofdcss: variabelen, reset, basislayout, typografie, containers, animaties
+ * Laatste update: 2026-04-17
+ * ========================================================================== */
+
+/* --------------------------------------------------------------------------
+ * 1. CSS CUSTOM PROPERTIES (Design Tokens)
+ * -------------------------------------------------------------------------- */
+:root {
+    /* Achtergrond */
+    --bg-darkest: #0f0f0f;
+    --bg-lightest: #1a1a1a;
+
+    /* Glasmorfisme */
+    --glass-bg: rgba(255, 255, 255, 0.05);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+
+    /* Tekst */
+    --text-primary: #ffffff;
+    --text-secondary: rgba(255, 255, 255, 0.6);
+    --text-muted: rgba(255, 255, 255, 0.4);
+
+    /* Accenten (per-tenant overschrijfbaar via inline style) */
+    --accent-primary: #FFC107;
+    --accent-secondary: #FF9800;
+    --accent-gradient: linear-gradient(135deg, #FFC107 0%, #FF9800 100%);
+
+    /* Semantische kleuren */
+    --success: #4CAF50;
+    --error: #f44336;
+    --warning: #FF9800;
+    --info: #2196F3;
+
+    /* Randradius */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 24px;
+    --radius-full: 9999px;
+
+    /* Typografie */
+    --font-stack: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+
+    /* Overgangen */
+    --transition-fast: all 150ms ease-out;
+    --transition: all 200ms ease-out;
+    --transition-slow: all 300ms ease-out;
+
+    /* Z-index lagen */
+    --z-base: 1;
+    --z-dropdown: 50;
+    --z-sticky: 100;
+    --z-overlay: 200;
+    --z-modal: 300;
+    --z-toast: 400;
+
+    /* Spacing */
+    --space-xs: 0.25rem;
+    --space-sm: 0.5rem;
+    --space-md: 1rem;
+    --space-lg: 1.5rem;
+    --space-xl: 2rem;
+    --space-2xl: 3rem;
+    --space-3xl: 4rem;
+}
+
+/* --------------------------------------------------------------------------
+ * 2. RESET
+ * -------------------------------------------------------------------------- */
+*,
+*::before,
+*::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* --------------------------------------------------------------------------
+ * 3. BASISLAYOUT
+ * -------------------------------------------------------------------------- */
+html {
+    height: 100%;
+    -webkit-text-size-adjust: 100%;
+}
+
+body {
+    font-family: var(--font-stack);
+    background: linear-gradient(180deg, var(--bg-darkest) 0%, var(--bg-lightest) 100%);
+    color: var(--text-primary);
+    min-height: 100vh;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+}
+
+a {
+    color: var(--accent-primary);
+    text-decoration: none;
+    transition: var(--transition-fast);
+}
+
+a:hover {
+    color: var(--accent-secondary);
+}
+
+img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+}
+
+/* --------------------------------------------------------------------------
+ * 4. CONTAINERS
+ * -------------------------------------------------------------------------- */
+.container {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: var(--space-md);
+}
+
+.container-wide {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: var(--space-md);
+}
+
+/* --------------------------------------------------------------------------
+ * 5. TYPOGRAFIE
+ * -------------------------------------------------------------------------- */
+h1 {
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+}
+
+h2 {
+    font-size: 22px;
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+}
+
+h3 {
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+h4 {
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.5;
+}
+
+p {
+    margin-bottom: var(--space-sm);
+}
+
+small {
+    font-size: 14px;
+}
+
+.text-secondary { color: var(--text-secondary); }
+.text-muted     { color: var(--text-muted); }
+.text-accent    { color: var(--accent-primary); }
+.text-success   { color: var(--success); }
+.text-error     { color: var(--error); }
+.text-warning   { color: var(--warning); }
+.text-center    { text-align: center; }
+.text-right     { text-align: right; }
+.text-bold      { font-weight: 600; }
+.text-sm        { font-size: 14px; }
+.text-xs        { font-size: 12px; }
+
+/* --------------------------------------------------------------------------
+ * 6. GLASMORFISME KAARTEN
+ * -------------------------------------------------------------------------- */
+.glass-card {
+    background: var(--glass-bg);
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--glass-shadow);
+    padding: var(--space-lg);
+}
+
+.glass-card--flat {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: none;
+}
+
+.glass-card--accent {
+    background: var(--glass-bg);
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
+    border: 1px solid rgba(255, 193, 7, 0.3);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--glass-shadow), 0 0 20px rgba(255, 193, 7, 0.1);
+    padding: var(--space-lg);
+}
+
+/* --------------------------------------------------------------------------
+ * 7. LAYOUT HELPERS
+ * -------------------------------------------------------------------------- */
+.flex          { display: flex; }
+.flex-col      { flex-direction: column; }
+.flex-wrap     { flex-wrap: wrap; }
+.items-center  { align-items: center; }
+.justify-between { justify-content: space-between; }
+.justify-center  { justify-content: center; }
+.gap-1  { gap: var(--space-sm); }
+.gap-2  { gap: var(--space-md); }
+.gap-3  { gap: var(--space-lg); }
+
+.grid     { display: grid; }
+.grid-2   { grid-template-columns: repeat(2, 1fr); }
+.grid-3   { grid-template-columns: repeat(3, 1fr); }
+
+.w-full   { width: 100%; }
+.hidden   { display: none !important; }
+
+/* --------------------------------------------------------------------------
+ * 8. SPACING UTILITIES
+ * -------------------------------------------------------------------------- */
+.mt-1 { margin-top: 0.5rem; }
+.mt-2 { margin-top: 1rem; }
+.mt-3 { margin-top: 1.5rem; }
+.mt-4 { margin-top: 2rem; }
+.mt-5 { margin-top: 3rem; }
+
+.mb-1 { margin-bottom: 0.5rem; }
+.mb-2 { margin-bottom: 1rem; }
+.mb-3 { margin-bottom: 1.5rem; }
+.mb-4 { margin-bottom: 2rem; }
+
+.mx-auto { margin-left: auto; margin-right: auto; }
+
+.pt-1 { padding-top: 0.5rem; }
+.pt-2 { padding-top: 1rem; }
+.pb-2 { padding-bottom: 1rem; }
+.px-2 { padding-left: 1rem; padding-right: 1rem; }
+.py-2 { padding-top: 1rem; padding-bottom: 1rem; }
+
+/* --------------------------------------------------------------------------
+ * 9. ANIMATIES
+ * -------------------------------------------------------------------------- */
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.5; }
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+@keyframes shimmer {
+    0%   { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+
+.animate-in      { animation: fadeInUp 200ms ease-out; }
+.animate-fade    { animation: fadeIn 300ms ease-out; }
+.animate-pulse   { animation: pulse 2s ease-in-out infinite; }
+.animate-spin    { animation: spin 1s linear infinite; }
+
+/* --------------------------------------------------------------------------
+ * 10. RESPONSIVE BREAKPOINTS
+ * -------------------------------------------------------------------------- */
+@media (min-width: 480px) {
+    .container { max-width: 480px; }
+}
+
+@media (min-width: 768px) {
+    .container { max-width: 600px; }
+    .container-wide { max-width: 960px; }
+
+    .hide-desktop { display: none !important; }
+}
+
+@media (max-width: 767px) {
+    .hide-mobile { display: none !important; }
+}
+
+@media (min-width: 1024px) {
+    .container { max-width: 600px; }
+    .container-wide { max-width: 1200px; }
+}
+
+/* --------------------------------------------------------------------------
+ * 11. PRINT
+ * -------------------------------------------------------------------------- */
+@media print {
+    body { background: #fff; color: #000; }
+    .glass-card { border: 1px solid #ccc; background: #f9f9f9; backdrop-filter: none; }
+    .nav-top, .no-print { display: none; }
+}
