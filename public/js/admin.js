@@ -116,11 +116,14 @@
             return;
         }
 
+        // Default avatar SVG
+        const defaultAvatar = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44"><circle fill="rgba(255,193,7,0.2)" cx="22" cy="14" r="10"/><circle fill="rgba(255,193,7,0.2)" cx="22" cy="38" r="14"/></svg>');
+        
         tbody.innerHTML = users.map(user => `
             <tr data-user-id="${user.id}">
                 <td>
                     <div class="user-cell">
-                        <img src="${user.photo_url || '/public/icons/default-avatar.png'}" alt="" class="avatar">
+                        <img src="${user.photo_url || defaultAvatar}" alt="" class="avatar">
                         <span>${user.first_name} ${user.last_name}</span>
                     </div>
                 </td>
@@ -128,7 +131,7 @@
                 <td><span class="badge badge-${user.role}">${user.role}</span></td>
                 <td>${user.tier_name || '-'}</td>
                 <td>${window.STAMGAST.formatCurrency(user.balance_cents)}</td>
-                <td>${formatDate(user.last_activity)}</td>
+                <td style="text-align: center;">${formatDate(user.last_activity)}</td>
                 <td>
                     <button class="btn btn-sm btn-edit" data-id="${user.id}">Bewerk</button>
                 </td>
@@ -152,6 +155,10 @@
         document.getElementById('user-email').value = user.email;
         document.getElementById('user-role').value = user.role;
 
+        // Show block button (hidden in add mode)
+        document.getElementById('block-user-btn').style.display = 'block';
+
+        document.getElementById('user-modal-overlay').classList.add('modal-overlay--open');
         document.getElementById('user-modal').classList.add('show');
     }
 
@@ -183,8 +190,35 @@
         }
     }
 
+    async function blockUser() {
+        const userId = parseInt(document.getElementById('user-id').value);
+        if (!userId || userId <= 0) return;
+
+        if (!confirm('Weet je zeker dat je deze gebruiker wilt blokkeren? Deze actie kan ongedaan gemaakt worden door een admin.')) {
+            return;
+        }
+
+        try {
+            const response = await window.STAMGAST.api('/admin/users', {
+                method: 'POST',
+                body: { action: 'block', user_id: userId }
+            });
+
+            if (response.success) {
+                window.STAMGAST.showSuccess('Gebruiker geblokkeerd');
+                closeModal();
+                loadUsers(currentPage);
+            } else {
+                throw new Error(response.error);
+            }
+        } catch (error) {
+            window.STAMGAST.showError(error.message);
+        }
+    }
+
     function closeModal() {
         document.querySelectorAll('.modal').forEach(m => m.classList.remove('show'));
+        document.getElementById('user-modal-overlay')?.classList.remove('modal-overlay--open');
     }
 
     // ============================================
@@ -345,7 +379,14 @@
         
         const path = window.location.pathname;
         
-        if (path.includes('/admin') && !path.includes('users') && !path.includes('tiers') && !path.includes('settings')) {
+        // Route-specific data loading
+        if (path.includes('/admin/users')) {
+            loadUsers(currentPage);
+        } else if (path.includes('/admin/tiers')) {
+            loadTiers();
+        } else if (path.includes('/admin/settings')) {
+            loadSettings();
+        } else if (path.includes('/admin')) {
             loadDashboardStats();
         }
         
@@ -358,9 +399,11 @@
             currentPage++; loadUsers(currentPage);
         });
         
-        document.getElementById('user-form')?.addEventListener('submit', (e) => {
-            e.preventDefault(); saveUser();
-        });
+         document.getElementById('user-form')?.addEventListener('submit', (e) => {
+             e.preventDefault(); saveUser();
+         });
+         
+         document.getElementById('block-user-btn')?.addEventListener('click', blockUser);
         
         document.getElementById('tier-form')?.addEventListener('submit', (e) => {
             e.preventDefault(); saveTier();
@@ -370,11 +413,33 @@
             e.preventDefault(); saveSettings();
         });
         
-        document.querySelectorAll('.btn-close, .modal').forEach(el => {
-            el.addEventListener('click', closeModal);
+        // Modal event handlers
+        document.getElementById('add-user-btn')?.addEventListener('click', () => openAddUserModal());
+        document.getElementById('close-modal')?.addEventListener('click', closeModal);
+        document.getElementById('user-modal-overlay')?.addEventListener('click', (e) => {
+            if (e.target.id === 'user-modal-overlay') closeModal();
         });
         
         console.log('Admin initialized');
+    }
+
+    function openAddUserModal() {
+        document.getElementById('modal-title').textContent = 'Nieuwe gebruiker';
+        document.getElementById('user-id').value = '';
+        document.getElementById('user-first-name').value = '';
+        document.getElementById('user-last-name').value = '';
+        document.getElementById('user-email').value = '';
+        document.getElementById('user-role').value = 'guest';
+
+        // Hide block button in add mode
+        document.getElementById('block-user-btn').style.display = 'none';
+
+        document.getElementById('user-modal-overlay').classList.add('modal-overlay--open');
+        document.getElementById('user-modal').classList.add('show');
+    }
+
+    function closeAddUserModal() {
+        document.getElementById('user-modal-overlay').classList.remove('modal-overlay--open');
     }
 
     // Export

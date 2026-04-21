@@ -53,7 +53,7 @@ $secondaryColor = $_SESSION['secondary_color'] ?? '#FF9800';
 <?php if (isLoggedIn()): ?>
 <nav class="nav-top">
     <a href="/" class="nav-brand" style="display:flex;align-items:center;gap:8px;text-decoration:none;">
-        <?php if ($userRole === 'superadmin'): ?>
+        <?php if ($userRole === 'superadmin' || $userRole === 'admin'): ?>
             <img src="/icons/regulr-vip-logo.png" alt="REGULR.vip" style="height:32px;width:auto;border-radius:6px;">
             <span style="font-weight:700;color:#FFC107;">REGULR.vip</span>
         <?php else: ?>

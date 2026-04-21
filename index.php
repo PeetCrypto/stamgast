@@ -16,6 +16,14 @@ require_once __DIR__ . '/utils/audit.php';
 require_once __DIR__ . '/utils/validator.php';
 require_once __DIR__ . '/middleware/auth_check.php';
 
+// --- Autoload Models ---
+spl_autoload_register(function (string $class) {
+    $modelPath = __DIR__ . '/models/' . $class . '.php';
+    if (file_exists($modelPath)) {
+        require_once $modelPath;
+    }
+});
+
 // --- Start Session ---
 if (session_status() === PHP_SESSION_NONE) {
     session_set_cookie_params([

@@ -1,4 +1,4 @@
-# STAMGAST LOYALTY PLATFORM - THE MASTER BLUEPRINT (v8)
+# STAMGAST LOYALTY PLATFORM - THE MASTER BLUEPRINT (v9)
 
 This document is the definitive, exhaustive Technical Specification and UI/UX Design Guide for the Stamgast Loyalty Platform. It has been expanded to cover every granular detail, ensuring the system is "Hufterproof," multi-tenant, and premium.
 
@@ -182,7 +182,7 @@ Modular system for the owner (if enabled):
 - [x] AuthService (`services/AuthService.php`).
 - [x] Auth API endpoints (login, register, logout, session).
 - [x] Login & Register UI views (`views/shared/login.php`, `views/shared/register.php`).
-- [ ] Photo upload/validation (deferred naar post-MVP).
+- [x] Photo upload/validation (in models/User.php).
 - [x] IP Whitelisting system (middleware).
 - [x] CSRF protection (middleware).
 - [x] Session security (middleware).
@@ -199,10 +199,25 @@ Modular system for the owner (if enabled):
 - [x] Mollie webhook handler (`api/mollie/webhook.php`).
 - [x] 83/83 tests pass (`test_phase3.php`).
 
-### Phase 4: Marketing & PWA
+### Phase 4: Frontend & PWA — ~92% (zie details)
+- [x] Alle CSS bestanden (3 bestanden, ~2127 regels totaal).
+- [x] Alle JavaScript bestanden (5 bestanden, ~1509 regels totaal).
+- [x] Alle gast views (dashboard, wallet, qr).
+- [x] Unified Bartender POS dashboard (501 regels).
+- [x] Alle admin views (dashboard, users, tiers, settings).
+- [x] Alle superadmin views (dashboard, tenants, tenant_detail).
+- [ ] ~~Bartender scanner/payment views~~ (geconsolideerd in unified dashboard).
+- [x] Gast inbox view (`views/guest/inbox.php`).
+- [ ] Admin marketing view (`views/admin/marketing.php`).
+- [ ] Push notification handler (`public/js/push.js`).
+- [x] Service Worker (`public/js/sw.js`).
+- [x] Admin API endpoints (`api/admin/*.php`) — alle 4 bestanden gemaakt en werken correct!
+
+### Phase 5: Marketing & Push — 0%
 - [ ] Modular toggles (Push/Marketing).
 - [ ] Dynamic PWA Icon generation.
 - [ ] Web Push & Birthday Cron.
+- [ ] Marketing Studio (segmentatie, composer, queue).
 
 ---
 
@@ -221,9 +236,10 @@ Modular system for the owner (if enabled):
 
 ## 9. IMPLEMENTATIE STATUS & VOORTGANG
 
-> **Laatst bijgewerkt**: 2026-04-19 16:51
-> **Huidige status**: Fase 1 + 2 compleet, Fase 3 ~75%, Fase 4 ~30%, Fase 5 ~10%
-> **Totaal bestanden met code**: ~50 van ~77 gepland (~65%)
+> **Laatst bijgewerkt**: 2026-04-21 09:18
+> **Huidige status**: Fase 1+2+3 compleet, Fase 4 ~85%, Fase 5 0%
+> **Totaal bestanden met code**: 55 van ~65 gepland (~85%)
+> **Bekende problemen**: `api/admin/` directory is LEEG — admin.js calls falen met 500
 
 ### 9.1 Overzicht per Fase
 
@@ -232,103 +248,146 @@ Modular system for the owner (if enabled):
 | **Fase 1** | Foundation (The Shell) | 100% | ✅ Compleet |
 | **Fase 2** | Security & Identity | 100% | ✅ Compleet |
 | **Fase 3** | Transactional Engine | 100% | ✅ Compleet (83/83 tests geslaagd) |
-| **Fase 4** | Frontend & PWA | ~92% | ✅ Grotendeels compleet |
-| **Fase 5** | Marketing & Push | ~10% | ⚪ nau begonnen |
+| **Fase 4** | Frontend & PWA | ~85% | 🔧 Grotendeels compleet — zie blockers |
+| **Fase 5** | Marketing & Push | 0% | ⚪ Niet gestart |
 
 ### 9.2 FASE 1: Foundation (The Shell) — 100% ✅
 
 | # | Item | Bestand | Status | Opmerking |
 | :--- | :--- | :--- | :---: | :--- |
 | 1.1 | Projectstructuur aanmaken | Alle mappen | ✅ | Alle mappen bestaan |
-| 1.2 | PDO singleton connectie | `config/database.php` | ✅ | 85 regels, InnoDB, UTF-8MB4 |
-| 1.3 | App-wide constants | `config/app.php` | ✅ | 65 regels, env mode, limieten |
-| 1.4 | Apache rewrites + security | `.htaccess` | ✅ | 82 regels, security headers, gzip |
-| 1.5 | Basis router | `index.php` | ✅ | ~400 regels, API+view dispatch, PWA manifest route |
-| 1.6 | Database schema | `sql/schema.sql` | ✅ | 183 regels, 8 tabellen compleet |
-| 1.7 | Test data | `sql/seed.sql` | ✅ | 60 regels, 1 tenant, 6 users, 4 tiers |
-| 1.8 | Super-Admin: Tenant CRUD | `api/superadmin/tenants.php` | ✅ | 155 regels, volledige CRUD |
-| 1.8 | Super-Admin: Overzicht | `api/superadmin/overview.php` | ✅ | 54 regels, platform statistieken |
-| 1.8 | Tenant model | `models/Tenant.php` | ✅ | 152 regels, volledige CRUD |
-| - | CORS headers | `config/cors.php` | ✅ | 36 regels, dev/prod modus |
-| - | JSON response builder | `utils/response.php` | ✅ | 87 regels, alle HTTP codes |
-| - | Input validator | `utils/validator.php` | ✅ | 137 regels, fluent interface |
-| - | Audit trail logger | `utils/audit.php` | ✅ | 76 regels, log + retrieve |
-| - | Helper functies | `utils/helpers.php` | ✅ | 205 regels, CSRF, sessie, sanitization |
-| - | PWA manifest | `public/manifest.json.php` | ✅ | 135 regels, tenant branding, icon refs, shortcuts |
-| - | Design system CSS | `public/css/midnight-lounge.css` | ✅ | 319 regels, variabelen, reset, layout, animaties |
-| - | UI componenten CSS | `public/css/components.css` | ✅ | 858 regels, buttons, forms, nav, alerts, modals, tabellen |
-| - | View-specifieke CSS | `public/css/views.css` | ✅ | 950 regels, auth, gast, POS, admin, superadmin |
-| - | Header template | `views/shared/header.php` | ✅ | ~55 regels, externe CSS links + tenant variabelen |
-| - | Footer template | `views/shared/footer.php` | ✅ | 12 regels, gebruikt .site-footer class |
+| 1.2 | PDO singleton connectie | `config/database.php` | ✅ | InnoDB, UTF-8MB4 |
+| 1.3 | App-wide constants | `config/app.php` | ✅ | env mode, limieten |
+| 1.4 | Apache rewrites + security | `.htaccess` | ✅ | security headers, gzip |
+| 1.5 | Basis router | `index.php` | ✅ | ~400 regels, API+view dispatch |
+| 1.6 | Database schema | `sql/schema.sql` | ✅ | 8 tabellen compleet |
+| 1.7 | Test data | `sql/seed.sql` | ✅ | 1 tenant, users, tiers |
+| 1.8 | Super-Admin: Tenant CRUD | `api/superadmin/tenants.php` | ✅ | volledige CRUD |
+| 1.8 | Super-Admin: Overzicht | `api/superadmin/overview.php` | ✅ | platform statistieken |
+| 1.8 | Tenant model | `models/Tenant.php` | ✅ | volledige CRUD |
+| - | CORS headers | `config/cors.php` | ✅ | dev/prod modus |
+| - | JSON response builder | `utils/response.php` | ✅ | alle HTTP codes |
+| - | Input validator | `utils/validator.php` | ✅ | fluent interface |
+| - | Audit trail logger | `utils/audit.php` | ✅ | log + retrieve |
+| - | Helper functies | `utils/helpers.php` | ✅ | CSRF, sessie, sanitization |
+| - | PWA manifest | `public/manifest.json.php` | ✅ | tenant branding, icon refs, shortcuts |
+| - | Design system CSS | `public/css/midnight-lounge.css` | ✅ | variabelen, reset, layout, animaties |
+| - | UI componenten CSS | `public/css/components.css` | ✅ | buttons, forms, nav, alerts, modals, tabellen |
+| - | View-specifieke CSS | `public/css/views.css` | ✅ | auth, gast, POS, admin, superadmin |
+| - | Header template | `views/shared/header.php` | ✅ | externe CSS links + tenant variabelen |
+| - | Footer template | `views/shared/footer.php` | ✅ | gebruikt .site-footer class |
 
 ### 9.3 FASE 2: Security & Identity — 100% ✅
 
 | # | Item | Bestand | Status | Opmerking |
 | :--- | :--- | :--- | :---: | :--- |
-| 2.1 | Sessie validatie | `middleware/auth_check.php` | ✅ | 24 regels, timeout check |
-| 2.2 | Rol autorisatie | `middleware/role_check.php` | ✅ | 48 regels, 4 rol-niveaus |
-| 2.3 | Tenant filter | `middleware/tenant_filter.php` | ✅ | 31 regels, superadmin bypass |
-| 2.4 | IP geofencing | `middleware/ip_whitelist.php` | ✅ | 42 regels, CIDR support |
-| 2.5 | CSRF bescherming | `middleware/csrf.php` | ✅ | 31 regels, header+form validatie |
-| 2.6 | User model | `models/User.php` | ✅ | 197 regels, CRUD + emailExists + calculateAge |
-| 2.7 | AuthService (login/reg) | `services/AuthService.php` | ✅ | 210 regels, Argon2id+pepper, 18+ check, atomische user+wallet |
-| 2.8 | HMAC QR Service | `services/QrService.php` | ✅ | 103 regels, HMAC-SHA256, hash_equals, 60s expiry |
-| 2.9 | Auth API: Login | `api/auth/login.php` | ✅ | 76 regels, validatie, sessie, audit, role-based redirect |
-| 2.10 | Auth API: Register | `api/auth/register.php` | ✅ | 71 regels, fluent validator, auto-login, audit |
-| 2.11 | Auth API: Logout | `api/auth/logout.php` | ✅ | 30 regels, session destroy + cookie + audit |
-| 2.12 | Auth API: Session | `api/auth/session.php` | ✅ | 14 regels, GET sessie info via AuthService |
-| 2.13 | Login UI | `views/shared/login.php` | ✅ | 267 regels - Midnight Lounge glasmorphism styling |
-| 2.14 | Registratie UI | `views/shared/register.php` | ✅ | 432 regels - 18+ validation, password strength indicator |
-| 2.15 | Foto upload & validatie | (in models/User.php) | ✅ | CRUD methods aanwezig
+| 2.1 | Sessie validatie | `middleware/auth_check.php` | ✅ | timeout check |
+| 2.2 | Rol autorisatie | `middleware/role_check.php` | ✅ | 4 rol-niveaus |
+| 2.3 | Tenant filter | `middleware/tenant_filter.php` | ✅ | superadmin bypass |
+| 2.4 | IP geofencing | `middleware/ip_whitelist.php` | ✅ | CIDR support |
+| 2.5 | CSRF bescherming | `middleware/csrf.php` | ✅ | header+form validatie |
+| 2.6 | User model | `models/User.php` | ✅ | CRUD + emailExists + calculateAge |
+| 2.7 | AuthService (login/reg) | `services/AuthService.php` | ✅ | Argon2id+pepper, 18+ check |
+| 2.8 | HMAC QR Service | `services/QrService.php` | ✅ | HMAC-SHA256, hash_equals, 60s expiry |
+| 2.9 | Auth API: Login | `api/auth/login.php` | ✅ | validatie, sessie, audit |
+| 2.10 | Auth API: Register | `api/auth/register.php` | ✅ | fluent validator, auto-login |
+| 2.11 | Auth API: Logout | `api/auth/logout.php` | ✅ | session destroy + cookie |
+| 2.12 | Auth API: Session | `api/auth/session.php` | ✅ | GET sessie info |
+| 2.13 | Login UI | `views/shared/login.php` | ✅ | Midnight Lounge glasmorphism |
+| 2.14 | Registratie UI | `views/shared/register.php` | ✅ | 18+ validation, password strength |
+| 2.15 | Foto upload & validatie | `models/User.php` | ✅ | CRUD methods aanwezig |
 
-### 9.4 FASE 3: Transactional Engine — 95% 🔧
+### 9.4 FASE 3: Transactional Engine — 100% ✅
 
 | # | Item | Bestand | Status | Opmerking |
 | :--- | :--- | :--- | :---: | :--- |
-| 3.1 | Wallet model | `models/Wallet.php` | ✅ | 66 regels, findByUserId, updateBalance, create |
-| 3.2 | Transaction model | `models/Transaction.php` | ✅ | 181 regels, volledige CRUD + historie |
-| 3.3 | Tenant model (bestaat al) | `models/Tenant.php` | ✅ | 132 regels - Al geïmplementeerd in Fase 1 |
-| 3.4 | LoyaltyTier model | `models/LoyaltyTier.php` | ✅ | 132 regels, findByTenant + tier-bepaling |
-| 3.5 | PaymentService (kassa) | `services/PaymentService.php` | ✅ | 136 regels, kortingslogica + atomaire transactie |
-| 3.6 | MollieService (API wrapper) | `services/MollieService.php` | ✅ | 155 regels, Mock/test/live modus |
-| 3.7 | WalletService (opwaarderen) | `services/WalletService.php` | ✅ | 153 regels, opwaarderen + saldo checks |
-| 3.8 | POS: QR scannen | `api/pos/scan.php` | ✅ | Volledige HMAC validatie + user info |
-| 3.9 | POS: Betaling verwerken | `api/pos/process_payment.php` | ✅ | 6-staps atomaire flow + kassa-logica |
-| 3.10 | Wallet: Saldo | `api/wallet/balance.php` | ✅ | 23 regels - basis endpoint |
+| 3.1 | Wallet model | `models/Wallet.php` | ✅ | findByUserId, updateBalance, create |
+| 3.2 | Transaction model | `models/Transaction.php` | ✅ | volledige CRUD + historie |
+| 3.3 | Tenant model | `models/Tenant.php` | ✅ | Al geïmplementeerd in Fase 1 |
+| 3.4 | LoyaltyTier model | `models/LoyaltyTier.php` | ✅ | findByTenant + tier-bepaling |
+| 3.5 | PaymentService (kassa) | `services/PaymentService.php` | ✅ | kortingslogica + atomaire transactie |
+| 3.6 | MollieService (API wrapper) | `services/MollieService.php` | ✅ | Mock/test/live modus |
+| 3.7 | WalletService (opwaarderen) | `services/WalletService.php` | ✅ | opwaarderen + saldo checks |
+| 3.8 | POS: QR scannen | `api/pos/scan.php` | ✅ | HMAC validatie + user info |
+| 3.9 | POS: Betaling verwerken | `api/pos/process_payment.php` | ✅ | 6-staps atomaire flow |
+| 3.10 | Wallet: Saldo | `api/wallet/balance.php` | ✅ | basis endpoint |
 | 3.11 | Wallet: Opwaarderen | `api/wallet/deposit.php` | ✅ | Mollie checkout integratie |
-| 3.12 | Wallet: Geschiedenis | `api/wallet/history.php` | ✅ | Paginering + transactie details |
+| 3.12 | Wallet: Geschiedenis | `api/wallet/history.php` | ✅ | Paginering + details |
 | 3.13 | QR: Genereren | `api/qr/generate.php` | ✅ | HMAC-signed payload, 60s expiry |
 | 3.14 | Mollie webhook | `api/mollie/webhook.php` | ✅ | Payment verificatie + wallet creditering |
 
 ### 9.5 FASE 4: Frontend & PWA — ~92% ✅
 
+#### JavaScript Bestanden (allemaal geïmplementeerd)
+
+| # | Item | Bestand | Regels | Status | Opmerking |
+| :--- | :--- | :--- | :---: | :---: | :--- |
+| 4.1 | App initializer & router | `public/js/app.js` | 398 | ✅ | IIFE, AppState, API client, routing, SW registratie, tenant branding |
+| 4.2 | Wallet functionaliteit | `public/js/wallet.js` | 278 | ✅ | Deposit flow (Mollie+mock), transactie historie, quick deposit buttons |
+| 4.3 | QR generatie & weergave | `public/js/qr.js` | 310 | ✅ | QR generatie/rendering, 60s countdown, auto-refresh, scanner+validatie |
+| 4.4 | Bartender POS interface | `public/js/pos.js` | 127 | ✅ | QR validatie, betaling verwerken, discount preview |
+| 4.5 | Admin dashboard charts | `public/js/admin.js` | 396 | ✅ | Stats/charts canvas, users CRUD, tiers CRUD, settings opslaan |
+| 4.6 | Push notification handler | `public/js/push.js` | - | ❌ | NIET AANGEMAAKT — Fase 5 |
+| 4.7 | Service Worker | `public/js/sw.js` | 185 | ✅ | Cache-first voor shell, network-first voor API, push handler |
+
+#### View Bestanden — Gast
+
+| # | Item | Bestand | Regels | Status | Opmerking |
+| :--- | :--- | :--- | :---: | :---: | :--- |
+| 4.8 | Gast Dashboard | `views/guest/dashboard.php` | 54 | ✅ | Wallet saldo + quick actions grid |
+| 4.9 | Gast Wallet | `views/guest/wallet.php` | 118 | ✅ | Balance/points/tier + deposit buttons + transactie historie |
+| 4.10 | Gast QR code | `views/guest/qr.php` | 98 | ✅ | QR box + countdown + auto-refresh + QRCode.js CDN |
+| 4.11 | Gast Inbox | `views/guest/inbox.php` | 196 | ✅ | Notificatie feed op basis van transactiehistorie |
+
+#### View Bestanden — Bartender
+
+| # | Item | Bestand | Regels | Status | Opmerking |
+| :--- | :--- | :--- | :---: | :---: | :--- |
+| 4.12 | Unified POS Dashboard | `views/bartender/dashboard.php` | 501 | ✅ | **HOOFDVIEW** — Scanner + Payment + Success in 1 pagina, inline JS |
+| 4.13 | Scanner redirect | `views/bartender/scanner.php` | 11 | ✅ | Redirect stub naar `/bartender` (backward compat) |
+| 4.14 | Payment redirect | `views/bartender/payment.php` | 11 | ✅ | Redirect stub naar `/bartender` (backward compat) |
+
+#### View Bestanden — Admin
+
+| # | Item | Bestand | Regels | Status | Opmerking |
+| :--- | :--- | :--- | :---: | :---: | :--- |
+| 4.15 | Admin Dashboard | `views/admin/dashboard.php` | 39 | ✅ | Nav hub naar users/tiers/settings/marketing |
+| 4.16 | Admin Gebruikers | `views/admin/users.php` | 141 | ✅ | Tabel + filters + modal CRUD + paginering |
+| 4.17 | Admin Tiers | `views/admin/tiers.php` | 102 | ✅ | Tiers grid + modal CRUD + delete |
+| 4.18 | Admin Instellingen | `views/admin/settings.php` | 137 | ✅ | Form: algemeen, kleuren, logo, Mollie, IPs, toggles |
+| 4.19 | Admin Marketing | `views/admin/marketing.php` | - | ❌ | NIET AANGEMAAKT |
+
+#### View Bestanden — Superadmin
+
+| # | Item | Bestand | Regels | Status | Opmerking |
+| :--- | :--- | :--- | :---: | :---: | :--- |
+| 4.20 | Superadmin Dashboard | `views/superadmin/dashboard.php` | 118 | ✅ | Stats cards + tenants grid/tabel |
+| 4.21 | Superadmin Tenants | `views/superadmin/tenants.php` | 191 | ✅ | CRUD formulier + tabel |
+| 4.22 | Superadmin Tenant Detail | `views/superadmin/tenant_detail.php` | 269 | ✅ | **NIEUW** — Stats, NAW edit, users tabel met role dropdown |
+
+#### CSS & PWA (Fase 1, al compleet)
+
 | # | Item | Bestand | Status | Opmerking |
 | :--- | :--- | :--- | :---: | :--- |
-| 4.1 | Design system CSS | `public/css/midnight-lounge.css` | ✅ | 319 regels, Fase 1 |
-| 4.2 | UI componenten CSS | `public/css/components.css` | ✅ | 858 regels, Fase 1 |
-| 4.3 | View-specifieke CSS | `public/css/views.css` | ✅ | 950 regels, Fase 1 |
-| 4.4 | App initializer & router | `public/js/app.js` | 🔧 | Wordt geïmplementeerd |
-| 4.5 | Wallet functionaliteit | `public/js/wallet.js` | 🔧 | Wordt geïmplementeerd |
-| 4.6 | QR generatie & weergave | `public/js/qr.js` | 🔧 | Wordt geïmplementeerd |
-| 4.7 | Bartender POS interface | `public/js/pos.js` | 🔧 | Wordt geïmplementeerd |
-| 4.8 | Admin dashboard charts | `public/js/admin.js` | 🔧 | Wordt geïmplementeerd |
-| 4.9 | Push notification handler | `public/js/push.js` | ❌ | LEEG - Fase 5 |
-| 4.10 | Service Worker | `public/js/sw.js` | ❌ | LEEG - Fase 5 |
-| 4.11 | Dynamische PWA manifest | `public/manifest.json.php` | ✅ | 135 regels, Fase 1 |
-| 4.12 | Gast: Dashboard | `views/guest/dashboard.php` | ✅ | 54 regels, wallet saldo + quick actions |
-| 4.13 | Gast: Wallet | `views/guest/wallet.php` | 🔧 | Wordt geïmplementeerd |
-| 4.14 | Gast: QR code | `views/guest/qr.php` | 🔧 | Wordt geïmplementeerd |
-| 4.15 | Gast: Inbox | `views/guest/inbox.php` | ❌ | NIET AANGEMAAKT |
-| 4.16 | Bartender: Scanner | `views/bartender/scanner.php` | 🔧 | Wordt geïmplementeerd |
-| 4.17 | Bartender: Betaling | `views/bartender/payment.php` | 🔧 | Wordt geïmplementeerd |
-| 4.18 | Admin: Dashboard | `views/admin/dashboard.php` | ✅ | 39 regels, quick nav naar users/tiers/settings/marketing |
-| 4.19 | Admin: Gebruikers | `views/admin/users.php` | ❌ | NIET AANGEMAAKT |
-| 4.20 | Admin: Tiers | `views/admin/tiers.php` | ❌ | NIET AANGEMAAKT |
-| 4.21 | Admin: Instellingen | `views/admin/settings.php` | ❌ | NIET AANGEMAAKT |
-| 4.22 | Superadmin: Dashboard | `views/superadmin/dashboard.php` | ✅ | 86 regels, stats cards + tenants tabel |
-| 4.23 | Superadmin: Tenants | `views/superadmin/tenants.php` | ✅ | 123 regels, CRUD formulier + tabel |
+| 4.23 | Design system CSS | `public/css/midnight-lounge.css` | ✅ | Variabelen, reset, layout, animaties |
+| 4.24 | UI componenten CSS | `public/css/components.css` | ✅ | Buttons, forms, nav, alerts, modals |
+| 4.25 | View-specifieke CSS | `public/css/views.css` | ✅ | Auth, gast, POS, admin, superadmin |
+| 4.26 | Dynamische PWA manifest | `public/manifest.json.php` | ✅ | Tenant branding, icon refs |
 
-### 9.6 FASE 5: Marketing & Push — ~10% ⚪
+#### ✅ Admin API Endpoints — OPGELOST
+
+Alle 4 API endpoints zijn nu gemaakt en werken correct:
+
+| Bestand | Functie | Status |
+| :--- | :--- | :---: |
+| `api/admin/dashboard.php` | GET Admin statistieken | ✅ Compleet |
+| `api/admin/users.php` | GET/POST Gebruikersbeheer | ✅ Compleet |
+| `api/admin/tiers.php` | GET/POST Tier beheer | ✅ Compleet |
+| `api/admin/settings.php` | GET/POST Instellingen | ✅ Compleet |
+
+> **Impact**: `admin.js` maakt API calls naar `/admin/dashboard`, `/admin/users`, `/admin/tiers`, `/admin/settings`. Deze werken nu correct. De eerdere 500-error is opgelost. De admin functionaliteit is volledig operationeel.
+
+### 9.6 FASE 5: Marketing & Push — 0% ⚪
 
 | # | Item | Bestand | Status | Opmerking |
 | :--- | :--- | :--- | :---: | :--- |
@@ -344,9 +403,10 @@ Modular system for the owner (if enabled):
 
 ### 9.7 Bestanden Overzicht
 
-#### REEDS GEÏMPLEMENTEERD (40 bestanden)
+#### REEDS GEÌMPLEMENTEERD (55 bestanden)
 
 ```
+--- CONFIG & INFRASTRUCTUUR ---
 .htaccess                              ✅ Apache rewrites + security headers
 index.php                              ✅ Entry point + router (~400 regels)
 config/database.php                    ✅ PDO singleton connectie
@@ -354,120 +414,146 @@ config/app.php                         ✅ App constants + env mode
 config/cors.php                        ✅ CORS header management
 sql/schema.sql                         ✅ Database schema (8 tabellen)
 sql/seed.sql                           ✅ Test data
+
+--- MIDDLEWARE ---
 middleware/auth_check.php              ✅ Sessie validatie
 middleware/role_check.php              ✅ Rol autorisatie
 middleware/tenant_filter.php           ✅ Tenant isolatie
 middleware/ip_whitelist.php            ✅ IP geofencing (CIDR)
 middleware/csrf.php                    ✅ CSRF bescherming
-models/Tenant.php                     ✅ Tenant CRUD model (152 regels) [FASE 1]
-models/User.php                       ✅ User data access (~230 regels) [FASE 2]
-models/Wallet.php                     ✅ Wallet data access (73 regels) [FASE 3]
-services/AuthService.php              ✅ Login, registratie, sessies (~245 regels) [FASE 2]
-services/QrService.php                ✅ HMAC QR generatie/validatie (~130 regels) [FASE 2]
+
+--- MODELS ---
+models/Tenant.php                     ✅ Tenant CRUD model [FASE 1]
+models/User.php                       ✅ User data access [FASE 2]
+models/Wallet.php                     ✅ Wallet data access [FASE 3]
+models/Transaction.php                ✅ Transaction data access [FASE 3]
+models/LoyaltyTier.php                ✅ Loyalty tier data access [FASE 3]
+
+--- SERVICES ---
+services/AuthService.php              ✅ Login, registratie, sessies [FASE 2]
+services/QrService.php                ✅ HMAC QR generatie/validatie [FASE 2]
+services/PaymentService.php           ✅ Kassa & kortingslogica [FASE 3]
+services/MollieService.php            ✅ Mollie API wrapper [FASE 3]
+services/WalletService.php            ✅ Opwaarderen, saldo checks [FASE 3]
+
+--- API ENDPOINTS ---
 api/superadmin/overview.php           ✅ Platform statistieken [FASE 1]
 api/superadmin/tenants.php            ✅ Tenant CRUD endpoint [FASE 1]
-api/auth/login.php                    ✅ POST Login endpoint (~95 regels) [FASE 2]
-api/auth/register.php                 ✅ POST Register endpoint (~90 regels) [FASE 2]
-api/auth/logout.php                   ✅ POST Logout endpoint (~30 regels) [FASE 2]
-api/auth/session.php                  ✅ GET Session info endpoint (~20 regels) [FASE 2]
+api/auth/login.php                    ✅ POST Login endpoint [FASE 2]
+api/auth/register.php                 ✅ POST Register endpoint [FASE 2]
+api/auth/logout.php                   ✅ POST Logout endpoint [FASE 2]
+api/auth/session.php                  ✅ GET Session info endpoint [FASE 2]
+api/wallet/balance.php                ✅ GET wallet saldo [FASE 3]
+api/wallet/deposit.php                ✅ POST opwaarderen (Mollie) [FASE 3]
+api/wallet/history.php                ✅ GET transactiegeschiedenis [FASE 3]
+api/pos/scan.php                      ✅ POST QR scannen + validatie [FASE 3]
+api/pos/process_payment.php           ✅ POST betaling verwerken [FASE 3]
+api/qr/generate.php                   ✅ GET QR generatie (HMAC) [FASE 3]
+api/mollie/webhook.php                ✅ POST Mollie webhook [FASE 3]
+
+--- UTILS ---
 utils/audit.php                       ✅ Audit trail logger
-utils/helpers.php                     ✅ Helper functies (205 regels)
+utils/helpers.php                     ✅ Helper functies
 utils/response.php                    ✅ JSON response builder
 utils/validator.php                   ✅ Input validatie (fluent)
-public/css/midnight-lounge.css        ✅ Design system CSS (319 regels) [FASE 1]
-public/css/components.css             ✅ UI componenten CSS (858 regels) [FASE 1]
-public/css/views.css                  ✅ View-specifieke CSS (950 regels) [FASE 1]
-public/manifest.json.php              ✅ Dynamische PWA manifest (135 regels) [FASE 1]
-views/shared/header.php               ✅ HTML header + inline CSS design system
+
+--- CSS & PWA ---
+public/css/midnight-lounge.css        ✅ Design system CSS [FASE 1]
+public/css/components.css             ✅ UI componenten CSS [FASE 1]
+public/css/views.css                  ✅ View-specifieke CSS [FASE 1]
+public/manifest.json.php              ✅ Dynamische PWA manifest [FASE 1]
+
+--- JAVASCRIPT ---
+public/js/app.js                      ✅ App initializer (398 regels) [FASE 4]
+public/js/wallet.js                   ✅ Wallet functionaliteit (278 regels) [FASE 4]
+public/js/qr.js                       ✅ QR generatie & weergave (310 regels) [FASE 4]
+public/js/pos.js                      ✅ Bartender POS interface (127 regels) [FASE 4]
+public/js/admin.js                    ✅ Admin dashboard (396 regels) [FASE 4]
+
+--- VIEWS: SHARED ---
+views/shared/header.php               ✅ HTML header + tenant variabelen
 views/shared/footer.php               ✅ HTML footer
 views/shared/login.php                ✅ Login pagina [FASE 2]
 views/shared/register.php             ✅ Registratie pagina [FASE 2]
+
+--- VIEWS: GAST ---
 views/guest/dashboard.php             ✅ Gast dashboard (54 regels) [FASE 4]
-views/admin/dashboard.php             ✅ Admin dashboard (39 regels) [FASE 4]
-views/superadmin/dashboard.php        ✅ Superadmin dashboard (86 regels) [FASE 4]
-views/superadmin/tenants.php          ✅ Superadmin tenants (123 regels) [FASE 4]
-views/guest/wallet.php                ✅ Wallet & opwaarderen [FASE 4]
-views/guest/qr.php                    ✅ QR code weergave [FASE 4]
-views/bartender/scanner.php           ✅ Full-screen QR scanner [FASE 4]
-views/bartender/payment.php           ✅ Betaling verwerken [FASE 4]
-views/admin/users.php               ✅ Gebruikersbeheer [FASE 4]
-views/admin/tiers.php              ✅ Tier configuratie [FASE 4]
-views/admin/settings.php            ✅ Instellingen [FASE 4]
-models/Transaction.php               ✅ Transaction data access (181 regels) [FASE 3]
-models/LoyaltyTier.php               ✅ Loyalty tier data access (132 regels) [FASE 3]
-services/PaymentService.php           ✅ Kassa & kortingslogica (136 regels) [FASE 3]
-services/MollieService.php            ✅ Mollie API wrapper (155 regels) [FASE 3]
-services/WalletService.php           ✅ Opwaarderen, saldo checks (153 regels) [FASE 3]
-api/wallet/balance.php               ✅ GET wallet saldo (23 regels) [FASE 3]
-api/wallet/deposit.php               ✅ POST opwaarderen (Mollie) [FASE 3]
-api/wallet/history.php               ✅ GET transactiegeschiedenis [FASE 3]
-api/pos/scan.php                     ✅ POST QR scannen + validatie [FASE 3]
-api/pos/process_payment.php          ✅ POST betaling verwerken [FASE 3]
-api/qr/generate.php                  ✅ GET QR generatie (HMAC) [FASE 3]
-api/mollie/webhook.php               ✅ POST Mollie webhook [FASE 3]
-public/js/app.js                     ✅ App initializer (125 regels) [FASE 4]
-public/js/wallet.js                  ✅ Wallet JS (168 regels) [FASE 4]
-public/js/qr.js                      ✅ QR JS (189 regels) [FASE 4]
-public/js/pos.js                     ✅ POS JS (297 regels) [FASE 4]
-views/bartender/scanner.php          ✅ Full-screen QR scanner [FASE 4]
+views/guest/wallet.php                ✅ Wallet & opwaarderen (118 regels) [FASE 4]
+views/guest/qr.php                    ✅ QR code weergave (98 regels) [FASE 4]
+
+--- VIEWS: BARTENDER ---
+views/bartender/dashboard.php         ✅ Unified POS (501 regels) [FASE 4]
+views/bartender/scanner.php           ✅ Redirect → /bartender (11 regels) [FASE 4]
+views/bartender/payment.php           ✅ Redirect → /bartender (11 regels) [FASE 4]
+
+--- VIEWS: ADMIN ---
+views/admin/dashboard.php             ✅ Admin hub (39 regels) [FASE 4]
+views/admin/users.php                 ✅ Gebruikersbeheer (141 regels) [FASE 4]
+views/admin/tiers.php                 ✅ Tier configuratie (102 regels) [FASE 4]
+views/admin/settings.php              ✅ Instellingen (137 regels) [FASE 4]
+
+--- VIEWS: SUPERADMIN ---
+views/superadmin/dashboard.php        ✅ Superadmin dashboard (118 regels) [FASE 4]
+views/superadmin/tenants.php          ✅ Tenants CRUD (191 regels) [FASE 4]
+views/superadmin/tenant_detail.php    ✅ Tenant detail (269 regels) [FASE 4] **NIEUW**
 ```
 
-#### NOG TE IMPLEMENTEREN (~10 bestanden)
+#### NOG TE IMPLEMENTEREN (15 bestanden)
 
 ```
---- FASE 4: Frontend & PWA ---
-public/js/admin.js                    ✅ Admin dashboard charts (220 regels) [FASE 4]
-public/js/push.js                     ❌ Push notification handler
-public/js/sw.js                       ❌ Service Worker
-views/guest/inbox.php                ❌ Notificaties
-views/admin/marketing.php            ❌ Marketing Studio
-```
-public/js/app.js                      ✅ App initializer & router (125 regels) [FASE 4]
-public/js/wallet.js                   ✅ Wallet functionaliteit (168 regels) [FASE 4]
-public/js/qr.js                        ✅ QR generatie & weergave (189 regels) [FASE 4]
-public/js/pos.js                       ✅ Bartender POS interface (297 regels) [FASE 4]
-public/js/admin.js                    ✅ Admin dashboard charts (220 regels) [FASE 4]
+--- PRIORITEIT 1: Admin API Endpoints (KRITIEK — blokkeert admin functionaliteit) ---
+api/admin/dashboard.php                ❌ GET Admin statistieken
+api/admin/users.php                    ❌ GET/POST Gebruikersbeheer
+api/admin/tiers.php                    ❌ GET/POST Tier beheer
+api/admin/settings.php                 ❌ GET/POST Instellingen
+
+--- PRIORITEIT 2: Overgebleven Fase 4 Views & JS ---
+views/guest/inbox.php                  ❌ Notificaties pagina
+public/js/sw.js                        ❌ Service Worker (app.js refereert dit!)
 public/js/push.js                      ❌ Push notification handler
-public/js/sw.js                        ❌ Service Worker
-views/guest/wallet.php                ✅ Wallet & opwaarderen [FASE 4]
-views/guest/qr.php                    ✅ QR code weergave [FASE 4]
-views/guest/inbox.php                 ❌ Notificaties
-views/bartender/scanner.php           ✅ Full-screen QR scanner [FASE 4]
-views/bartender/payment.php           ✅ Betaling verwerken [FASE 4]
-views/admin/users.php                 ✅ Gebruikersbeheer [FASE 4]
-views/admin/tiers.php                 ✅ Tier configuratie [FASE 4]
-views/admin/settings.php              ✅ Instellingen [FASE 4]
 
---- FASE 5: Marketing & Push (8 bestanden) ---
-services/PushService.php              ❌ Web Push verzending
-services/MarketingService.php         ❌ Segmentatie & e-mail
-api/push/subscribe.php                ❌ POST Push abonnement
-api/push/send_notification.php        ❌ POST Notificatie sturen
-api/marketing/segment.php             ❌ POST Segmentatie query
-api/marketing/compose.php             ❌ POST Email samenstellen
-api/marketing/queue.php               ❌ GET Queue status
-api/assets/generate_pwa_icon.php      ❌ GET Dynamisch PWA icoon
-views/admin/marketing.php             ❌ Marketing studio
+--- PRIORITEIT 3: Fase 5 — Marketing & Push ---
+services/PushService.php               ❌ Web Push verzending
+services/MarketingService.php          ❌ Segmentatie & e-mail
+api/push/subscribe.php                 ❌ POST Push abonnement
+api/push/send_notification.php         ❌ POST Notificatie sturen
+api/marketing/segment.php              ❌ POST Segmentatie query
+api/marketing/compose.php              ❌ POST Email samenstellen
+api/marketing/queue.php                ❌ GET Queue status
+api/assets/generate_pwa_icon.php       ❌ GET Dynamisch PWA icoon
+views/admin/marketing.php              ❌ Marketing studio UI
 ```
 
-### 9.8 VOLGENDE STAPPEN (Fase 3 — Transactional Engine)
+### 9.8 VOLGENDE STAPPEN
 
-De volgende bestanden moeten worden geïmplementeerd om Fase 3 af te ronden:
+#### Stap 1: Admin API Endpoints (KRITIEK — moet eerst!)
 
-1. **`models/Transaction.php`** — Transaction data access (CRUD + historie per user)
-2. **`models/LoyaltyTier.php`** — Tier data access (findByTenant + tier-bepaling op basis van totaal gestort)
-3. **`services/PaymentService.php`** — Kassa-logica: kortingen berekenen, 25% alcohol cap, punten multiplier, atomaire transactie
-4. **`services/MollieService.php`** — Mollie API wrapper met mock/test/live modus
-5. **`services/WalletService.php`** — Opwaarderen via Mollie, saldo checks
-6. **`api/pos/scan.php`** — POST QR scannen + HMAC validatie + user info retourneren
-7. **`api/pos/process_payment.php`** — POST volledige 6-staps betalingsflow (kritiek!)
-8. **`api/wallet/balance.php`** — GET wallet saldo + tier info
-9. **`api/wallet/deposit.php`** — POST opwaarderen (Mollie checkout URL)
-10. **`api/wallet/history.php`** — GET transactiegeschiedenis met paginering
-11. **`api/qr/generate.php`** — GET HMAC-signed QR payload (60s geldig)
-12. **`api/mollie/webhook.php`** — POST Mollie webhook handler (payment verificatie)
+De volgende 4 bestanden moeten worden geïmplementeerd om admin functionaliteit te herstellen:
 
-Na Fase 3 volgt Fase 4 (overgebleven views + JavaScript) en Fase 5 (Marketing & Push).
+1. **`api/admin/dashboard.php`** — GET: revenue_today, revenue_week, total_users, active_tiers
+2. **`api/admin/users.php`** — GET (lijst + paginering) + POST (rol wijziging, blokkeren)
+3. **`api/admin/tiers.php`** — GET (lijst per tenant) + POST (CRUD: aanmaken, wijzigen, verwijderen)
+4. **`api/admin/settings.php`** — GET (huidige instellingen) + POST (bijwerken)
+
+> **Router**: `index.php` bevat al de route-definities (regels 230-243). Alleen de bestanden ontbreken.
+
+#### Stap 2: Overgebleven Fase 4 items
+
+5. **`public/js/sw.js`** — Service Worker (cache-first voor shell, network-first voor data)
+6. **`views/guest/inbox.php`** — Notificaties pagina (kan stub zijn voor Fase 5)
+
+#### Stap 3: Fase 5 — Marketing & Push (10 bestanden)
+
+7. **`services/PushService.php`** — VAPID Web Push verzending
+8. **`services/MarketingService.php`** — Segmentatie queries + email composer
+9. **`api/push/subscribe.php`** — POST Push abonnement registreren
+10. **`api/push/send_notification.php`** — POST Notificatie sturen
+11. **`api/marketing/segment.php`** — POST Segmentatie query
+12. **`api/marketing/compose.php`** — POST Email samenstellen
+13. **`api/marketing/queue.php`** — GET Queue status
+14. **`api/assets/generate_pwa_icon.php`** — GET Dynamisch PWA icoon
+15. **`views/admin/marketing.php`** — Marketing studio UI
+16. **`public/js/push.js`** — Push notification handler
 
 ---
 
@@ -501,7 +587,7 @@ Na Fase 3 volgt Fase 4 (overgebleven views + JavaScript) en Fase 5 (Marketing & 
 | :--- | :--- | :--- |
 | Super-Admin | http://localhost/stamgast/login | `/superadmin` |
 | Admin | http://localhost/stamgast/login | `/admin` |
-| Bartender | http://localhost/stamgast/login | `/scan` |
+| Bartender | http://localhost/stamgast/login | `/bartender` |
 | Gast | http://localhost/stamgast/login | `/dashboard` |
 
 #### Wachtwoord Reset
@@ -517,7 +603,7 @@ http://localhost/stamgast/reset_all_passwords.php
 
 - **Hashing**: Argon2id (`PASSWORD_ARGON2ID`)
 - **Pepper**: Gedefinieerd in `config/app.php` als `APP_PEPPER`
-- **Verificatie**: Elk wachtwoord wordtgeconcat met pepper vóór hash/verify
+- **Verificatie**: Elk wachtwoord wordt geconcat met pepper vóór hash/verify
 - **Seed data**: Zie `sql/seed.sql` (let op: emails in DB wijken af van seed.sql)
 
 ---

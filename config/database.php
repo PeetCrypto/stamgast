@@ -83,3 +83,10 @@ class Database
         throw new \RuntimeException('Cannot unserialize singleton');
     }
 }
+
+// --- Create global $db variable for convenience ---
+// This allows scripts to use $db directly without calling getInstance()
+if (!isset($db)) {
+    global $db;
+    $db = Database::getInstance()->getConnection();
+}

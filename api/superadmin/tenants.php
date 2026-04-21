@@ -88,9 +88,20 @@ function handleDetail(Tenant $model, int $tenantId): void
 
 function handleCreate(Tenant $model, User $userModel, array $input, PDO $db): void
 {
-    $v = new Validator();
-    $v->string('name', $input['name'] ?? '', 2, 255)
-      ->slug('slug', $input['slug'] ?? '');
+    $v =string('name', $input['name'] ?? '', 2, 255);
+    
+    // Slug: convert to valid format if provided, otherwise auto-generate from name
+    if (!empty($input['slug'])) {
+        // Auto-convert to valid slug format
+        $input['slug'] = strtolower(preg_replace('/[^a-z0-9]+/', '-', trim($input['slug'])));
+        $input['slug'] = trim($input['slug'], '-');
+    } elseif (!empty($input['name'])) {
+        // Auto-generate slug from name if not provided
+        $input['slug'] = strtolower(preg_replace('/[^a-z0-9]+/', '-', trim($input['name'])));
+    }
+    if (!empty($input['slug'])) {
+        $v->slug('slug', $input['slug']);
+    }
 
     if (isset($input['brand_color'])) {
         $v->hexColor('brand_color', $input['brand_color']);
@@ -106,8 +117,9 @@ function handleCreate(Tenant $model, User $userModel, array $input, PDO $db): vo
     }
     $v->validate();
 
-    // Check slug uniqueness
-    $existing = $model->findBySlug($input['slug']);
+    // Check slug uniqueness (use provided or auto-generated)
+    $slugToCheck = $input['slug'] ?? strtolower(preg_replace('/[^a-z0-9]+/', '-', trim($input['name'] ?? '')));
+    $existing = $model->findBySlug($slugToCheck);
     if ($existing) {
         Response::error('Slug already in use', 'SLUG_EXISTS', 409);
     }
@@ -203,9 +215,21 @@ function handleUpdate(Tenant $model, array $input, PDO $db): void
     }
 
     // Validate fields if present
-    $v = new Validator();
-    if (isset($input['name'])) $v->string('name', $input['name'], 2, 255);
-    if (isset($input['slug'])) $v->slug('slug', $input['slug']);
+$v = new Validator();
+    $v->string('name', $input['name'] ?? '', 2, 255);
+    
+    // Slug: convert to valid format if provided, otherwise auto-generate from name
+    if (!empty($input['slug'])) {
+        // Auto-convert to valid slug format
+        $input['slug'] = strtolower(preg_replace('/[^a-z0-9]+/', '-', trim($input['slug'])));
+        $input['slug'] = trim($input['slug'], '-');
+    } elseif (!empty($input['name'])) {
+        // Auto-generate slug from name if not provided
+        $input['slug'] = strtolower(preg_replace('/[^a-z0-9]+/', '-', trim($input['name'])));
+    }
+    if (!empty($input['slug'])) {
+        $v->slug('slug', $input['slug']);
+    }
     if (isset($input['brand_color'])) $v->hexColor('brand_color', $input['brand_color']);
     if (isset($input['secondary_color'])) $v->hexColor('secondary_color', $input['secondary_color']);
     if (isset($input['mollie_status'])) $v->enum('mollie_status', $input['mollie_status'], ['mock', 'test', 'live']);
