@@ -51,6 +51,7 @@ RewriteRule ^sql/ - [F,L]
 
 # --- ROUTING ---
 # Route all requests (except existing files and public/) through index.php
+RewriteCond %{ENV:REDIRECT_STATUS} ^$
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteCond %{REQUEST_URI} !^/public/
@@ -59,7 +60,8 @@ RewriteRule ^(.*)$ index.php?route=$1 [QSA,L]
 # --- PHP SETTINGS (if allowed by host) ---
 <IfModule mod_php.c>
     php_value session.cookie_httponly 1
-    php_value session.cookie_secure 1
+    # session.cookie_secure is set dynamically in index.php based on APP_DEBUG
+    # Do NOT hardcode to 1 here — breaks HTTP development environments
     php_value session.use_strict_mode 1
     php_value session.cookie_samesite "Strict"
     php_value expose_php 0

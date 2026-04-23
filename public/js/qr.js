@@ -8,6 +8,7 @@
     let qrData = null;
     let refreshTimer = null;
     let countdownTimer = null;
+    let qrInitialized = false; // Guard against double-init
     const QR_EXPIRY_SECONDS = 60;
     const QR_REFRESH_THRESHOLD = 55;
 
@@ -37,41 +38,63 @@
         const container = document.getElementById('qr-container');
         if (!container) return;
 
-        // Use QRCode.js library (loaded from CDN or local)
-        if (typeof QRCode !== 'undefined') {
-            container.innerHTML = '';
-            new QRCode(container, {
-                text: qrPayload,
+        container.innerHTML = '';
+
+        // Option 1: qrcodejs library — constructor API (new QRCode(container, opts))
+        if (typeof QRCode === 'function' && QRCode.CorrectLevel) {
+            try {
+                new QRCode(container, {
+                    text: qrPayload,
+                    width: 250,
+                    height: 250,
+                    colorDark: '#000000',
+                    colorLight: '#ffffff',
+                    correctLevel: QRCode.CorrectLevel.M
+                });
+            } catch (err) {
+                console.error('QRCode constructor error:', err);
+                container.innerHTML = '';
+                renderQRCanvas(qrPayload, container);
+            }
+        }
+        // Option 2: qrcode npm package — QRCode.toCanvas() API
+        else if (typeof QRCode !== 'undefined' && typeof QRCode.toCanvas === 'function') {
+            const canvas = document.createElement('canvas');
+            container.appendChild(canvas);
+            QRCode.toCanvas(canvas, qrPayload, {
                 width: 250,
-                height: 250,
-                colorDark: '#000000',
-                colorLight: '#ffffff',
-                correctLevel: QRCode.CorrectLevel.M
+                margin: 2,
+                color: { dark: '#000000', light: '#ffffff' }
+            }, function(error) {
+                if (error) {
+                    console.error('QR toCanvas error:', error);
+                    container.innerHTML = '';
+                    renderQRCanvas(qrPayload, container);
+                }
             });
-        } else {
-            // Fallback: display as data URL using a canvas-based approach
+        }
+        // Option 3: Fallback — show payload as text
+        else {
+            console.warn('No QR library loaded, using text fallback');
             renderQRCanvas(qrPayload, container);
         }
 
-        // Add pulsing neon effect
-        const qrBox = document.querySelector('.qr-box');
+        // Add pulsing neon glow effect to the QR wrapper
+        const qrBox = document.getElementById('qr-wrapper');
         if (qrBox) {
-            qrBox.classList.add('qr-active');
+            qrBox.classList.add('qr-box--glow');
         }
     }
 
     function renderQRCanvas(payload, container) {
-        // Simple fallback - create canvas and use built-in QR generation
-        const canvas = document.createElement('canvas');
-        canvas.width = 250;
-        canvas.height = 250;
-        
-        // Note: In production, you'd include a QR library like qrcode.js
-        // For now, show the payload as text for testing
+        // Fallback when no QR library is available — show payload as text
         container.innerHTML = `
-            <div class="qr-fallback">
-                <p>QR Payload:</p>
-                <code>${payload.substring(0, 50)}...</code>
+            <div class="qr-fallback" style="padding:16px;text-align:center;">
+                <p style="color:var(--text-secondary);margin-bottom:8px;">QR Data:</p>
+                <code style="word-break:break-all;font-size:11px;color:var(--text-primary);">${payload}</code>
+                <p style="color:var(--accent-primary);margin-top:12px;font-size:13px;">
+                    ⚠️ QR library niet geladen
+                </p>
             </div>
         `;
     }
@@ -92,7 +115,9 @@
             const remaining = expiresAt - now;
 
             if (remaining <= 0) {
-                // QR expired, generate new one
+                // QR expired — clear interval to prevent duplicate generateQR() calls
+                clearInterval(countdownTimer);
+                countdownTimer = null;
                 countdownEl.textContent = 'Verlopen...';
                 countdownEl.classList.add('expired');
                 generateQR();
@@ -109,11 +134,13 @@
                 countdownEl.classList.remove('warning');
             }
 
-            // Auto-refresh when approaching expiry
+            // Auto-refresh when approaching expiry (only schedule once)
             if (remaining <= QR_REFRESH_THRESHOLD && !refreshTimer) {
+                const delayMs = Math.max(0, (remaining - 5)) * 1000;
                 refreshTimer = setTimeout(() => {
+                    refreshTimer = null;   // Clear reference so next cycle can reschedule
                     generateQR();
-                }, (remaining - 5) * 1000);
+                }, delayMs);
             }
         }, 1000);
     }
@@ -126,7 +153,7 @@
         if (!refreshBtn) return;
 
         refreshBtn.addEventListener('click', async () => {
-            const qrBox = document.querySelector('.qr-box');
+            const qrBox = document.getElementById('qr-wrapper');
             if (qrBox) {
                 qrBox.classList.add('refreshing');
             }
@@ -272,6 +299,12 @@
     // INITIALIZATION
     // ============================================
     async function initQR() {
+        // Prevent double initialization (app.js route handler + auto-init)
+        if (qrInitialized) {
+            console.log('QR already initialized, skipping');
+            return;
+        }
+        qrInitialized = true;
         console.log('Initializing QR...');
         
         // Check if this is a scanner view (bartender)
@@ -289,7 +322,7 @@
         console.log('QR initialized');
     }
 
-    // Export to global
+    // Export to global STAMGAST namespace
     window.STAMGAST = window.STAMGAST || {};
     window.STAMGAST.qr = {
         init: initQR,
@@ -299,12 +332,12 @@
         stopScanner: stopScanner
     };
 
-    // Auto-init if on QR page
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initQR);
-    } else if (window.location.pathname.includes('/qr') || 
-               window.location.pathname.includes('/scan')) {
-        initQR();
-    }
+    // Also expose as global function so app.js can call it as fallback
+    window.initQR = initQR;
+
+    // NOTE: No auto-init here. Initialization is exclusively handled by
+    // app.js via the route handler (window.STAMGAST.qr.init()).
+    // This prevents the double-init race condition where qr.js auto-init
+    // and app.js handleRoute() both fire generateQR() simultaneously.
 
 })();

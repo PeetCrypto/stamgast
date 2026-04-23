@@ -3,9 +3,30 @@
  * STAMGAST - Admin Instellingen
  * Admin: tenant instellingen beheren
  */
-$firstName = $_SESSION['first_name'] ?? 'Admin';
-$tenantName = $_SESSION['tenant_name'] ?? APP_NAME;
-$tenant = $_SESSION['tenant'] ?? null;
+declare(strict_types=1);
+
+$firstName      = $_SESSION['first_name'] ?? 'Admin';
+$tenantName     = $_SESSION['tenant_name'] ?? APP_NAME;
+$tenantId       = (int) ($_SESSION['tenant_id'] ?? 0);
+
+// Haal de volledige tenant direct uit de database voor de meest actuele data
+$db             = Database::getInstance()->getConnection();
+$tenantModel    = new Tenant($db);
+$tenant         = $tenantModel->findById($tenantId);
+
+// Fallback op session-waarden als de DB-query faalt
+if (!$tenant) {
+    $tenant = [
+        'name'              => $tenantName,
+        'brand_color'       => $_SESSION['brand_color'] ?? '#FFC107',
+        'secondary_color'   => $_SESSION['secondary_color'] ?? '#FF9800',
+        'logo_path'         => $_SESSION['tenant_logo'] ?? '',
+        'mollie_status'     => 'mock',
+        'whitelisted_ips'   => '',
+        'feature_push'      => true,
+        'feature_marketing' => true,
+    ];
+}
 ?>
 
 <?php require VIEWS_PATH . 'shared/header.php'; ?>
@@ -48,12 +69,15 @@ $tenant = $_SESSION['tenant'] ?? null;
             
             <div class="form-group">
                 <label>Logo</label>
-                <div style="border: 2px dashed rgba(255,255,255,0.2); padding: var(--space-md); text-align: center; border-radius: 8px;">
-                    <?php if (!empty($tenant['logo_path'])): ?>
-                    <img src="<?= htmlspecialchars($tenant['logo_path']) ?>" alt="Logo" style="max-height: 80px; margin-bottom: var(--space-md);">
-                    <?php endif; ?>
-                    <input type="file" id="tenant-logo" accept="image/*" style="margin-top: var(--space-sm);">
-                    <p class="text-sm" style="margin-top: var(--space-xs); opacity: 0.7;">PNG of JPG, max 1MB</p>
+                <div id="logo-preview-container" style="border: 2px dashed rgba(255,255,255,0.2); padding: var(--space-md); text-align: center; border-radius: 8px; min-height: 100px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                    <img id="logo-preview" src="<?= !empty($tenant['logo_path']) ? htmlspecialchars($tenant['logo_path']) : '' ?>" alt="Logo" <?= empty($tenant['logo_path']) ? 'style="display:none; max-height: 80px; margin-bottom: var(--space-md);"' : 'style="max-height: 80px; margin-bottom: var(--space-md);"' ?>>
+                    <input type="file" id="tenant-logo" name="tenant_logo" accept="image/png,image/jpeg,image/webp,image/svg+xml" style="margin-top: var(--space-sm);">
+                    <p class="text-sm" style="margin-top: var(--space-xs); opacity: 0.7;">PNG, JPG, WebP of SVG, max 2MB</p>
+                    <p class="text-sm" id="logo-remove-field" style="margin-top: var(--space-xs); opacity: 0.7; <?= empty($tenant['logo_path']) ? 'display:none;' : '' ?>">
+                        <label style="cursor: pointer; color: #f44336;">
+                            <input type="checkbox" id="logo-remove" name="logo_remove" value="1" style="margin-right: 4px;">Verwijder logo
+                        </label>
+                    </p>
                 </div>
             </div>
         </div>

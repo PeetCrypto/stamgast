@@ -30,7 +30,6 @@ if ($method === 'GET') {
             'alcohol_discount_perc' => (float) $tier['alcohol_discount_perc'],
             'food_discount_perc'    => (float) $tier['food_discount_perc'],
             'points_multiplier'     => (float) $tier['points_multiplier'],
-            'created_at'            => $tier['created_at'],
         ];
     }, $tiers);
 

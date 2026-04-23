@@ -43,6 +43,20 @@ class User
     }
 
     /**
+     * Find user by email across ALL tenants (for superadmin login)
+     * Superadmins have tenant_id = NULL, so tenant-filtered search won't find them
+     */
+    public function findByEmailGlobal(string $email): ?array
+    {
+        $stmt = $this->db->prepare(
+            'SELECT * FROM `users` WHERE `email` = :email LIMIT 1'
+        );
+        $stmt->execute([':email' => $email]);
+        $result = $stmt->fetch();
+        return $result ?: null;
+    }
+
+    /**
      * Get all users for a tenant
      * @return array<int, array>
      */
@@ -64,11 +78,11 @@ class User
     }
 
     /**
-     * Count users for a tenant
+     * Count users for a tenant (excludes superadmin - they are platform-level, not tenant-level)
      */
     public function countByTenant(int $tenantId): int
     {
-        $stmt = $this->db->prepare('SELECT COUNT(*) FROM `users` WHERE `tenant_id` = :tenant_id');
+        $stmt = $this->db->prepare('SELECT COUNT(*) FROM `users` WHERE `tenant_id` = :tenant_id AND `role` != \'superadmin\'');
         $stmt->execute([':tenant_id' => $tenantId]);
         return (int) $stmt->fetchColumn();
     }
@@ -87,7 +101,7 @@ class User
         );
 
         $stmt->execute([
-            ':tenant_id'     => $data['tenant_id'],
+            ':tenant_id'     => $data['tenant_id'] ?? null,
             ':email'         => $data['email'],
             ':password_hash' => $data['password_hash'],
             ':role'          => $data['role'] ?? 'guest',

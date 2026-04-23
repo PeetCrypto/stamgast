@@ -74,7 +74,7 @@ $staticRoute = $route;
 if (str_starts_with($staticRoute, 'stamgast/')) {
     $staticRoute = substr($staticRoute, 9);
 }
-if (str_starts_with($staticRoute, 'css/') || str_starts_with($staticRoute, 'js/') || str_starts_with($staticRoute, 'icons/') || $staticRoute === 'favicon.ico') {
+if (str_starts_with($staticRoute, 'css/') || str_starts_with($staticRoute, 'js/') || str_starts_with($staticRoute, 'icons/') || str_starts_with($staticRoute, 'uploads/') || $staticRoute === 'favicon.ico') {
     $filePath = PUBLIC_PATH . $staticRoute;
     if (file_exists($filePath)) {
         $ext = pathinfo($filePath, PATHINFO_EXTENSION);
@@ -100,10 +100,10 @@ if (str_starts_with($apiRouteCheck, 'stamgast/')) {
     $apiRouteCheck = substr($apiRouteCheck, 9);
 }
 if (str_starts_with($apiRouteCheck, 'api/')) {
-    // Catch ALL PHP errors/warnings and return as JSON instead of HTML
-    // set_error_handler(function (int $errno, string $errstr, string $errfile, int $errline) {
-    //     throw new \ErrorException($errstr, 0, $errno, $errfile, $errline);
-    // });
+    // Convert PHP warnings/notices to exceptions so they don't leak HTML into JSON responses
+    set_error_handler(function (int $errno, string $errstr, string $errfile, int $errline) {
+        throw new \ErrorException($errstr, 0, $errno, $errfile, $errline);
+    });
 
     try {
         ob_start(); // Buffer any accidental output (BOM, whitespace, warnings)
@@ -147,8 +147,9 @@ function handleApiRoute(string $route, string $method): void
     $group = $segments[0] ?? '';
     $action = $segments[1] ?? '';
 
-    // Require CSRF check for state-changing requests (skip for public auth endpoints)
-    if (!in_array($group, ['auth'], true)) {
+    // Require CSRF check for state-changing requests
+    // Skip CSRF for: auth (public endpoints), upload (multipart/form-data sends token as form field)
+    if (!in_array($group, ['auth', 'upload'], true)) {
         require_once __DIR__ . '/middleware/csrf.php';
         csrfCheck();
     }
@@ -314,6 +315,25 @@ function handleApiRoute(string $route, string $method): void
                 require __DIR__ . '/api/mollie/webhook.php';
             } else {
                 Response::notFound('Mollie endpoint not found');
+            }
+            break;
+
+        // --- UPLOAD ---
+        case 'upload':
+            // Direct session check - skip auth middleware (which includes CSRF check)
+            if (session_status() === PHP_SESSION_NONE) {
+                session_start();
+            }
+            $tenantId = currentTenantId();
+            if (!$tenantId) {
+                Response::error('Niet ingelogd', 'NO_SESSION', 401);
+            }
+            switch ($action) {
+                case 'logo':
+                    require __DIR__ . '/api/upload/logo.php';
+                    break;
+                default:
+                    Response::notFound('Upload endpoint not found');
             }
             break;
 

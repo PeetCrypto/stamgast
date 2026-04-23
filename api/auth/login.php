@@ -4,6 +4,8 @@ declare(strict_types=1);
 /**
  * POST /api/auth/login
  * Authenticates a user with email and password
+ * Superadmins: no tenant_id required (platform-level login)
+ * Tenant users: tenant_id required, defaults to session or 1
  */
 
 // Load services
@@ -27,8 +29,9 @@ if (empty($email) || empty($password)) {
     Response::error('E-mail en wachtwoord zijn verplicht', 'MISSING_FIELDS', 400);
 }
 
-// Determine tenant_id
+// Determine tenant_id for tenant users
 // If not provided, use default tenant 1
+// Superadmins don't need a tenant_id — AuthService handles this
 if ($tenantId === null) {
     $tenantId = currentTenantId() ?? 1;
 }
@@ -42,11 +45,11 @@ if (!isValidEmail($email)) {
 $db = Database::getInstance()->getConnection();
 $authService = new AuthService($db);
 
-// Attempt login
+// Attempt login (AuthService handles superadmin vs tenant user internally)
 $user = $authService->login($email, $password, $tenantId);
 
 if ($user === null) {
-    // Log failed attempt
+    // Log failed attempt (use provided tenant_id, or null if unavailable)
     $audit = new Audit($db);
     $audit->log(
         $tenantId,
@@ -60,13 +63,13 @@ if ($user === null) {
     Response::error('Ongeldig e-mailadres of wachtwoord', 'INVALID_CREDENTIALS', 401);
 }
 
-// Start secure session
+// Start secure session (handles superadmin without tenant internally)
 $authService->startSession($user);
 
-// Log successful login
+// Log successful login — tenant_id is null for superadmins
 $audit = new Audit($db);
 $audit->log(
-    (int) $user['tenant_id'],
+    $user['tenant_id'] !== null ? (int) $user['tenant_id'] : null,
     (int) $user['id'],
     'auth.login_success',
     'user',
@@ -87,7 +90,7 @@ Response::success([
         'id'         => (int) $user['id'],
         'role'       => $user['role'],
         'first_name' => $user['first_name'],
-        'tenant_id'  => (int) $user['tenant_id'],
+        'tenant_id'  => $user['tenant_id'] !== null ? (int) $user['tenant_id'] : null,
     ],
     'redirect' => $redirect,
 ]);

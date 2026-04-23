@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS `tenants` (
 -- -------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `users` (
     `id`                INT             NOT NULL AUTO_INCREMENT,
-    `tenant_id`         INT             NOT NULL,
+    `tenant_id`         INT             NULL COMMENT 'NULL for platform-level superadmins',
     `email`             VARCHAR(255)    NOT NULL,
     `password_hash`     VARCHAR(255)    NOT NULL,
     `role`              ENUM('superadmin','admin','bartender','guest') NOT NULL,
@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS `users` (
     UNIQUE KEY `uk_users_tenant_email` (`tenant_id`, `email`),
     INDEX `idx_users_tenant` (`tenant_id`),
     INDEX `idx_users_role` (`role`),
-    CONSTRAINT `fk_users_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenants`(`id`) ON DELETE CASCADE
+    CONSTRAINT `fk_users_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenants`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- -------------------------------------------------------------------------
@@ -169,7 +169,7 @@ CREATE TABLE IF NOT EXISTS `email_queue` (
 -- -------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `audit_log` (
     `id`                INT             NOT NULL AUTO_INCREMENT,
-    `tenant_id`         INT             NOT NULL,
+    `tenant_id`         INT             NULL COMMENT 'NULL for platform-level superadmin actions',
     `user_id`           INT             NULL,
     `action`            VARCHAR(100)    NOT NULL COMMENT 'e.g. payment.processed',
     `entity_type`       VARCHAR(50)     NULL COMMENT 'e.g. transaction',
@@ -183,7 +183,7 @@ CREATE TABLE IF NOT EXISTS `audit_log` (
     INDEX `idx_audit_user` (`user_id`),
     INDEX `idx_audit_action` (`action`),
     INDEX `idx_audit_created` (`created_at`),
-    CONSTRAINT `fk_audit_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenants`(`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_audit_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenants`(`id`) ON DELETE SET NULL,
     CONSTRAINT `fk_audit_user` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

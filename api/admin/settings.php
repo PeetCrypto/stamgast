@@ -113,6 +113,36 @@ if ($method === 'GET') {
         $data['feature_marketing'] = (int) (bool) $input['feature_marketing'];
     }
 
+    // Logo removal: clear logo_path, delete file from disk, update session
+    if (array_key_exists('logo_path', $input) && $input['logo_path'] === '') {
+        // Get current logo path before clearing
+        $tenant = $tenantModel->findById($tenantId);
+        $oldLogoPath = $tenant['logo_path'] ?? '';
+
+        $data['logo_path'] = '';
+
+        // Delete the physical file from disk
+        if ($oldLogoPath) {
+            $relativePath = ltrim(str_replace(
+                defined('BASE_URL') ? BASE_URL : '',
+                '',
+                $oldLogoPath
+            ), '/');
+            $oldFile = defined('ROOT_PATH')
+                ? ROOT_PATH . str_replace('/', DIRECTORY_SEPARATOR, $relativePath)
+                : __DIR__ . '/../' . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+            if (file_exists($oldFile) && is_file($oldFile)) {
+                @unlink($oldFile);
+            }
+        }
+
+        // Update session immediately so header reflects the change
+        $_SESSION['tenant_logo'] = '';
+        if (isset($_SESSION['tenant'])) {
+            $_SESSION['tenant']['logo_path'] = '';
+        }
+    }
+
     // NAW fields
     $nawFields = ['contact_name', 'contact_email', 'phone', 'address', 'postal_code', 'city', 'country'];
     foreach ($nawFields as $field) {

@@ -9,16 +9,32 @@ $tenantName = $_SESSION['tenant_name'] ?? APP_NAME;
 
 <?php require VIEWS_PATH . 'shared/header.php'; ?>
 
-<div class="container" style="padding: var(--space-lg);">
+<div class="container" style="padding: var(--space-lg); max-width: 100%; width: 100%;">
     <h1 style="margin-bottom: var(--space-lg); text-align: center;">Loyalty Tiers</h1>
     <p style="text-align: center; margin-bottom: var(--space-xl); opacity: 0.7;">Configureer kortingen en beloningen per niveau</p>
 
-    <!-- Tiers Grid -->
-    <div id="tiers-grid" style="max-width: 800px; margin: 0 auto var(--space-xl) auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-lg);">
-        <!-- Tier Cards (loaded via JS) -->
-        <div style="text-align: center; padding: var(--space-xl);">
-            <div class="spinner"></div>
-            <p>Tiers laden...</p>
+    <div class="glass-card" style="padding: var(--space-lg); margin-bottom: var(--space-lg); overflow-x: auto;">
+        <!-- Tiers Table -->
+        <div style="min-width: 800px;">
+            <table class="data-table" style="width: 100%;">
+                <thead>
+                    <tr>
+                        <th>Naam</th>
+                        <th style="text-align: center;">Min. storting</th>
+                        <th style="text-align: center;">Alcohol korting</th>
+                        <th style="text-align: center;">Food korting</th>
+                        <th style="text-align: center;">Punten multiplier</th>
+                        <th>Acties</th>
+                    </tr>
+                </thead>
+                <tbody id="tiers-table-body">
+                    <tr>
+                        <td colspan="6" style="text-align: center; padding: var(--space-xl);">
+                            <p>Laden...</p>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
     </div>
 
@@ -36,11 +52,11 @@ $tenantName = $_SESSION['tenant_name'] ?? APP_NAME;
 </div>
 
 <!-- Tier Modal -->
-<div class="modal-overlay" id="tier-modal-overlay" style="display: none;">
-    <div class="modal" id="tier-modal" style="max-width: 500px; width: 90%;">
+<div class="modal-overlay" id="tier-modal-overlay">
+    <div class="modal" id="tier-modal" style="max-width: 500px;">
         <div class="modal-header">
-            <h2 id="modal-title">Tier</h2>
-            <button class="btn-close" id="close-modal">&times;</button>
+            <h2 id="tier-modal-title">Tier</h2>
+            <button class="btn-close" id="close-tier-modal">&times;</button>
         </div>
         <div class="modal-body">
             <form id="tier-form">
@@ -76,7 +92,7 @@ $tenantName = $_SESSION['tenant_name'] ?? APP_NAME;
                 </div>
                 
                 <div class="form-actions" style="display: flex; justify-content: space-between; margin-top: var(--space-lg);">
-                    <button type="button" class="btn btn-danger" id="delete-tier-btn">Verwijderen</button>
+                    <button type="button" class="btn btn-danger" id="delete-tier-btn" style="display: none;">Verwijderen</button>
                     <button type="submit" class="btn btn-primary">Opslaan</button>
                 </div>
             </form>

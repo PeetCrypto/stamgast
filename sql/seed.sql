@@ -14,10 +14,10 @@ INSERT INTO `tenants` (`uuid`, `name`, `slug`, `brand_color`, `secondary_color`,
 -- -------------------------------------------------------------------------
 -- 2. USERS
 -- -------------------------------------------------------------------------
--- Super-Admin (no tenant - platform level)
+-- Super-Admin (NULL tenant_id - platform level, NOT tenant level)
 -- Password: "Admin123!" hashed with Argon2id
 INSERT INTO `users` (`tenant_id`, `email`, `password_hash`, `role`, `first_name`, `last_name`, `birthdate`) VALUES
-(1, 'superadmin@stamgast.app', '$argon2id$v=19$m=65536,t=4,p=1$dummyhashforsuperadmin001', 'superadmin', 'Super', 'Admin', '1990-01-01');
+(NULL, 'superadmin@stamgast.app', '$argon2id$v=19$m=65536,t=4,p=1$dummyhashforsuperadmin001', 'superadmin', 'Super', 'Admin', '1990-01-01');
 
 -- Admin (tenant owner)
 -- Password: "Admin123!"
@@ -36,10 +36,10 @@ INSERT INTO `users` (`tenant_id`, `email`, `password_hash`, `role`, `first_name`
 (1, 'guest3@example.com', '$argon2id$v=19$m=65536,t=4,p=1$dummyhashforguest3000006', 'guest', 'Sophie', 'Mulder', '1998-04-18');
 
 -- -------------------------------------------------------------------------
--- 3. WALLETS (auto-created per user)
+-- 3. WALLETS (auto-created per tenant user — NOT for superadmin)
+-- Superadmin (user_id=1) has NO wallet: platform manager, not a tenant guest.
 -- -------------------------------------------------------------------------
 INSERT INTO `wallets` (`user_id`, `tenant_id`, `balance_cents`, `points_cents`) VALUES
-(1, 1, 0, 0),
 (2, 1, 0, 0),
 (3, 1, 0, 0),
 (4, 1, 15000, 15000),

@@ -188,6 +188,13 @@ select.form-input {
     padding-right: 2.5rem;
 }
 
+/* Dropdown options - dark background with visible text */
+select.form-input option {
+    background: #1a1a1a;
+    color: #ffffff;
+    padding: 0.5rem;
+}
+
 textarea.form-input {
     resize: vertical;
     min-height: 100px;
@@ -553,15 +560,19 @@ textarea.form-input {
     border: 1px solid var(--glass-border);
 }
 
+.data-table,
 .table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 14px;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  table-layout: fixed;
 }
 
+.data-table th,
 .table th {
-    text-align: left;
-    padding: 0.75rem 1rem;
+    text-align: center;
+    width: 16.66%;
+    padding: 0.75rem 0.5rem;
     color: var(--text-muted);
     font-weight: 600;
     font-size: 12px;
@@ -571,16 +582,21 @@ textarea.form-input {
     background: rgba(255, 255, 255, 0.02);
 }
 
+.data-table td,
 .table td {
-    padding: 0.75rem 1rem;
+    text-align: center;
+    width: 16.66%;
+    padding: 0.75rem 0.5rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     color: var(--text-secondary);
 }
 
+.data-table tr:last-child td,
 .table tr:last-child td {
     border-bottom: none;
 }
 
+.data-table tr:hover td,
 .table tr:hover td {
     background: rgba(255, 255, 255, 0.02);
 }

@@ -5,6 +5,12 @@
  */
 $firstName = $_SESSION['first_name'] ?? 'Admin';
 $tenantName = $_SESSION['tenant_name'] ?? APP_NAME;
+
+// Load tiers dynamically for filter dropdown
+$db = Database::getInstance()->getConnection();
+$tierModel = new LoyaltyTier($db);
+$tenantId = currentTenantId();
+$tiersList = $tierModel->getByTenant($tenantId);
 ?>
 
 <?php require VIEWS_PATH . 'shared/header.php'; ?>
@@ -24,9 +30,9 @@ $tenantName = $_SESSION['tenant_name'] ?? APP_NAME;
             </select>
             <select id="tier-filter" class="form-input" style="min-width: 150px;">
                 <option value="">Alle tiers</option>
-                <option value="bronze">Brons</option>
-                <option value="silver">Zilver</option>
-                <option value="gold">Goud</option>
+                <?php foreach ($tiersList as $tier): ?>
+                <option value="<?= htmlspecialchars($tier['name']) ?>"><?= htmlspecialchars(ucfirst($tier['name'])) ?></option>
+                <?php endforeach; ?>
             </select>
         </div>
 

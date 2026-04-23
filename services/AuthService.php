@@ -23,14 +23,29 @@ class AuthService
 
     /**
      * Authenticate a user by email and password
+     * For superadmins: searches globally (no tenant filter)
+     * For tenant users: searches within the given tenant
      * Returns user data on success, null on failure
      */
-    public function login(string $email, string $password, int $tenantId): ?array
+    public function login(string $email, string $password, ?int $tenantId = null): ?array
     {
-        // Find user by email within this tenant
-        $user = $this->userModel->findByEmail($email, $tenantId);
+        // First try global search — superadmins have tenant_id = NULL
+        $user = $this->userModel->findByEmailGlobal($email);
 
         if ($user === null) {
+            return null;
+        }
+
+        // If user is a superadmin, no tenant context needed
+        if ($user['role'] === 'superadmin') {
+            // Superadmins don't belong to any tenant — skip tenant check
+        } elseif ($tenantId !== null) {
+            // Tenant user: verify they belong to the specified tenant
+            if ((int) $user['tenant_id'] !== $tenantId) {
+                return null;
+            }
+        } else {
+            // No tenant context provided and user is not superadmin
             return null;
         }
 
@@ -133,6 +148,7 @@ class AuthService
     /**
      * Start a secure session for the given user
      * Regenerates session ID to prevent session fixation
+     * Superadmins get no tenant context (platform-level, multi-tenant)
      */
     public function startSession(array $user, ?array $tenant = null): void
     {
@@ -141,25 +157,39 @@ class AuthService
 
         // Set core session data
         $_SESSION['user_id']       = (int) $user['id'];
-        $_SESSION['tenant_id']     = (int) $user['tenant_id'];
+        $_SESSION['tenant_id']     = $user['tenant_id'] !== null ? (int) $user['tenant_id'] : null;
         $_SESSION['role']          = $user['role'];
         $_SESSION['first_name']    = $user['first_name'];
         $_SESSION['last_name']     = $user['last_name'];
         $_SESSION['last_activity'] = time();
+
+        // Superadmins operate at platform level — no tenant branding
+        if ($user['role'] === 'superadmin') {
+            $_SESSION['tenant_name']      = defined('APP_NAME') ? APP_NAME : 'STAMGAST';
+            $_SESSION['brand_color']      = '#FFC107';
+            $_SESSION['secondary_color']  = '#FF9800';
+            $_SESSION['tenant_logo']      = '';
+            $_SESSION['tenant']           = null;
+            return;
+        }
 
         // Set tenant branding in session (for header.php)
         if ($tenant !== null) {
             $_SESSION['tenant_name']      = $tenant['name'];
             $_SESSION['brand_color']      = $tenant['brand_color'];
             $_SESSION['secondary_color']  = $tenant['secondary_color'];
-} else {
+            $_SESSION['tenant_logo']      = $tenant['logo_path'] ?? '';
+            $_SESSION['tenant']           = $tenant;
+        } else {
             // Load tenant data if not provided
             $tenantModel = new Tenant($this->db);
             $tenantData = $tenantModel->findById((int) $user['tenant_id']);
             if ($tenantData) {
-                $_SESSION['tenant_name'] = $tenantData['name'];
-                $_SESSION['brand_color'] = $tenantData['brand_color'] ?? '#FFC107';
+                $_SESSION['tenant_name']     = $tenantData['name'];
+                $_SESSION['brand_color']     = $tenantData['brand_color'] ?? '#FFC107';
                 $_SESSION['secondary_color'] = $tenantData['secondary_color'] ?? '#FF9800';
+                $_SESSION['tenant_logo']     = $tenantData['logo_path'] ?? '';
+                $_SESSION['tenant']          = $tenantData;
             }
         }
     }

@@ -17,9 +17,10 @@ class Audit
 
     /**
      * Log an audit entry
+     * @param int|null $tenantId NULL for platform-level superadmin actions
      */
     public function log(
-        int $tenantId,
+        ?int $tenantId,
         ?int $userId,
         string $action,
         ?string $entityType = null,

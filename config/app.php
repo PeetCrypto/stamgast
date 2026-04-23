@@ -42,6 +42,11 @@ define('FOOD_DISCOUNT_MAX', 100);    // 100% max
 define('DEFAULT_PAGE_SIZE', 20);
 define('MAX_PAGE_SIZE', 100);
 
+// --- BASE URL (auto-detect subdirectory) ---
+// Detect if running in a subdirectory (e.g., /stamgast/)
+$scriptDir = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? ''));
+define('BASE_URL', rtrim($scriptDir, '/'));
+
 // --- PATHS ---
 define('ROOT_PATH', __DIR__ . '/../');
 define('PUBLIC_PATH', ROOT_PATH . 'public/');

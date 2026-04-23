@@ -13,6 +13,10 @@ class Response
      */
     public static function success(array $data = [], int $statusCode = 200): void
     {
+        // Clean any buffered output (warnings, whitespace) before sending JSON
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
         http_response_code($statusCode);
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode([
@@ -27,6 +31,9 @@ class Response
      */
     public static function error(string $message, string $code = 'ERROR', int $statusCode = 400): void
     {
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
         http_response_code($statusCode);
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode([
@@ -66,6 +73,9 @@ class Response
      */
     public static function validationError(array $errors, string $message = 'Validation failed'): void
     {
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
         http_response_code(422);
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode([

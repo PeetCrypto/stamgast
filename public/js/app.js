@@ -9,7 +9,7 @@
     // CONFIGURATION
     // ============================================
     const APP_CONFIG = {
-        API_BASE: '/api',
+        API_BASE: (window.__BASE_URL || '') + '/api',
         SESSION_CHECK_INTERVAL: 30000, // 30 seconds
         QR_REFRESH_INTERVAL: 55000,   // 55 seconds (refresh before 60s expiry)
         DEBUG: false
@@ -131,6 +131,25 @@
     // ============================================
     // SESSION MANAGEMENT
     // ============================================
+
+    /**
+     * Pages rendered server-side by PHP (index.php router). These already have
+     * proper session/auth checks in their view templates, so a failed JS
+     * session-check must NOT redirect away — the server already validated access.
+     * Only SPA-like navigations should trigger a redirect on session failure.
+     */
+    const SERVER_RENDERED_PAGES = [
+        '/dashboard', '/wallet', '/qr', '/inbox',
+        '/scan', '/payment',
+        '/admin', '/admin/users', '/admin/tiers', '/admin/settings', '/admin/marketing',
+        '/superadmin', '/superadmin/tenants'
+    ];
+
+    function isServerRenderedPage() {
+        const path = window.location.pathname.replace(/\/$/, '').split('?')[0];
+        return SERVER_RENDERED_PAGES.includes(path);
+    }
+
     async function checkSession() {
         try {
             const response = await apiCall('/auth/session');
@@ -142,14 +161,20 @@
                 return true;
             } else {
                 AppState.user = null;
-                if (window.location.pathname !== '/login' && 
-                    window.location.pathname !== '/') {
+                // Only redirect on non-login pages that are NOT server-rendered.
+                // Server-rendered pages already have PHP session protection;
+                // a failed JS session check here is likely a transient API issue.
+                if (window.location.pathname !== '/login' &&
+                    window.location.pathname !== '/' &&
+                    !isServerRenderedPage()) {
                     redirectToLogin();
                 }
                 return false;
             }
         } catch (error) {
             log('Session check failed:', error);
+            // On API failure: do NOT redirect server-rendered pages.
+            // The PHP session is still valid — this is likely a transient network/API error.
             return false;
         }
     }
@@ -201,28 +226,33 @@
             await checkSession();
         }
         
-        // Route-specific initialization
+        // Route-specific initialization (use STAMGAST namespace, not global functions)
         switch (route) {
             case 'wallet':
-                if (typeof initWallet === 'function') initWallet();
+                if (window.STAMGAST?.wallet?.init) window.STAMGAST.wallet.init();
+                else if (typeof initWallet === 'function') initWallet();
                 break;
             case 'qr':
-                if (typeof initQR === 'function') initQR();
+                if (window.STAMGAST?.qr?.init) window.STAMGAST.qr.init();
+                else if (typeof initQR === 'function') initQR();
                 break;
             case 'scanner':
             case 'payment':
-                if (typeof initPOS === 'function') initPOS();
+                if (window.STAMGAST?.pos?.init) window.STAMGAST.pos.init();
+                else if (typeof initPOS === 'function') initPOS();
                 break;
             case 'admin':
             case 'adminUsers':
             case 'adminTiers':
             case 'adminSettings':
             case 'adminMarketing':
-                if (typeof initAdmin === 'function') initAdmin();
+                if (window.STAMGAST?.admin?.init) window.STAMGAST.admin.init();
+                else if (typeof initAdmin === 'function') initAdmin();
                 break;
             case 'superadmin':
             case 'superadminTenants':
-                if (typeof initSuperAdmin === 'function') initSuperAdmin();
+                if (window.STAMGAST?.superadmin?.init) window.STAMGAST.superadmin.init();
+                else if (typeof initSuperAdmin === 'function') initSuperAdmin();
                 break;
         }
         

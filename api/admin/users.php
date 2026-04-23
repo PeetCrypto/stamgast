@@ -28,11 +28,13 @@ if ($method === 'GET') {
     $limit  = min(max(1, (int) ($_GET['limit'] ?? 20)), 100);
     $search = trim($_GET['search'] ?? '');
     $role   = trim($_GET['role'] ?? '');
+    $tier   = trim($_GET['tier'] ?? '');
 
     $offset = ($page - 1) * $limit;
 
     // Build query with optional filters
-    $where  = 'WHERE u.`tenant_id` = :tid';
+    // CRITICAL: Exclude superadmin - they are platform-level, not tenant-level users
+    $where  = 'WHERE u.`tenant_id` = :tid AND u.`role` != \'superadmin\'';
     $params = [':tid' => $tenantId];
 
     if ($search !== '') {
@@ -45,6 +47,24 @@ if ($method === 'GET') {
     if ($role !== '' && in_array($role, ['superadmin', 'admin', 'bartender', 'guest'], true)) {
         $where .= ' AND u.`role` = :role';
         $params[':role'] = $role;
+    }
+
+    // Tier filter - get tier name (case-insensitive)
+    $tierFilter = '';
+    if ($tier !== '') {
+        $tierLower = strtolower($tier);
+        // Get tiers for this tenant
+        $tiersStmt = $db->prepare("SELECT `name`, `min_deposit_cents` FROM `loyalty_tiers` WHERE `tenant_id` = :tid ORDER BY `min_deposit_cents` ASC");
+        $tiersStmt->execute([':tid' => $tenantId]);
+        $allTiers = $tiersStmt->fetchAll();
+        
+        // Find the tier name that matches (case-insensitive)
+        foreach ($allTiers as $t) {
+            if (strtolower($t['name']) === $tierLower) {
+                $tierFilter = $t['name'];
+                break;
+            }
+        }
     }
 
     // Count total
@@ -95,6 +115,13 @@ if ($method === 'GET') {
             'created_at'     => $row['created_at'],
         ];
     }, $rows);
+
+    // Filter by tier in PHP (case-insensitive)
+    if ($tierFilter !== '') {
+        $users = array_values(array_filter($users, function($u) use ($tierFilter) {
+            return $u['tier_name'] !== null && strtolower($u['tier_name']) === strtolower($tierFilter);
+        }));
+    }
 
     Response::success([
         'users' => $users,
