@@ -83,7 +83,7 @@ $dashboardMap = [
     'bartender'  => '/scan',
     'guest'      => '/dashboard',
 ];
-$redirect = $dashboardMap[$user['role']] ?? '/dashboard';
+$redirect = BASE_URL . ($dashboardMap[$user['role']] ?? '/dashboard');
 
 Response::success([
     'user' => [

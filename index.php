@@ -284,6 +284,11 @@ function handleApiRoute(string $route, string $method): void
                     requireAdmin();
                     require __DIR__ . '/api/push/send_notification.php';
                     break;
+                case 'broadcast':
+                    require_once __DIR__ . '/middleware/role_check.php';
+                    requireAdmin();
+                    require __DIR__ . '/api/push/broadcast.php';
+                    break;
                 default:
                     Response::notFound('Push endpoint not found');
             }
@@ -407,6 +412,7 @@ function handleViewRoute(string $route, string $method): void
         'admin/tiers'       => 'admin/tiers.php',
         'admin/settings'    => 'admin/settings.php',
         'admin/marketing'   => 'admin/marketing.php',
+        'admin/push'        => 'admin/push.php',
 
         // Super-admin
         'superadmin'            => 'superadmin/dashboard.php',
@@ -446,7 +452,7 @@ function handleViewRoute(string $route, string $method): void
     // Enforce role-based access
     $roleViews = [
         'superadmin' => ['superadmin/dashboard.php', 'superadmin/tenants.php', 'superadmin/tenant_detail.php'],
-        'admin'      => ['admin/dashboard.php', 'admin/users.php', 'admin/tiers.php', 'admin/settings.php', 'admin/marketing.php'],
+        'admin'      => ['admin/dashboard.php', 'admin/users.php', 'admin/tiers.php', 'admin/settings.php', 'admin/marketing.php', 'admin/push.php'],
         'bartender'  => ['bartender/scanner.php', 'bartender/payment.php'],
     ];
 

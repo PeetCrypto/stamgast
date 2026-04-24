@@ -127,7 +127,7 @@ function isApiRequest(): bool
  */
 function redirect(string $url): void
 {
-    header('Location: ' . $url);
+    header('Location: ' . BASE_URL . $url);
     exit;
 }
 

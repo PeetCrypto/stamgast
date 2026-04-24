@@ -104,14 +104,9 @@ if ($method === 'GET') {
         $data['whitelisted_ips'] = trim($input['whitelisted_ips']);
     }
 
-    // Feature toggles
-    if (isset($input['feature_push'])) {
-        $data['feature_push'] = (int) (bool) $input['feature_push'];
-    }
-
-    if (isset($input['feature_marketing'])) {
-        $data['feature_marketing'] = (int) (bool) $input['feature_marketing'];
-    }
+    // NOTE: feature_push and feature_marketing are NOT editable by admin.
+    // Only the Super-Admin can toggle these via /api/superadmin/tenants
+    // This ensures platform-level control over module availability.
 
     // Logo removal: clear logo_path, delete file from disk, update session
     if (array_key_exists('logo_path', $input) && $input['logo_path'] === '') {
@@ -157,7 +152,16 @@ if ($method === 'GET') {
 
     $tenantModel->update($tenantId, $data);
 
-    // Update session whitelisted_ips if changed (used by POS IP check)
+    // Update session so header reflects changes immediately (without page reload)
+    if (isset($data['brand_color'])) {
+        $_SESSION['brand_color'] = $data['brand_color'];
+    }
+    if (isset($data['secondary_color'])) {
+        $_SESSION['secondary_color'] = $data['secondary_color'];
+    }
+    if (isset($data['name'])) {
+        $_SESSION['tenant_name'] = $data['name'];
+    }
     if (isset($data['whitelisted_ips'])) {
         $_SESSION['whitelisted_ips'] = $data['whitelisted_ips'];
     }

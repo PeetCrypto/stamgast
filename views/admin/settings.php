@@ -69,7 +69,7 @@ if (!$tenant) {
             
             <div class="form-group">
                 <label>Logo</label>
-                <div id="logo-preview-container" style="border: 2px dashed rgba(255,255,255,0.2); padding: var(--space-md); text-align: center; border-radius: 8px; min-height: 100px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                <div id="logo-preview-container" style="border: 2px dashed rgba(255,255,255,0.2); padding: var(--space-md); text-align: center; border-radius: 8px; min-height: 100px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #0f0f0f;">
                     <img id="logo-preview" src="<?= !empty($tenant['logo_path']) ? htmlspecialchars($tenant['logo_path']) : '' ?>" alt="Logo" <?= empty($tenant['logo_path']) ? 'style="display:none; max-height: 80px; margin-bottom: var(--space-md);"' : 'style="max-height: 80px; margin-bottom: var(--space-md);"' ?>>
                     <input type="file" id="tenant-logo" name="tenant_logo" accept="image/png,image/jpeg,image/webp,image/svg+xml" style="margin-top: var(--space-sm);">
                     <p class="text-sm" style="margin-top: var(--space-xs); opacity: 0.7;">PNG, JPG, WebP of SVG, max 2MB</p>
@@ -113,20 +113,18 @@ if (!$tenant) {
             </div>
         </div>
 
-        <!-- Features -->
+        <!-- Features (READ-ONLY — bepaald door platform beheerder) -->
         <div style="margin-bottom: var(--space-xl);">
-            <h2 style="margin-bottom: var(--space-md); color: var(--accent-primary);">Modules</h2>
-            
-            <div style="display: flex; flex-direction: column; gap: var(--space-md);">
-                <label style="display: flex; align-items: center; gap: var(--space-md); cursor: pointer;">
-                    <input type="checkbox" id="feature-push" <?= ($tenant['feature_push'] ?? true) ? 'checked' : '' ?> style="width: 20px; height: 20px;">
-                    <span>Push Notificaties</span>
-                </label>
-                
-                <label style="display: flex; align-items: center; gap: var(--space-md); cursor: pointer;">
-                    <input type="checkbox" id="feature-marketing" <?= ($tenant['feature_marketing'] ?? true) ? 'checked' : '' ?> style="width: 20px; height: 20px;">
-                    <span>Marketing Studio</span>
-                </label>
+            <h2 style="margin-bottom: var(--space-md); color: var(--accent-primary);">Modules
+                <span class="text-sm" style="font-weight:400; color: var(--text-secondary);">— Beheerd door platform beheerder</span>
+            </h2>
+            <div style="display: flex; gap: var(--space-md);">
+                <span class="badge" style="padding: 8px 16px; border-radius: 20px; background: <?= ($tenant['feature_push'] ?? true) ? 'rgba(76,175,80,0.2); color: #4CAF50; border: 1px solid rgba(76,175,80,0.3)' : 'rgba(244,67,54,0.2); color: #f44336; border: 1px solid rgba(244,67,54,0.3)' ?>;">
+                    <?= ($tenant['feature_push'] ?? true) ? '✓' : '✗' ?> Push Notificaties
+                </span>
+                <span class="badge" style="padding: 8px 16px; border-radius: 20px; background: <?= ($tenant['feature_marketing'] ?? true) ? 'rgba(76,175,80,0.2); color: #4CAF50; border: 1px solid rgba(76,175,80,0.3)' : 'rgba(244,67,54,0.2); color: #f44336; border: 1px solid rgba(244,67,54,0.3)' ?>;">
+                    <?= ($tenant['feature_marketing'] ?? true) ? '✓' : '✗' ?> Marketing Studio
+                </span>
             </div>
         </div>
 

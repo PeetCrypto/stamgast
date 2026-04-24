@@ -1,4 +1,4 @@
-﻿-- ==========================================================================
+-- ==========================================================================
 -- STAMGAST LOYALTY PLATFORM - COMPLETE DATABASE SCHEMA
 -- MySQL 8.0+ | UTF-8MB4 | Multi-Tenant Isolated
 -- ==========================================================================
@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS `tenants` (
     `postal_code`       VARCHAR(20)     NULL COMMENT 'NAW: Postcode',
     `city`              VARCHAR(100)    NULL COMMENT 'NAW: Plaats',
     `country`           VARCHAR(100)    DEFAULT 'Nederland' COMMENT 'NAW: Land',
+    `is_active`         BOOLEAN         DEFAULT 1 COMMENT '0 = tenant uitgeschakeld door superadmin',
     `feature_push`      BOOLEAN         DEFAULT 1,
     `feature_marketing` BOOLEAN         DEFAULT 1,
     `created_at`        TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,

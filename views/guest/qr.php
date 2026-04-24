@@ -76,14 +76,14 @@ require __DIR__ . '/../shared/header.php';
 
     <!-- Quick Actions -->
     <div class="quick-actions">
-        <a href="/wallet" class="btn btn-outline">
+        <a href="<?= BASE_URL ?>/wallet" class="btn btn-outline">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
                 <line x1="1" y1="10" x2="23" y2="10"/>
             </svg>
             Naar Wallet
         </a>
-        <a href="/dashboard" class="btn btn-outline">
+        <a href="<?= BASE_URL ?>/dashboard" class="btn btn-outline">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
             </svg>
@@ -97,7 +97,7 @@ require __DIR__ . '/../shared/header.php';
 
 <!-- QRCode.js library (qrcodejs - constructor API) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="/public/js/app.js"></script>
-<script src="/public/js/qr.js"></script>
+<script src="<?= BASE_URL ?>/public/js/app.js"></script>
+<script src="<?= BASE_URL ?>/public/js/qr.js"></script>
 
 <?php require __DIR__ . '/../shared/footer.php'; ?>

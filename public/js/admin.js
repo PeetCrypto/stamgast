@@ -467,9 +467,10 @@ async function deleteTier(tierId) {
             mollie_api_key: document.getElementById('mollie-api-key').value,
             mollie_status: document.getElementById('mollie-status').value,
             whitelisted_ips: document.getElementById('whitelisted-ips').value,
-            feature_push: document.getElementById('feature-push').checked,
-            feature_marketing: document.getElementById('feature-marketing').checked
         };
+
+        // NOTE: feature_push/feature_marketing are controlled by Super-Admin only.
+        // Admin cannot toggle these modules — they are read-only in the settings view.
 
         try {
             const response = await window.STAMGAST.api('/admin/settings', {
@@ -517,7 +518,7 @@ async function deleteTier(tierId) {
             if (img) {
                 img.src = logoUrl;
                 img.alt = document.title || 'Logo';
-                img.style.cssText = 'height:32px;width:auto;max-width:140px;object-fit:contain;';
+                img.style.cssText = 'height:32px;width:auto;max-width:140px;object-fit:contain;background:transparent;border-radius:0;';
             }
         } else {
             // Replace the <img> with a text span showing tenant name
@@ -548,6 +549,7 @@ async function deleteTier(tierId) {
             reader.onload = function(e) {
                 preview.src = e.target.result;
                 preview.style.display = 'block';
+                preview.style.background = 'transparent';
             };
             reader.readAsDataURL(file);
         });
@@ -756,6 +758,259 @@ async function deleteTier(tierId) {
     }
 
     // ============================================
+    // PUSH NOTIFICATIONS
+    // ============================================
+    let pushMode = 'broadcast';
+    let selectedUserId = null;
+    let pushSearchTimeout = null;
+
+    function loadPushPage() {
+        // Tab switching
+        document.getElementById('tab-broadcast')?.addEventListener('click', () => switchPushMode('broadcast'));
+        document.getElementById('tab-individual')?.addEventListener('click', () => switchPushMode('individual'));
+
+        // Character counters + live preview
+        document.getElementById('push-title')?.addEventListener('input', updatePushPreview);
+        document.getElementById('push-body')?.addEventListener('input', updatePushPreview);
+
+        // User search
+        document.getElementById('user-search')?.addEventListener('input', (e) => {
+            clearTimeout(pushSearchTimeout);
+            pushSearchTimeout = setTimeout(() => searchPushUsers(e.target.value), 300);
+        });
+        document.getElementById('clear-user-btn')?.addEventListener('click', clearSelectedUser);
+
+        // Compose form
+        document.getElementById('push-compose-form')?.addEventListener('submit', (e) => {
+            e.preventDefault();
+            sendPushNotification();
+        });
+
+        // History refresh
+        document.getElementById('refresh-history-btn')?.addEventListener('click', loadPushHistory);
+
+        // Initial load
+        loadPushHistory();
+    }
+
+    function switchPushMode(mode) {
+        pushMode = mode;
+        document.querySelectorAll('.target-tab').forEach(t => t.classList.remove('active'));
+        document.getElementById('tab-' + mode)?.classList.add('active');
+
+        document.getElementById('broadcast-info').style.display = mode === 'broadcast' ? 'block' : 'none';
+        document.getElementById('individual-section').style.display = mode === 'individual' ? 'block' : 'none';
+
+        const sendBtn = document.getElementById('push-send-btn');
+        if (sendBtn) {
+            sendBtn.textContent = mode === 'broadcast' ? '📢 Verstuur naar iedereen' : '👤 Verstuur naar geselecteerde gast';
+        }
+
+        if (mode === 'individual') clearSelectedUser();
+    }
+
+    function updatePushPreview() {
+        const titleEl = document.getElementById('push-title');
+        const bodyEl = document.getElementById('push-body');
+        const title = titleEl?.value || 'Je titel hier...';
+        const body = bodyEl?.value || 'Je bericht verschijnt hier als voorbeeld...';
+
+        const previewTitle = document.getElementById('preview-title');
+        const previewBody = document.getElementById('preview-body');
+        if (previewTitle) previewTitle.textContent = title;
+        if (previewBody) previewBody.textContent = body;
+
+        // Character counters
+        const titleLen = (titleEl?.value || '').length;
+        const bodyLen = (bodyEl?.value || '').length;
+        const titleCount = document.getElementById('title-count');
+        const bodyCount = document.getElementById('body-count');
+
+        if (titleCount) {
+            titleCount.textContent = titleLen;
+            titleCount.parentElement.className = 'char-counter' +
+                (titleLen > 90 ? ' warn' : '') + (titleLen > 100 ? ' over' : '');
+        }
+        if (bodyCount) {
+            bodyCount.textContent = bodyLen;
+            bodyCount.parentElement.className = 'char-counter' +
+                (bodyLen > 450 ? ' warn' : '') + (bodyLen > 500 ? ' over' : '');
+        }
+    }
+
+    async function searchPushUsers(query) {
+        if (!query || query.length < 2) return;
+
+        try {
+            const response = await window.STAMGAST.api('/admin/users?search=' + encodeURIComponent(query) + '&limit=10');
+            if (response.success) {
+                renderPushUserResults(response.data.users);
+            }
+        } catch (error) {
+            console.error('User search error:', error);
+        }
+    }
+
+    function renderPushUserResults(users) {
+        const container = document.getElementById('user-search-results');
+        if (!container) return;
+
+        if (!users || users.length === 0) {
+            container.innerHTML = '<p style="color:var(--text-secondary);font-size:14px;text-align:center;padding:var(--space-md);">Geen gasten gevonden</p>';
+            container.style.display = 'block';
+            return;
+        }
+
+        container.innerHTML = users.filter(u => u.role === 'guest').map(u => `
+            <div class="user-search-item" data-user-id="${u.id}" data-user-name="${u.first_name} ${u.last_name}" data-user-email="${u.email}">
+                <div class="user-info">
+                    <div class="user-name">${u.first_name} ${u.last_name}</div>
+                    <div class="user-email">${u.email}</div>
+                </div>
+                <span class="push-badge ${(u.has_push || u.push_subscribed) ? 'subscribed' : 'no-push'}">
+                    ${(u.has_push || u.push_subscribed) ? '✓ Push' : 'Geen push'}
+                </span>
+            </div>
+        `).join('');
+        container.style.display = 'block';
+
+        container.querySelectorAll('.user-search-item').forEach(item => {
+            item.addEventListener('click', () => selectPushUser(
+                parseInt(item.dataset.userId),
+                item.dataset.userName,
+                item.dataset.userEmail
+            ));
+        });
+    }
+
+    function selectPushUser(id, name, email) {
+        selectedUserId = id;
+        document.getElementById('user-search-results').style.display = 'none';
+        document.getElementById('user-search').value = '';
+        document.getElementById('selected-user-info').style.display = 'block';
+        document.getElementById('selected-user-name').textContent = name;
+        document.getElementById('selected-user-email').textContent = email;
+    }
+
+    function clearSelectedUser() {
+        selectedUserId = null;
+        document.getElementById('selected-user-info').style.display = 'none';
+        document.getElementById('user-search-results').style.display = 'none';
+        document.getElementById('user-search').value = '';
+    }
+
+    async function sendPushNotification() {
+        const title = document.getElementById('push-title')?.value?.trim();
+        const body = document.getElementById('push-body')?.value?.trim();
+
+        if (!title || !body) {
+            window.STAMGAST.showError('Vul titel en bericht in');
+            return;
+        }
+
+        const sendBtn = document.getElementById('push-send-btn');
+        if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Bezig met verzenden...'; }
+
+        try {
+            let response;
+            if (pushMode === 'broadcast') {
+                response = await window.STAMGAST.api('/push/broadcast', {
+                    method: 'POST',
+                    body: { title, body }
+                });
+            } else {
+                if (!selectedUserId) {
+                    window.STAMGAST.showError('Selecteer eerst een gast');
+                    if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = '👤 Verstuur naar geselecteerde gast'; }
+                    return;
+                }
+                response = await window.STAMGAST.api('/push/send_notification', {
+                    method: 'POST',
+                    body: { user_id: selectedUserId, title, body }
+                });
+            }
+
+            if (response.success) {
+                window.STAMGAST.showSuccess('Notificatie verzonden! (' + (response.data.sent || 0) + ' afgeleverd)');
+                document.getElementById('push-title').value = '';
+                document.getElementById('push-body').value = '';
+                updatePushPreview();
+                clearSelectedUser();
+                loadPushHistory();
+            } else {
+                throw new Error(response.error || 'Verzenden mislukt');
+            }
+        } catch (error) {
+            window.STAMGAST.showError('Fout: ' + error.message);
+        } finally {
+            if (sendBtn) {
+                sendBtn.disabled = false;
+                sendBtn.textContent = pushMode === 'broadcast' ? '📢 Verstuur naar iedereen' : '👤 Verstuur naar geselecteerde gast';
+            }
+        }
+    }
+
+    async function loadPushHistory() {
+        const container = document.getElementById('push-history');
+        if (!container) return;
+
+        container.innerHTML = '<p style="color:var(--text-secondary);font-size:14px;text-align:center;padding:var(--space-md);">Geschiedenis ophalen...</p>';
+
+        try {
+            const response = await window.STAMGAST.api('/admin/dashboard');
+            if (response.success) {
+                // Update stats counters
+                if (response.data.push_stats) {
+                    const statSent = document.getElementById('stat-sent');
+                    const statFailed = document.getElementById('stat-failed');
+                    if (statSent) statSent.textContent = response.data.push_stats.sent_7d || 0;
+                    if (statFailed) statFailed.textContent = response.data.push_stats.failed_7d || 0;
+                }
+
+                if (response.data.recent_push && response.data.recent_push.length > 0) {
+                    renderPushHistory(response.data.recent_push);
+                } else {
+                    container.innerHTML = '<p style="color:var(--text-secondary);font-size:14px;text-align:center;padding:var(--space-md);">Nog geen verzonden notificaties</p>';
+                }
+            } else {
+                container.innerHTML = '<p style="color:var(--text-secondary);font-size:14px;text-align:center;padding:var(--space-md);">Nog geen verzonden notificaties</p>';
+            }
+        } catch (error) {
+            container.innerHTML = '<p style="color:var(--text-secondary);font-size:14px;text-align:center;padding:var(--space-md);">Geschiedenis kon niet worden geladen</p>';
+        }
+    }
+
+    function renderPushHistory(items) {
+        const container = document.getElementById('push-history');
+        if (!container) return;
+
+        if (!items || items.length === 0) {
+            container.innerHTML = '<p style="color:var(--text-secondary);font-size:14px;text-align:center;padding:var(--space-md);">Nog geen verzonden notificaties</p>';
+            return;
+        }
+
+        container.innerHTML = items.map(item => {
+            const isBroadcast = item.action === 'push.broadcast_sent';
+            const date = new Date(item.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+            const details = item.details || {};
+
+            return `
+                <div class="history-item">
+                    <div class="history-icon ${isBroadcast ? 'broadcast' : 'individual'}">
+                        ${isBroadcast ? '📢' : '👤'}
+                    </div>
+                    <div class="history-details">
+                        <div class="history-title">${details.title || 'Geen titel'}</div>
+                        <div class="history-meta">
+                            ${isBroadcast ? 'Broadcast' : 'Individueel'} • ${details.sent || 0} verzonden${details.failed > 0 ? ' • ' + details.failed + ' mislukt' : ''} • ${date}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    // ============================================
     // INITIALIZATION
     // ============================================
     function initAdmin() {
@@ -783,6 +1038,8 @@ async function deleteTier(tierId) {
             initLogoPreview();
         } else if (path.includes('/admin/marketing')) {
             loadMarketing();
+        } else if (path.includes('/admin/push')) {
+            loadPushPage();
         } else if (path.includes('/admin')) {
             loadDashboardStats();
         }

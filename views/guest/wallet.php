@@ -118,7 +118,7 @@ require __DIR__ . '/../shared/header.php';
 
     <!-- Quick Actions -->
     <div class="quick-actions">
-        <a href="/qr" class="btn btn-outline">
+        <a href="<?= BASE_URL ?>/qr" class="btn btn-outline">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="3" width="7" height="7"/>
                 <rect x="14" y="3" width="7" height="7"/>
@@ -131,7 +131,7 @@ require __DIR__ . '/../shared/header.php';
             </svg>
             QR Code
         </a>
-        <a href="/dashboard" class="btn btn-outline">
+        <a href="<?= BASE_URL ?>/dashboard" class="btn btn-outline">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
             </svg>

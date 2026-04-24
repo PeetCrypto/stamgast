@@ -53,8 +53,11 @@ switch ($method) {
             case 'update_role':
                 handleUpdateRole($userModel, $input, $db);
                 break;
+            case 'change_password':
+                handleChangePassword($userModel, $input, $db);
+                break;
             default:
-                Response::error('Invalid action. Use: create, update, delete, update_role', 'INVALID_ACTION', 400);
+                Response::error('Invalid action. Use: create, update, delete, update_role, change_password', 'INVALID_ACTION', 400);
         }
         break;
 
@@ -88,7 +91,8 @@ function handleDetail(Tenant $model, int $tenantId): void
 
 function handleCreate(Tenant $model, User $userModel, array $input, PDO $db): void
 {
-    $v =string('name', $input['name'] ?? '', 2, 255);
+    $v = new Validator();
+    $v->string('name', $input['name'] ?? '', 2, 255);
     
     // Slug: convert to valid format if provided, otherwise auto-generate from name
     if (!empty($input['slug'])) {
@@ -165,16 +169,21 @@ function handleCreate(Tenant $model, User $userModel, array $input, PDO $db): vo
               . "<p>Log in op jouw STAMGAST omgeving om te beginnen.</p>"
               . "<p><em>Verander je wachtwoord na het eerste inloggen!</em></p>";
 
-        $stmt = $db->prepare(
-            'INSERT INTO `email_queue` (`tenant_id`, `user_id`, `subject`, `body_html`, `status`)
-             VALUES (:tid, :uid, :subject, :body, \'pending\')'
-        );
-        $stmt->execute([
-            ':tid'     => $tenantId,
-            ':uid'     => $adminUserId,
-            ':subject' => $subject,
-            ':body'    => $body,
-        ]);
+        try {
+            $stmt = $db->prepare(
+                'INSERT INTO `email_queue` (`tenant_id`, `user_id`, `subject`, `body_html`, `status`)
+                 VALUES (:tid, :uid, :subject, :body, \'pending\')'
+            );
+            $stmt->execute([
+                ':tid'     => $tenantId,
+                ':uid'     => $adminUserId,
+                ':subject' => $subject,
+                ':body'    => $body,
+            ]);
+        } catch (\Throwable $e) {
+            // email_queue table may not exist yet — log but don't fail tenant creation
+            error_log('email_queue insert failed: ' . $e->getMessage());
+        }
 
         // Also try to send directly
         $headers = "From: noreply@stamgast.nl\r\nContent-Type: text/html; charset=UTF-8\r\n";
@@ -313,4 +322,64 @@ function handleUpdateRole(User $userModel, array $input, PDO $db): void
     );
 
     Response::success(['user_id' => $userId, 'new_role' => $newRole]);
+}
+
+function handleChangePassword(User $userModel, array $input, PDO $db): void
+{
+    $userId = (int) ($input['user_id'] ?? 0);
+    $email = $input['email'] ?? '';
+    $tenantId = (int) ($input['tenant_id'] ?? 0);
+    $newPassword = $input['new_password'] ?? '';
+
+    // Validate required fields
+    if (empty($email) && $userId <= 0) {
+        Response::error('E-mail of user_id is verplicht', 'MISSING_FIELD', 400);
+    }
+    
+    if (empty($newPassword)) {
+        Response::error('Nieuw wachtwoord is verplicht', 'MISSING_FIELD', 400);
+    }
+
+    // Find user by email if user_id not provided
+    if ($userId <= 0 && !empty($email)) {
+        $user = $userModel->findByEmail($email, $tenantId);
+        if (!$user) {
+            Response::error('Gebruiker niet gevonden met opgegeven e-mail', 'USER_NOT_FOUND', 404);
+        }
+        $userId = (int) $user['id'];
+    }
+
+    // Validate user exists
+    if ($userId > 0) {
+        $user = $userModel->findById($userId);
+        if (!$user) {
+            Response::error('Gebruiker niet gevonden', 'USER_NOT_FOUND', 404);
+        }
+        
+        // Check if user belongs to the specified tenant
+        if ((int) $user['tenant_id'] !== $tenantId) {
+            Response::error('Gebruiker behoort niet tot deze tenant', 'USER_NOT_IN_TENANT', 403);
+        }
+    }
+
+    // Validate password strength (at least 8 characters)
+    if (strlen($newPassword) < 8) {
+        Response::error('Wachtwoord moet minimaal 8 tekens bevatten', 'PASSWORD_TOO_SHORT', 400);
+    }
+
+    // Update password
+    $passwordHash = password_hash($newPassword, PASSWORD_ARGON2ID);
+    $userModel->updatePassword($userId, $passwordHash);
+
+    $audit = new Audit($db);
+    $audit->log(
+        $tenantId,
+        currentUserId(),
+        'user.password_changed',
+        'user',
+        $userId,
+        ['user_email' => $user['email'] ?? '']
+    );
+
+    Response::success(['user_id' => $userId, 'message' => 'Wachtwoord succesvol gewijzigd']);
 }

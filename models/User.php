@@ -230,4 +230,16 @@ class User
         ]);
         return (int) $stmt->fetchColumn() > 0;
     }
+
+    /**
+     * Update a user's password
+     */
+    public function updatePassword(int $userId, string $passwordHash): bool
+    {
+        $stmt = $this->db->prepare('UPDATE `users` SET `password_hash` = :password_hash WHERE `id` = :id');
+        return $stmt->execute([
+            ':password_hash' => $passwordHash,
+            ':id' => $userId,
+        ]);
+    }
 }

@@ -44,7 +44,7 @@ $tenants = $tenantModel->getAllWithUserCount();
     <div class="glass-card" style="padding: var(--space-lg);">
         <div style="margin-bottom: var(--space-md);">
             <h2 style="margin-bottom: var(--space-sm);">Tenants</h2>
-            <a href="/superadmin/tenants" class="btn btn-primary">Beheer Tenants</a>
+            <a href="<?= BASE_URL ?>/superadmin/tenants" class="btn btn-primary">Beheer Tenants</a>
         </div>
 
         <?php if (empty($tenants)): ?>
@@ -53,7 +53,7 @@ $tenants = $tenantModel->getAllWithUserCount();
             <!-- Tenant Cards Grid -->
             <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-md);">
                 <?php foreach ($tenants as $t): ?>
-                <a href="/superadmin/tenant/<?= (int) $t['id'] ?>" class="glass-card" style="display: block; padding: var(--space-md); text-decoration: none; transition: transform 0.2s, box-shadow 0.2s; border-left: 4px solid <?= sanitize($t['brand_color'] ?? '#FFC107') ?>;">
+                <a href="<?= BASE_URL ?>/superadmin/tenant/<?= (int) $t['id'] ?>" class="glass-card" style="display: block; padding: var(--space-md); text-decoration: none; transition: transform 0.2s, box-shadow 0.2s; border-left: 4px solid <?= sanitize($t['brand_color'] ?? '#FFC107') ?>;">
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-sm);">
                         <h3 style="margin: 0; font-size: 18px; color: var(--text-primary);"><?= sanitize($t['name']) ?></h3>
                         <span class="badge" style="font-size: 11px;"><?= sanitize($t['mollie_status']) ?></span>
@@ -94,7 +94,7 @@ $tenants = $tenantModel->getAllWithUserCount();
                         <?php foreach ($tenants as $t): ?>
                         <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
                             <td style="padding: var(--space-sm);">
-                                <a href="/superadmin/tenant/<?= (int) $t['id'] ?>" style="color: var(--text-primary); text-decoration: underline;">
+                                <a href="<?= BASE_URL ?>/superadmin/tenant/<?= (int) $t['id'] ?>" style="color: var(--text-primary); text-decoration: underline;">
                                     <?= sanitize($t['name']) ?>
                                 </a>
                             </td>
@@ -111,7 +111,7 @@ $tenants = $tenantModel->getAllWithUserCount();
     </div>
 
     <div style="margin-top: var(--space-xl); text-align: center;">
-        <a href="/logout" class="btn btn-secondary">Uitloggen</a>
+        <a href="<?= BASE_URL ?>/logout" class="btn btn-secondary">Uitloggen</a>
     </div>
 </div>
 

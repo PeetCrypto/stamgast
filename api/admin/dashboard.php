@@ -196,7 +196,10 @@ $whales = $stmt->fetchAll();
 // Totaal Uitstaand Saldo (alle wallets)
 // ------------------------------------------
 $stmt = $db->prepare(
-    "SELECT COALESCE(SUM(`balance_cents`), 0) FROM `wallets` WHERE `tenant_id` = :tid"
+    "SELECT COALESCE(SUM(w.`balance_cents`), 0) 
+     FROM `wallets` w
+     JOIN `users` u ON w.`user_id` = u.`id`
+     WHERE w.`tenant_id` = :tid AND u.`role` != 'superadmin'"
 );
 $stmt->execute([':tid' => $tenantId]);
 $totalOutstandingBalance = (int) $stmt->fetchColumn();
@@ -318,6 +321,30 @@ $stmt->execute([':tid' => $tenantId]);
 $correctionLog = $stmt->fetchAll();
 
 // ==========================================
+// PUSH GESCHIEDENIS (recente 7 dagen)
+// ==========================================
+$stmt = $db->prepare(
+    "SELECT `action`, `metadata`, `created_at`
+     FROM `audit_log`
+     WHERE `tenant_id` = :tid
+       AND `action` LIKE 'push.%'
+       AND `created_at` >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+     ORDER BY `created_at` DESC
+     LIMIT 20"
+);
+$stmt->execute([':tid' => $tenantId]);
+$recentPush = $stmt->fetchAll();
+
+// Push stats (7dagen)
+$pushSent7d = 0;
+$pushFailed7d = 0;
+foreach ($recentPush as $entry) {
+    $details = json_decode($entry['metadata'], true) ?? [];
+    $pushSent7d += (int) ($details['sent'] ?? 0);
+    $pushFailed7d += (int) ($details['failed'] ?? 0);
+}
+
+// ==========================================
 // RESPONSE
 // ==========================================
 Response::success([
@@ -423,5 +450,21 @@ Response::success([
                 'created_at'      => $c['created_at'],
             ];
         }, $correctionLog),
+    ],
+    
+    // ======================================
+    // PUSH GESCHIEDENIS
+    // ======================================
+    'recent_push' => array_map(function ($p) {
+        return [
+            'action'     => $p['action'],
+            'details'    => json_decode($p['metadata'], true) ?? [],
+            'created_at' => $p['created_at'],
+        ];
+    }, $recentPush),
+    
+    'push_stats' => [
+        'sent_7d'   => $pushSent7d,
+        'failed_7d' => $pushFailed7d,
     ],
 ]);

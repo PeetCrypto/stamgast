@@ -265,6 +265,7 @@ textarea.form-input {
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     border-bottom: 1px solid var(--glass-border);
+    isolation: isolate;
 }
 
 .nav-brand {

@@ -111,7 +111,7 @@ foreach ($transactions as $tx) {
             <p style="font-size: 48px; margin-bottom: var(--space-md);">📭</p>
             <h2 style="color: var(--text-secondary); margin-bottom: var(--space-sm);">Nog geen berichten</h2>
             <p class="text-secondary">Je transacties en notificaties verschijnen hier automatisch.</p>
-            <a href="/dashboard" class="btn btn-primary" style="margin-top: var(--space-lg);">Terug naar dashboard</a>
+            <a href="<?= BASE_URL ?>/dashboard" class="btn btn-primary" style="margin-top: var(--space-lg);">Terug naar dashboard</a>
         </div>
     <?php else: ?>
         <!-- Notification Feed -->

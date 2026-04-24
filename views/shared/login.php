@@ -36,9 +36,9 @@ $csrfToken  = generateCSRFToken();
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
     <!-- Midnight Lounge Design System -->
-    <link rel="stylesheet" href="/css/midnight-lounge.css">
-    <link rel="stylesheet" href="/css/components.css">
-    <link rel="stylesheet" href="/css/views.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>/css/midnight-lounge.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>/css/components.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>/css/views.css">
 
     <!-- Tenant branding -->
     <style>
@@ -195,7 +195,7 @@ $csrfToken  = generateCSRFToken();
         <div class="auth-footer">
             <p class="text-secondary text-sm">
                 Nog geen account?
-                <a href="/register">Registreer nu</a>
+                <a href="<?= BASE_URL ?>/register">Registreer nu</a>
             </p>
         </div>
 
@@ -211,6 +211,9 @@ $csrfToken  = generateCSRFToken();
 </div>
 
 <!-- JavaScript -->
+<script>
+const BASE_URL = '<?= BASE_URL ?>';
+</script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     const form = document.getElementById('login-form');
@@ -238,7 +241,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             console.log('[LOGIN] Attempt:', { email, csrfToken: csrfToken ? 'present' : 'MISSING' });
-            const response = await fetch('/api/auth/login', {
+            const response = await fetch(BASE_URL + '/api/auth/login', {
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: {

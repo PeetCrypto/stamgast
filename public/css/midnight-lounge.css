@@ -113,6 +113,8 @@ img {
     max-width: 100%;
     height: auto;
     display: block;
+    border: none;
+    border-radius: 0;
 }
 
 /* --------------------------------------------------------------------------

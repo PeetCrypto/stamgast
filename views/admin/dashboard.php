@@ -14,6 +14,14 @@ declare(strict_types=1);
 
 $firstName = $_SESSION['first_name'] ?? 'Admin';
 $tenantName = $_SESSION['tenant_name'] ?? APP_NAME;
+
+// Load tenant for feature flag checks (navigation)
+$db = Database::getInstance()->getConnection();
+$tenantModel = new Tenant($db);
+$_tenantId = (int) ($_SESSION['tenant_id'] ?? 0);
+$_tenant = $tenantModel->findById($_tenantId);
+$featurePush = (bool) ($_tenant['feature_push'] ?? true);
+$featureMarketing = (bool) ($_tenant['feature_marketing'] ?? true);
 ?>
 
 <?php require VIEWS_PATH . 'shared/header.php'; ?>
@@ -248,10 +256,22 @@ $tenantName = $_SESSION['tenant_name'] ?? APP_NAME;
             <p style="color: var(--text-secondary);"><?= sanitize($tenantName) ?></p>
         </div>
         <div style="display: flex; gap: var(--space-sm);">
+            <?php if ($featurePush): ?>
+            <a href="/admin/push" class="btn btn-secondary btn-sm">Push</a>
+            <?php endif; ?>
+            <?php if ($featureMarketing): ?>
+            <a href="/admin/marketing" class="btn btn-secondary btn-sm">Marketing</a>
+            <?php endif; ?>
             <a href="/admin/users" class="btn btn-secondary btn-sm">Gebruikers</a>
             <a href="/admin/settings" class="btn btn-secondary btn-sm">Instellingen</a>
             <a href="/logout" class="btn btn-ghost btn-sm">Uitloggen</a>
         </div>
+    </div>
+
+    <!-- Module Status Balk (PHP-rendered, controlled by Super-Admin) -->
+    <div style="display: flex; gap: var(--space-sm); margin-bottom: var(--space-md);">
+        <span style="padding:4px 12px;border-radius:16px;font-size:12px;<?= $featurePush ? 'background:rgba(76,175,80,0.2);color:#4CAF50;' : 'background:rgba(255,255,255,0.05);color:var(--text-secondary);' ?>">Push: <?= $featurePush ? 'Actief' : 'Inactief' ?></span>
+        <span style="padding:4px 12px;border-radius:16px;font-size:12px;<?= $featureMarketing ? 'background:rgba(76,175,80,0.2);color:#4CAF50;' : 'background:rgba(255,255,255,0.05);color:var(--text-secondary);' ?>">Marketing: <?= $featureMarketing ? 'Actief' : 'Inactief' ?></span>
     </div>
 
     <!-- Sectie 1: LIVE MONITOR -->
@@ -339,7 +359,8 @@ $tenantName = $_SESSION['tenant_name'] ?? APP_NAME;
         </div>
     </section>
 
-    <!-- Sectie 4: MARKETING PERFORMANCE -->
+    <?php if ($featureMarketing): ?>
+    <!-- Sectie 4: MARKETING PERFORMANCE (alleen zichtbaar als Super-Admin module heeft aangezet) -->
     <section style="margin-bottom: var(--space-xl);">
         <h2 class="section-title"><span class="section-icon">🎂</span> Marketing Performance</h2>
         
@@ -368,6 +389,7 @@ $tenantName = $_SESSION['tenant_name'] ?? APP_NAME;
             </div>
         </div>
     </section>
+    <?php endif; ?>
 
     <!-- Sectie 5: PERSONEELSCONTROLE -->
     <section style="margin-bottom: var(--space-xl);">
@@ -400,6 +422,10 @@ $tenantName = $_SESSION['tenant_name'] ?? APP_NAME;
 <?php require VIEWS_PATH . 'shared/footer.php'; ?>
 
 <script>
+// Feature flags from server (controlled by Super-Admin)
+const FEATURE_PUSH = <?= $featurePush ? 'true' : 'false' ?>;
+const FEATURE_MARKETING = <?= $featureMarketing ? 'true' : 'false' ?>;
+
 // ==========================================
 // Admin Dashboard JS
 // Laad alle stats via de API
@@ -407,8 +433,9 @@ $tenantName = $_SESSION['tenant_name'] ?? APP_NAME;
 
 (async function loadDashboard() {
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
-    
+
     try {
+        // Laad dashboard data
         const response = await fetch('/api/admin/dashboard', {
             method: 'GET',
             headers: {
@@ -416,14 +443,14 @@ $tenantName = $_SESSION['tenant_name'] ?? APP_NAME;
                 'X-CSRF-Token': csrfToken
             }
         });
-        
+
         const data = await response.json();
-        
+
         if (!data.success) {
             console.error('Dashboard error:', data.error);
             return;
         }
-        
+
         const d = data.data;
         
         // ==========================================
@@ -459,10 +486,12 @@ $tenantName = $_SESSION['tenant_name'] ?? APP_NAME;
         document.getElementById('spent-30d').textContent = formatEuro(d.liquidity?.spent_30d);
         
         // ==========================================
-        // 4. MARKETING PERFORMANCE
+        // 4. MARKETING PERFORMANCE (alleen als actief)
         // ==========================================
-        renderBirthdays(d.marketing?.birthdays_this_week || []);
-        renderTuesdayEffect(d.marketing?.tuesday_effect);
+        if (FEATURE_MARKETING) {
+            renderBirthdays(d.marketing?.birthdays_this_week || []);
+            renderTuesdayEffect(d.marketing?.tuesday_effect);
+        }
         
         // ==========================================
         // 5. PERSONEELSCONTROLE
@@ -527,18 +556,19 @@ function renderWhales(whales) {
     whales.forEach((w, i) => {
         const initials = (w.first_name?.[0] || '') + (w.last_name?.[0] || '');
         const hasPush = w.has_push ? '✅' : '⚠️';
+        const bonusBtn = FEATURE_PUSH
+            ? `<button class="btn btn-secondary btn-action" onclick="sendWhaleBonus(${w.id})" title="Bonus sturen">🎁</button>`
+            : '';
         
         html += `
             <div class="whale-card">
                 <div class="whale-avatar">${initials}</div>
                 <div class="whale-info">
                     <div class="whale-name">${w.first_name} ${w.last_name}</div>
-                    <div class="whale-stats">${w.visits_30d} bezoeken • ${hasPush} push</div>
+                    <div class="whale-stats">${w.visits_30d} bezoeken${FEATURE_PUSH ? ' • ' + hasPush + ' push' : ''}</div>
                 </div>
                 <div class="whale-amount">${formatEuro(w.total_spent_30d)}</div>
-                <button class="btn btn-secondary btn-action" onclick="sendWhaleBonus(${w.id})" title="Bonus sturen">
-                    🎁
-                </button>
+                ${bonusBtn}
             </div>
         `;
     });

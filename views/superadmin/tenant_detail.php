@@ -74,10 +74,16 @@ $users = $tenantModel->getUsersWithWallets($tenantId);
         </div>
     </div>
 
-    <!-- Two Column Layout -->
+    <!-- Tab Navigation -->
+    <div style="display: flex; margin-bottom: var(--space-md); border-bottom: 1px solid var(--glass-border);">
+        <button class="tab-button active" data-tab="naw" style="padding: var(--space-sm) var(--space-md); background: var(--glass-bg); border: none; cursor: pointer; border-radius: 4px 4px 0 0;">NAW Gegevens</button>
+        <button class="tab-button" data-tab="users" style="padding: var(--space-sm) var(--space-md); background: var(--glass-bg); border: none; cursor: pointer; border-radius: 4px 4px 4px 4px;">Gebruikers</button>
+    </div>
+
+    <!-- Tab Content -->
     <div style="display: grid; grid-template-columns: 1fr 2fr; gap: var(--space-lg);">
         <!-- Left: NAW Details -->
-        <div>
+        <div class="tab-content" id="tab-naw" style="display: block;">
             <div class="glass-card" style="padding: var(--space-lg);">
                 <h2 style="margin-bottom: var(--space-md);">NAW Gegevens</h2>
                 <form id="naw-form">
@@ -128,8 +134,64 @@ $users = $tenantModel->getUsersWithWallets($tenantId);
                             <option value="live" <?= ($tenant['mollie_status'] ?? '') === 'live' ? 'selected' : '' ?>>Live</option>
                         </select>
                     </div>
+
+                    <!-- Tenant Status Toggle -->
+                    <div style="border-top: 1px solid var(--glass-border); padding-top: var(--space-md); margin-top: var(--space-md); margin-bottom: var(--space-md);">
+                        <h3 style="font-size: 14px; font-weight: 600; margin-bottom: var(--space-sm); color: <?= ($tenant['is_active'] ?? true) ? 'var(--accent-primary)' : '#f44336' ?>;">Tenant Status</h3>
+                        <div class="form-group">
+                            <label style="display:flex;align-items:center;gap:var(--space-sm);cursor:pointer;">
+                                <input type="checkbox" id="naw-is_active" <?= ($tenant['is_active'] ?? true) ? 'checked' : '' ?> style="width:18px;height:18px;">
+                                <span id="naw-is_active-label" style="color: <?= ($tenant['is_active'] ?? true) ? '#4CAF50' : '#f44336' ?>;">
+                                    <?= ($tenant['is_active'] ?? true) ? 'Actief' : 'Uitgeschakeld' ?>
+                                </span>
+                            </label>
+                            <p class="text-sm text-secondary" style="margin-top:4px;">Schakel uit om de tenant en alle gebruikers tijdelijk te blokkeren.</p>
+                        </div>
+                    </div>
+
+                    <!-- Module Toggles (Platform beheerder) -->
+                    <div style="border-top: 1px solid var(--glass-border); padding-top: var(--space-md); margin-top: var(--space-md); margin-bottom: var(--space-md);">
+                        <h3 style="font-size: 14px; font-weight: 600; margin-bottom: var(--space-sm); color: var(--accent-primary);">Modules</h3>
+                        <div class="form-group">
+                            <label class="text-sm text-secondary">Push Notificaties</label>
+                            <label style="display:flex;align-items:center;gap:var(--space-sm);cursor:pointer;">
+                                <input type="checkbox" id="naw-feature_push" <?= ($tenant['feature_push'] ?? true) ? 'checked' : '' ?> style="width:18px;height:18px;">
+                                <span id="naw-feature_push-label"><?= ($tenant['feature_push'] ?? true) ? 'Actief' : 'Inactief' ?></span>
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label class="text-sm text-secondary">Marketing Studio</label>
+                            <label style="display:flex;align-items:center;gap:var(--space-sm);cursor:pointer;">
+                                <input type="checkbox" id="naw-feature_marketing" <?= ($tenant['feature_marketing'] ?? true) ? 'checked' : '' ?> style="width:18px;height:18px;">
+                                <span id="naw-feature_marketing-label"><?= ($tenant['feature_marketing'] ?? true) ? 'Actief' : 'Inactief' ?></span>
+                            </label>
+                        </div>
+                    </div>
+
                     <button type="submit" class="btn btn-primary" style="width:100%;margin-top:var(--space-sm);">Opslaan</button>
                     <p id="naw-status" class="text-sm" style="margin-top:var(--space-sm);text-align:center;"></p>
+                </form>
+            </div>
+            
+            <!-- Password Change Form -->
+            <div class="glass-card" style="padding: var(--space-lg); margin-top: var(--space-md);">
+                <h2 style="margin-bottom: var(--space-md);">Wachtwoord Wijzigen</h2>
+                <form id="password-form">
+                    <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+                    <div class="form-group">
+                        <label class="text-sm text-secondary">E-mail van Admin</label>
+                        <input type="email" id="admin-email" class="form-input" placeholder="admin@voorbeeld.nl" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="text-sm text-secondary">Nieuw Wachtwoord</label>
+                        <input type="password" id="new-password" class="form-input" placeholder="Nieuw wachtwoord" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="text-sm text-secondary">Bevestig Nieuw Wachtwoord</label>
+                        <input type="password" id="confirm-password" class="form-input" placeholder="Bevestig nieuw wachtwoord" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width:100%;margin-top:var(--space-sm);">Wachtwoord Wijzigen</button>
+                    <p id="password-status" class="text-sm" style="margin-top:var(--space-sm);text-align:center;"></p>
                 </form>
             </div>
         </div>
@@ -215,6 +277,14 @@ document.getElementById('naw-form')?.addEventListener('submit', async (e) => {
         if (el) data[f] = el.value.trim();
     });
 
+    // Include feature toggles and tenant status
+    const pushEl = document.getElementById('naw-feature_push');
+    const mktEl = document.getElementById('naw-feature_marketing');
+    const activeEl = document.getElementById('naw-is_active');
+    if (pushEl) data.feature_push = pushEl.checked ? 1 : 0;
+    if (mktEl) data.feature_marketing = mktEl.checked ? 1 : 0;
+    if (activeEl) data.is_active = activeEl.checked ? 1 : 0;
+
     try {
         const res = await fetch('/api/superadmin/tenants', {
             method: 'POST',
@@ -234,6 +304,20 @@ document.getElementById('naw-form')?.addEventListener('submit', async (e) => {
         statusEl.style.color = '#f44336';
     }
     setTimeout(() => { statusEl.textContent = ''; }, 3000);
+});
+
+// Feature toggle label updates
+document.getElementById('naw-feature_push')?.addEventListener('change', function() {
+    document.getElementById('naw-feature_push-label').textContent = this.checked ? 'Actief' : 'Inactief';
+});
+document.getElementById('naw-feature_marketing')?.addEventListener('change', function() {
+    document.getElementById('naw-feature_marketing-label').textContent = this.checked ? 'Actief' : 'Inactief';
+});
+// Tenant status toggle label update
+document.getElementById('naw-is_active')?.addEventListener('change', function() {
+    const label = document.getElementById('naw-is_active-label');
+    label.textContent = this.checked ? 'Actief' : 'Uitgeschakeld';
+    label.style.color = this.checked ? '#4CAF50' : '#f44336';
 });
 
 // Role change
@@ -263,6 +347,61 @@ document.querySelectorAll('.role-select').forEach(sel => {
             this.style.background = originalBg || '';
         }
     });
+});
+
+// Password change form handler
+document.getElementById('password-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const statusEl = document.getElementById('password-status');
+    statusEl.textContent = 'Wachtwoord wijzigen...';
+    statusEl.style.color = 'var(--text-secondary)';
+    
+    const email = document.getElementById('admin-email').value.trim();
+    const newPassword = document.getElementById('new-password').value;
+    const confirmPassword = document.getElementById('confirm-password').value;
+    
+    // Validate password match
+    if (newPassword !== confirmPassword) {
+        statusEl.textContent = 'Wachtwoorden komen niet overeen';
+        statusEl.style.color = '#f44336';
+        return;
+    }
+    
+    // Validate password strength (at least 8 characters)
+    if (newPassword.length < 8) {
+        statusEl.textContent = 'Wachtwoord moet minimaal 8 tekens bevatten';
+        statusEl.style.color = '#f44336';
+        return;
+    }
+    
+    try {
+        const res = await fetch('/api/superadmin/tenants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+            body: JSON.stringify({ 
+                action: 'change_password', 
+                tenant_id: TENANT_ID, 
+                email: email,
+                new_password: newPassword 
+            })
+        });
+        const result = await res.json();
+        if (result.success) {
+            statusEl.textContent = '✓ Wachtwoord gewijzigd';
+            statusEl.style.color = '#4CAF50';
+            // Clear form fields
+            document.getElementById('admin-email').value = '';
+            document.getElementById('new-password').value = '';
+            document.getElementById('confirm-password').value = '';
+        } else {
+            statusEl.textContent = '✗ ' + (result.error || 'Fout bij wijzigen wachtwoord');
+            statusEl.style.color = '#f44336';
+        }
+    } catch (err) {
+        statusEl.textContent = '✗ Netwerkfout';
+        statusEl.style.color = '#f44336';
+    }
+    setTimeout(() => { statusEl.textContent = ''; }, 3000);
 });
 </script>
 

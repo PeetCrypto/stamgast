@@ -58,8 +58,8 @@ $tenantLogo = $_SESSION['tenant_logo'] ?? ''; // Tenant uploaded logo URL
 <nav class="nav-top">
     <div style="display:flex;align-items:center;width:100%;">
         <!-- Left: REGULR.vip platform branding -->
-        <a href="/" style="display:flex;align-items:center;gap:6px;text-decoration:none;flex:1;">
-            <img src="<?= BASE_URL ?>/icons/regulr-vip-logo.png" alt="REGULR.vip" style="height:28px;width:auto;border-radius:4px;">
+        <a href="<?= BASE_URL ?>" style="display:flex;align-items:center;gap:6px;text-decoration:none;flex:1;">
+            <img src="<?= BASE_URL ?>/icons/regulr-vip-logo.png" alt="REGULR.vip" style="height:28px;width:auto;border-radius:4px;background:transparent;">
             <span style="font-weight:700;color:#FFC107;font-size:14px;">REGULR.vip</span>
         </a>
 

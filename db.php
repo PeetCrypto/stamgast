@@ -80,7 +80,36 @@ try {
         ip_address VARCHAR(45)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     
-CREATE TABLE IF NOT EXISTS audit_log (
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NOT NULL,
+        user_id INT NOT NULL,
+        endpoint TEXT NOT NULL,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_push_tenant (tenant_id),
+        INDEX idx_push_user (user_id),
+        CONSTRAINT fk_push_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        CONSTRAINT fk_push_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    
+    CREATE TABLE IF NOT EXISTS email_queue (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id INT NOT NULL,
+        user_id INT,
+        subject VARCHAR(255) NOT NULL,
+        body_html TEXT NOT NULL,
+        status ENUM('pending','sent','failed') DEFAULT 'pending',
+        sent_at TIMESTAMP NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_email_tenant (tenant_id),
+        INDEX idx_email_status (status),
+        CONSTRAINT fk_email_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        CONSTRAINT fk_email_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    
+    CREATE TABLE IF NOT EXISTS audit_log (
         id INT AUTO_INCREMENT PRIMARY KEY,
         tenant_id INT NOT NULL,
         user_id INT,

@@ -121,6 +121,7 @@ class Tenant
         $allowedFields = [
             'name', 'slug', 'brand_color', 'secondary_color', 'logo_path',
             'mollie_api_key', 'mollie_status', 'whitelisted_ips',
+            'is_active',
             'feature_push', 'feature_marketing',
             'contact_name', 'contact_email', 'phone', 'address',
             'postal_code', 'city', 'country',
@@ -166,6 +167,17 @@ class Tenant
     }
 
     /**
+     * Check if a tenant is active (not disabled by superadmin)
+     */
+    public function isActive(int $tenantId): bool
+    {
+        $stmt = $this->db->prepare('SELECT `is_active` FROM `tenants` WHERE `id` = :id LIMIT 1');
+        $stmt->execute([':id' => $tenantId]);
+        $result = $stmt->fetchColumn();
+        return (bool) $result;
+    }
+
+    /**
      * Get platform overview statistics (super-admin)
      */
     public function getPlatformStats(): array
@@ -206,20 +218,22 @@ class Tenant
         $stmt->execute([':tid' => $tenantId]);
         $deposits = (int) $stmt->fetchColumn();
 
-        // Total balance across all wallets
+        // Total balance across all wallets (excluding super-admins)
         $stmt = $this->db->prepare(
-            'SELECT COALESCE(SUM(`balance_cents`), 0)
-             FROM `wallets`
-             WHERE `tenant_id` = :tid'
+            'SELECT COALESCE(SUM(w.`balance_cents`), 0)
+             FROM `wallets` w
+             JOIN `users` u ON w.`user_id` = u.`id`
+             WHERE w.`tenant_id` = :tid AND u.`role` != \'superadmin\''
         );
         $stmt->execute([':tid' => $tenantId]);
         $totalBalance = (int) $stmt->fetchColumn();
 
-        // Total points across all wallets
+        // Total points across all wallets (excluding super-admins)
         $stmt = $this->db->prepare(
-            'SELECT COALESCE(SUM(`points_cents`), 0)
-             FROM `wallets`
-             WHERE `tenant_id` = :tid'
+            'SELECT COALESCE(SUM(w.`points_cents`), 0)
+             FROM `wallets` w
+             JOIN `users` u ON w.`user_id` = u.`id`
+             WHERE w.`tenant_id` = :tid AND u.`role` != \'superadmin\''
         );
         $stmt->execute([':tid' => $tenantId]);
         $totalPoints = (int) $stmt->fetchColumn();

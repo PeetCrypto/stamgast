@@ -29,26 +29,26 @@ $pointsCents = $wallet ? (int) $wallet['points_cents'] : 0;
         <p class="text-secondary text-sm">Je saldo</p>
         <p style="font-size: 48px; font-weight: 700; color: var(--accent-primary);">&euro; <?= number_format($balanceCents / 100, 2, ',', '.') ?></p>
         <p class="text-secondary text-sm" style="margin-top: var(--space-xs);"><?= number_format($pointsCents / 100, 0) ?> punten</p>
-        <a href="/wallet" class="btn btn-primary" style="margin-top: var(--space-md);">Opwaarderen</a>
+        <a href="<?= BASE_URL ?>/wallet" class="btn btn-primary" style="margin-top: var(--space-md);">Opwaarderen</a>
     </div>
 
     <!-- Quick Actions -->
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-md); margin-bottom: var(--space-xl);">
-        <a href="/qr" class="glass-card" style="padding: var(--space-lg); text-align: center; text-decoration: none; color: inherit;">
+        <a href="<?= BASE_URL ?>/qr" class="glass-card" style="padding: var(--space-lg); text-align: center; text-decoration: none; color: inherit;">
             <p style="font-size: 24px; margin-bottom: var(--space-xs);">&#9203;</p>
             <p class="text-sm">QR Code</p>
         </a>
-        <a href="/wallet" class="glass-card" style="padding: var(--space-lg); text-align: center; text-decoration: none; color: inherit;">
+        <a href="<?= BASE_URL ?>/wallet" class="glass-card" style="padding: var(--space-lg); text-align: center; text-decoration: none; color: inherit;">
             <p style="font-size: 24px; margin-bottom: var(--space-xs);">&#128176;</p>
             <p class="text-sm">Wallet</p>
         </a>
-        <a href="/inbox" class="glass-card" style="padding: var(--space-lg); text-align: center; text-decoration: none; color: inherit;">
+        <a href="<?= BASE_URL ?>/inbox" class="glass-card" style="padding: var(--space-lg); text-align: center; text-decoration: none; color: inherit;">
             <p style="font-size: 24px; margin-bottom: var(--space-xs);">&#128233;</p>
             <p class="text-sm">Inbox</p>
         </a>
     </div>
 
-    <a href="/logout" class="btn btn-secondary">Uitloggen</a>
+    <a href="<?= BASE_URL ?>/logout" class="btn btn-secondary">Uitloggen</a>
 </div>
 
 <?php require VIEWS_PATH . 'shared/footer.php'; ?>
