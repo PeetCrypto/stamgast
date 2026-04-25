@@ -25,7 +25,7 @@
         const csrfMeta = document.querySelector('meta[name="csrf-token"]');
         const csrfToken = csrfMeta ? csrfMeta.content : '';
 
-        const response = await fetch('/api/pos/scan', {
+        const response = await fetch((window.__BASE_URL || '') + '/api/pos/scan', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -61,7 +61,7 @@
         paymentProcessing = true;
 
         try {
-            const response = await fetch('/api/pos/process_payment', {
+            const response = await fetch((window.__BASE_URL || '') + '/api/pos/process_payment', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

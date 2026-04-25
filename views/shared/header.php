@@ -67,7 +67,7 @@ $tenantLogo = $_SESSION['tenant_logo'] ?? ''; // Tenant uploaded logo URL
         <!-- Center: No tenant logo for superadmin (multi-tenant platform level) -->
         <?php elseif ($userRole === 'admin'): ?>
         <!-- Center: Tenant logo (admin) -->
-        <a href="/" style="display:flex;align-items:center;justify-content:center;flex:0 0 auto;">
+        <a href="<?= BASE_URL ?>/admin" style="display:flex;align-items:center;justify-content:center;flex:0 0 auto;">
             <?php if (!empty($tenantLogo)): ?>
             <img src="<?= sanitize($tenantLogo) ?>" alt="<?= sanitize($tenantName) ?>" style="height:32px;width:auto;max-width:140px;object-fit:contain;">
             <?php else: ?>
@@ -76,7 +76,7 @@ $tenantLogo = $_SESSION['tenant_logo'] ?? ''; // Tenant uploaded logo URL
         </a>
         <?php else: ?>
         <!-- Center: Tenant logo (bartender/guest) -->
-        <a href="/" style="display:flex;align-items:center;justify-content:center;flex:0 0 auto;">
+        <a href="<?= BASE_URL ?>/dashboard" style="display:flex;align-items:center;justify-content:center;flex:0 0 auto;">
             <?php if (!empty($tenantLogo)): ?>
             <img src="<?= sanitize($tenantLogo) ?>" alt="<?= sanitize($tenantName) ?>" style="height:36px;width:auto;max-width:150px;object-fit:contain;">
             <?php else: ?>

@@ -214,7 +214,7 @@ $subscriberCount = $pushService->getSubscriptionCount($tenantId);
             De Push module is door de platform beheerder uitgeschakeld.
             Neem contact op met de beheerder om deze functionaliteit te activeren.
         </p>
-        <a href="/admin" class="btn btn-primary">Terug naar Dashboard</a>
+        <a href="<?= BASE_URL ?>/admin" class="btn btn-primary">Terug naar Dashboard</a>
     </div>
 
     <?php else: ?>
@@ -339,10 +339,10 @@ $subscriberCount = $pushService->getSubscriptionCount($tenantId);
     <?php endif; ?>
 
     <div style="text-align: center; margin-top: var(--space-xl);">
-        <a href="/admin" class="btn btn-secondary">Terug naar Dashboard</a>
+        <a href="<?= BASE_URL ?>/admin" class="btn btn-secondary">Terug naar Dashboard</a>
     </div>
 </div>
 
 <?php require VIEWS_PATH . 'shared/footer.php'; ?>
-<script src="/public/js/app.js"></script>
-<script src="/public/js/admin.js"></script>
+<script src="<?= BASE_URL ?>/public/js/app.js"></script>
+<script src="<?= BASE_URL ?>/public/js/admin.js"></script>

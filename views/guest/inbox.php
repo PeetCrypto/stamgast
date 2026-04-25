@@ -164,13 +164,13 @@ foreach ($transactions as $tx) {
         <?php if ($totalPages > 1): ?>
             <div style="display: flex; justify-content: center; gap: var(--space-sm); margin-top: var(--space-lg);">
                 <?php if ($page > 1): ?>
-                    <a href="/inbox?page=<?= $page - 1 ?>" class="btn btn-secondary" style="font-size: 14px;">← Vorige</a>
+                    <a href="<?= BASE_URL ?>/inbox?page=<?= $page - 1 ?>" class="btn btn-secondary" style="font-size: 14px;">← Vorige</a>
                 <?php endif; ?>
                 <span class="text-secondary" style="display: flex; align-items: center; font-size: 14px;">
                     Pagina <?= $page ?> van <?= $totalPages ?>
                 </span>
                 <?php if ($page < $totalPages): ?>
-                    <a href="/inbox?page=<?= $page + 1 ?>" class="btn btn-secondary" style="font-size: 14px;">Volgende →</a>
+                    <a href="<?= BASE_URL ?>/inbox?page=<?= $page + 1 ?>" class="btn btn-secondary" style="font-size: 14px;">Volgende →</a>
                 <?php endif; ?>
             </div>
         <?php endif; ?>
@@ -178,7 +178,7 @@ foreach ($transactions as $tx) {
 
     <!-- Back link -->
     <div style="margin-top: var(--space-xl); text-align: center;">
-        <a href="/dashboard" class="text-secondary" style="font-size: 14px; text-decoration: none;">← Terug naar dashboard</a>
+        <a href="<?= BASE_URL ?>/dashboard" class="text-secondary" style="font-size: 14px; text-decoration: none;">← Terug naar dashboard</a>
     </div>
 </div>
 

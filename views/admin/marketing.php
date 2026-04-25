@@ -101,7 +101,7 @@ $tiersList      = $tierModel->getByTenant($tenantId);
         <p style="color: var(--text-secondary); margin-bottom: var(--space-lg);">
             Schakel de Marketing module in via Instellingen om deze functionaliteit te gebruiken.
         </p>
-        <a href="/admin/settings" class="btn btn-primary">Naar Instellingen</a>
+        <a href="<?= BASE_URL ?>/admin/settings" class="btn btn-primary">Naar Instellingen</a>
     </div>
     <?php else: ?>
 
@@ -242,7 +242,7 @@ $tiersList      = $tierModel->getByTenant($tenantId);
     <?php endif; ?>
 
     <div style="text-align: center; margin-top: var(--space-xl);">
-        <a href="/admin" class="btn btn-secondary">Terug naar Dashboard</a>
+        <a href="<?= BASE_URL ?>/admin" class="btn btn-secondary">Terug naar Dashboard</a>
     </div>
 </div>
 
@@ -250,7 +250,7 @@ $tiersList      = $tierModel->getByTenant($tenantId);
 <div class="alerts-container"></div>
 
 <?php require VIEWS_PATH . 'shared/footer.php'; ?>
-<script src="/public/js/app.js"></script>
-<script src="/public/js/admin.js"></script>
+<script src="<?= BASE_URL ?>/public/js/app.js"></script>
+<script src="<?= BASE_URL ?>/public/js/admin.js"></script>
 </body>
 </html>

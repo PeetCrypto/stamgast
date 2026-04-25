@@ -131,24 +131,27 @@
         // Default avatar SVG
         const defaultAvatar = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44"><circle fill="rgba(255,193,7,0.2)" cx="22" cy="14" r="10"/><circle fill="rgba(255,193,7,0.2)" cx="22" cy="38" r="14"/></svg>');
         
-        tbody.innerHTML = users.map(user => `
-            <tr data-user-id="${user.id}">
+        tbody.innerHTML = users.map(user => {
+            const blockedRow = user.is_blocked ? ' class="user-blocked-row"' : '';
+            const blockedBadge = user.is_blocked ? '<span class="badge-blocked">Geblokkeerd</span>' : '';
+            return `
+            <tr data-user-id="${user.id}"${blockedRow}>
                 <td>
                     <div class="user-cell">
                         <img src="${user.photo_url || defaultAvatar}" alt="" class="avatar">
-                        <span>${user.first_name} ${user.last_name}</span>
+                        <span>${user.first_name} ${user.last_name}${blockedBadge}</span>
                     </div>
                 </td>
                 <td>${user.email}</td>
-                <td><span class="badge badge-${user.role}">${user.role}</span></td>
+                <td><span class="badge badge-${user.role}">${roleLabel(user.role)}</span></td>
                 <td>${user.tier_name || '-'}</td>
-                <td>${window.STAMGAST.formatCurrency(user.balance_cents)}</td>
+                <td style="text-align: center;">${window.STAMGAST.formatCurrency(user.balance_cents)}</td>
                 <td style="text-align: center;">${formatDate(user.last_activity)}</td>
                 <td>
                     <button class="btn btn-sm btn-edit" data-id="${user.id}">Bewerk</button>
                 </td>
-            </tr>
-        `).join('');
+            </tr>`;
+        }).join('');
 
         // Add click handlers
         tbody.querySelectorAll('.btn-edit').forEach(btn => {
@@ -160,38 +163,74 @@
         const user = usersData.find(u => u.id === userId);
         if (!user) return;
 
-        document.getElementById('modal-title').textContent = `Bewerk: ${user.first_name}`;
+        document.getElementById('modal-title').textContent = `Bewerk: ${user.first_name} ${user.last_name}`;
         document.getElementById('user-id').value = user.id;
         document.getElementById('user-first-name').value = user.first_name;
         document.getElementById('user-last-name').value = user.last_name;
         document.getElementById('user-email').value = user.email;
         document.getElementById('user-role').value = user.role;
 
-        // Show block button (hidden in add mode)
-        document.getElementById('block-user-btn').style.display = 'block';
+        // Hide password create field (only for new users)
+        document.getElementById('password-create-group').style.display = 'none';
+        document.getElementById('user-password').removeAttribute('required');
+        document.getElementById('user-password').value = '';
+
+        // Show password reset section (only for existing users)
+        document.getElementById('password-reset-section').style.display = 'block';
+        document.getElementById('reset-password-input').value = '';
+
+        // Show block or unblock based on current status
+        if (user.is_blocked) {
+            document.getElementById('block-user-btn').style.display = 'none';
+            document.getElementById('unblock-user-btn').style.display = 'inline-block';
+        } else {
+            document.getElementById('block-user-btn').style.display = 'inline-block';
+            document.getElementById('unblock-user-btn').style.display = 'none';
+        }
 
         document.getElementById('user-modal-overlay').classList.add('modal-overlay--open');
         document.getElementById('user-modal').classList.add('show');
     }
 
     async function saveUser() {
-        const form = document.getElementById('user-form');
+        const userId = document.getElementById('user-id').value;
+        const isNewUser = !userId || userId === '';
+
         const data = {
-            user_id: parseInt(document.getElementById('user-id').value),
-            first_name: document.getElementById('user-first-name').value,
-            last_name: document.getElementById('user-last-name').value,
-            email: document.getElementById('user-email').value,
+            first_name: document.getElementById('user-first-name').value.trim(),
+            last_name: document.getElementById('user-last-name').value.trim(),
+            email: document.getElementById('user-email').value.trim(),
             role: document.getElementById('user-role').value
         };
+
+        // Validate required fields
+        if (!data.first_name || !data.last_name || !data.email) {
+            window.STAMGAST.showError('Vul alle verplichte velden in');
+            return;
+        }
+
+        if (isNewUser) {
+            // CREATE mode
+            data.password = document.getElementById('user-password').value;
+            if (!data.password || data.password.length < 8) {
+                window.STAMGAST.showError('Wachtwoord is verplicht en moet minimaal 8 tekens lang zijn');
+                return;
+            }
+            data.action = 'create';
+        } else {
+            // UPDATE mode
+            data.user_id = parseInt(userId);
+            data.action = 'update';
+        }
 
         try {
             const response = await window.STAMGAST.api('/admin/users', {
                 method: 'POST',
-                body: { action: 'update', ...data }
+                body: data
             });
 
             if (response.success) {
-                window.STAMGAST.showSuccess('Gebruiker opgeslagen');
+                window.STAMGAST.showSuccess(isNewUser ? 'Gebruiker aangemaakt' : 'Gebruiker opgeslagen');
                 closeModal();
                 loadUsers(currentPage);
             } else {
@@ -228,7 +267,68 @@
         }
     }
 
-function closeModal() {
+    async function unblockUser() {
+        const userId = parseInt(document.getElementById('user-id').value);
+        if (!userId || userId <= 0) return;
+
+        if (!confirm('Weet je zeker dat je deze gebruiker wilt deblokkeren?')) {
+            return;
+        }
+
+        try {
+            const response = await window.STAMGAST.api('/admin/users', {
+                method: 'POST',
+                body: { action: 'unblock', user_id: userId }
+            });
+
+            if (response.success) {
+                window.STAMGAST.showSuccess('Gebruiker gedeblokkeerd');
+                closeModal();
+                loadUsers(currentPage);
+            } else {
+                throw new Error(response.error);
+            }
+        } catch (error) {
+            window.STAMGAST.showError(error.message);
+        }
+    }
+
+    async function resetPassword() {
+        const userId = parseInt(document.getElementById('user-id').value);
+        const newPassword = document.getElementById('reset-password-input').value;
+
+        if (!userId || userId <= 0) {
+            window.STAMGAST.showError('Geen gebruiker geselecteerd');
+            return;
+        }
+
+        if (!newPassword || newPassword.length < 8) {
+            window.STAMGAST.showError('Wachtwoord moet minimaal 8 tekens lang zijn');
+            return;
+        }
+
+        if (!confirm('Weet je zeker dat je het wachtwoord van deze gebruiker wilt wijzigen?')) {
+            return;
+        }
+
+        try {
+            const response = await window.STAMGAST.api('/admin/users', {
+                method: 'POST',
+                body: { action: 'reset_password', user_id: userId, new_password: newPassword }
+            });
+
+            if (response.success) {
+                window.STAMGAST.showSuccess('Wachtwoord gewijzigd');
+                document.getElementById('reset-password-input').value = '';
+            } else {
+                throw new Error(response.error);
+            }
+        } catch (error) {
+            window.STAMGAST.showError(error.message);
+        }
+    }
+
+    function closeModal() {
     document.querySelectorAll('.modal').forEach(m => m.classList.remove('show'));
     document.getElementById('user-modal-overlay')?.classList.remove('modal-overlay--open');
     document.getElementById('tier-modal-overlay')?.classList.remove('modal-overlay--open');
@@ -750,6 +850,11 @@ async function deleteTier(tierId) {
         return date.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
     }
 
+    function roleLabel(role) {
+        const labels = { admin: 'Admin', bartender: 'Bartender', guest: 'Gast', superadmin: 'Superadmin' };
+        return labels[role] || role;
+    }
+
     function updatePagination(total, page) {
         const totalPages = Math.ceil(total / 20);
         document.getElementById('page-info').textContent = `Pagina ${page} van ${totalPages}`;
@@ -1058,6 +1163,12 @@ async function deleteTier(tierId) {
          });
          
          document.getElementById('block-user-btn')?.addEventListener('click', blockUser);
+         document.getElementById('unblock-user-btn')?.addEventListener('click', unblockUser);
+         document.getElementById('reset-password-btn')?.addEventListener('click', resetPassword);
+         document.getElementById('toggle-password-visibility')?.addEventListener('click', () => {
+             const input = document.getElementById('reset-password-input');
+             input.type = input.type === 'password' ? 'text' : 'password';
+         });
         
         document.getElementById('tier-form')?.addEventListener('submit', (e) => {
             e.preventDefault(); saveTier();
@@ -1096,8 +1207,17 @@ async function deleteTier(tierId) {
         document.getElementById('user-email').value = '';
         document.getElementById('user-role').value = 'guest';
 
-        // Hide block button in add mode
+        // Show password field for new user (required)
+        document.getElementById('password-create-group').style.display = 'block';
+        document.getElementById('user-password').setAttribute('required', 'required');
+        document.getElementById('user-password').value = '';
+
+        // Hide password reset section (only for editing)
+        document.getElementById('password-reset-section').style.display = 'none';
+
+        // Hide block/unblock buttons (not applicable for new users)
         document.getElementById('block-user-btn').style.display = 'none';
+        document.getElementById('unblock-user-btn').style.display = 'none';
 
         document.getElementById('user-modal-overlay').classList.add('modal-overlay--open');
         document.getElementById('user-modal').classList.add('show');

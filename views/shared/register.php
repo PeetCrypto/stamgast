@@ -36,9 +36,9 @@ $csrfToken  = generateCSRFToken();
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
     <!-- Midnight Lounge Design System -->
-    <link rel="stylesheet" href="/css/midnight-lounge.css">
-    <link rel="stylesheet" href="/css/components.css">
-    <link rel="stylesheet" href="/css/views.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>/css/midnight-lounge.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>/css/components.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>/css/views.css">
 
     <!-- Tenant branding + auth page styles -->
     <style>
@@ -310,7 +310,7 @@ $csrfToken  = generateCSRFToken();
         <!-- Footer Links -->
         <div class="auth-footer">
             <p class="text-secondary text-sm">
-                Al een account? <a href="/login">Inloggen</a>
+                Al een account? <a href="<?= BASE_URL ?>/login">Inloggen</a>
             </p>
         </div>
 
@@ -433,7 +433,7 @@ document.addEventListener('DOMContentLoaded', () => {
         registerIcon.style.display = 'block';
 
         try {
-            const response = await fetch('/api/auth/register', {
+            const response = await fetch((window.__BASE_URL || '') + '/api/auth/register', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -452,7 +452,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (response.ok && data.success) {
                 // Redirect to dashboard
-                window.location.href = data.redirect || '/dashboard';
+                window.location.href = data.redirect || ((window.__BASE_URL || '') + '/dashboard');
             } else {
                 showError(data.error || 'Registratie mislukt.');
                 resetButton();

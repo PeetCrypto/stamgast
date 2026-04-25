@@ -7,5 +7,5 @@ declare(strict_types=1);
  * Kept for backward compatibility (/payment route)
  */
 
-header('Location: /bartender');
+header('Location: ' . BASE_URL . '/bartender');
 exit;

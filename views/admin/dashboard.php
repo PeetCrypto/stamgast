@@ -257,14 +257,14 @@ $featureMarketing = (bool) ($_tenant['feature_marketing'] ?? true);
         </div>
         <div style="display: flex; gap: var(--space-sm);">
             <?php if ($featurePush): ?>
-            <a href="/admin/push" class="btn btn-secondary btn-sm">Push</a>
+            <a href="<?= BASE_URL ?>/admin/push" class="btn btn-secondary btn-sm">Push</a>
             <?php endif; ?>
             <?php if ($featureMarketing): ?>
-            <a href="/admin/marketing" class="btn btn-secondary btn-sm">Marketing</a>
+            <a href="<?= BASE_URL ?>/admin/marketing" class="btn btn-secondary btn-sm">Marketing</a>
             <?php endif; ?>
-            <a href="/admin/users" class="btn btn-secondary btn-sm">Gebruikers</a>
-            <a href="/admin/settings" class="btn btn-secondary btn-sm">Instellingen</a>
-            <a href="/logout" class="btn btn-ghost btn-sm">Uitloggen</a>
+            <a href="<?= BASE_URL ?>/admin/users" class="btn btn-secondary btn-sm">Gebruikers</a>
+            <a href="<?= BASE_URL ?>/admin/settings" class="btn btn-secondary btn-sm">Instellingen</a>
+            <a href="<?= BASE_URL ?>/logout" class="btn btn-ghost btn-sm">Uitloggen</a>
         </div>
     </div>
 
@@ -436,7 +436,7 @@ const FEATURE_MARKETING = <?= $featureMarketing ? 'true' : 'false' ?>;
 
     try {
         // Laad dashboard data
-        const response = await fetch('/api/admin/dashboard', {
+        const response = await fetch((window.__BASE_URL || '') + '/api/admin/dashboard', {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
@@ -680,7 +680,7 @@ async function sendWhaleBonus(userId) {
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
     
     try {
-        const response = await fetch('/api/push/send_notification', {
+        const response = await fetch((window.__BASE_URL || '') + '/api/push/send_notification', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

@@ -19,7 +19,7 @@ $tenantId = (int) ($parts[2] ?? 0);
 if ($tenantId <= 0) {
     http_response_code(404);
     require VIEWS_PATH . 'shared/header.php';
-    echo '<div class="container" style="text-align:center;padding:4rem"><h1>404</h1><p>Tenant niet gevonden</p><a href="/superadmin" class="btn btn-primary">Terug</a></div>';
+    echo '<div class="container" style="text-align:center;padding:4rem"><h1>404</h1><p>Tenant niet gevonden</p><a href="<?= BASE_URL ?>/superadmin" class="btn btn-primary">Terug</a></div>';
     require VIEWS_PATH . 'shared/footer.php';
     exit;
 }
@@ -28,7 +28,7 @@ $tenant = $tenantModel->findById($tenantId);
 if (!$tenant) {
     http_response_code(404);
     require VIEWS_PATH . 'shared/header.php';
-    echo '<div class="container" style="text-align:center;padding:4rem"><h1>404</h1><p>Tenant niet gevonden</p><a href="/superadmin" class="btn btn-primary">Terug</a></div>';
+    echo '<div class="container" style="text-align:center;padding:4rem"><h1>404</h1><p>Tenant niet gevonden</p><a href="<?= BASE_URL ?>/superadmin" class="btn btn-primary">Terug</a></div>';
     require VIEWS_PATH . 'shared/footer.php';
     exit;
 }
@@ -43,7 +43,7 @@ $users = $tenantModel->getUsersWithWallets($tenantId);
     <!-- Navigation -->
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
         <h1><?= sanitize($tenant['name']) ?></h1>
-        <a href="/superadmin" class="btn btn-secondary">&larr; Terug</a>
+        <a href="<?= BASE_URL ?>/superadmin" class="btn btn-secondary">&larr; Terug</a>
     </div>
 
     <!-- Stats Cards -->
@@ -74,16 +74,10 @@ $users = $tenantModel->getUsersWithWallets($tenantId);
         </div>
     </div>
 
-    <!-- Tab Navigation -->
-    <div style="display: flex; margin-bottom: var(--space-md); border-bottom: 1px solid var(--glass-border);">
-        <button class="tab-button active" data-tab="naw" style="padding: var(--space-sm) var(--space-md); background: var(--glass-bg); border: none; cursor: pointer; border-radius: 4px 4px 0 0;">NAW Gegevens</button>
-        <button class="tab-button" data-tab="users" style="padding: var(--space-sm) var(--space-md); background: var(--glass-bg); border: none; cursor: pointer; border-radius: 4px 4px 4px 4px;">Gebruikers</button>
-    </div>
-
-    <!-- Tab Content -->
+    <!-- Two Column Layout -->
     <div style="display: grid; grid-template-columns: 1fr 2fr; gap: var(--space-lg);">
         <!-- Left: NAW Details -->
-        <div class="tab-content" id="tab-naw" style="display: block;">
+        <div>
             <div class="glass-card" style="padding: var(--space-lg);">
                 <h2 style="margin-bottom: var(--space-md);">NAW Gegevens</h2>
                 <form id="naw-form">
@@ -193,21 +187,24 @@ $users = $tenantModel->getUsersWithWallets($tenantId);
                     <button type="submit" class="btn btn-primary" style="width:100%;margin-top:var(--space-sm);">Wachtwoord Wijzigen</button>
                     <p id="password-status" class="text-sm" style="margin-top:var(--space-sm);text-align:center;"></p>
                 </form>
-            </div>
+</div>
         </div>
 
-        <!-- Right: Users List -->
+<!-- Right: Users List -->
         <div>
             <div class="glass-card" style="padding: var(--space-lg);">
-                <h2 style="margin-bottom: var(--space-md);">
-                    Gebruikers (<?= count($users) ?>)
-                    <span class="text-sm text-secondary" style="font-weight:400;">
-                        &mdash;
-                        <?= ($stats['user_counts']['admin'] ?? 0) ?> admin,
-                        <?= ($stats['user_counts']['bartender'] ?? 0) ?> bartenders,
-                        <?= ($stats['user_counts']['guest'] ?? 0) ?> gasten
-                    </span>
-                </h2>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-md);">
+                    <h2>
+                        Gebruikers (<?= count($users) ?>)
+                        <span class="text-sm text-secondary" style="font-weight:400;">
+                            &mdash;
+                            <?= ($stats['user_counts']['admin'] ?? 0) ?> admin,
+                            <?= ($stats['user_counts']['bartender'] ?? 0) ?> bartenders,
+                            <?= ($stats['user_counts']['guest'] ?? 0) ?> gasten
+                        </span>
+                    </h2>
+                    <button id="change-password-btn" class="btn btn-primary" style="display: none;">Wachtwoord Wijzigen</button>
+                </div>
 
                 <?php if (empty($users)): ?>
                     <p class="text-secondary">Geen gebruikers gevonden.</p>
@@ -220,6 +217,7 @@ $users = $tenantModel->getUsersWithWallets($tenantId);
                                 <th style="text-align: left; padding: var(--space-sm); color: var(--text-secondary);">Saldo</th>
                                 <th style="text-align: left; padding: var(--space-sm); color: var(--text-secondary);">Rol</th>
                                 <th style="text-align: left; padding: var(--space-sm); color: var(--text-secondary);">Laatst actief</th>
+                                <th style="text-align: left; padding: var(--space-sm); color: var(--text-secondary);">Acties</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -249,11 +247,37 @@ $users = $tenantModel->getUsersWithWallets($tenantId);
                                 <td style="padding: var(--space-sm); font-size: 13px; color: var(--text-secondary);">
                                     <?= $u['last_activity'] ? date('d-m-Y H:i', strtotime($u['last_activity'])) : '-' ?>
                                 </td>
+                                <td style="padding: var(--space-sm);">
+                                    <button class="btn btn-secondary btn-sm select-user-btn" data-user-id="<?= (int) $u['id'] ?>" data-user-email="<?= sanitize($u['email']) ?>" style="padding: 2px 8px; font-size: 12px;">Bewerk</button>
+                                </td>
                             </tr>
                             <?php endforeach; ?>
                         </tbody>
                     </table>
                 <?php endif; ?>
+                
+                <!-- Password Change Form (Hidden by default) -->
+                <div id="user-password-change-form" class="glass-card" style="padding: var(--space-lg); margin-top: var(--space-md); display: none;">
+                    <h3 style="margin-bottom: var(--space-md);">Wachtwoord Wijzigen</h3>
+                    <form id="user-password-form">
+                        <input type="hidden" id="selected-user-id" name="user_id" value="">
+                        <div class="form-group">
+                            <label class="text-sm text-secondary">Gebruiker</label>
+                            <input type="text" id="selected-user-email" class="form-input" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label class="text-sm text-secondary">Nieuw Wachtwoord</label>
+                            <input type="password" id="user-new-password" class="form-input" placeholder="Nieuw wachtwoord" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="text-sm text-secondary">Bevestig Nieuw Wachtwoord</label>
+                            <input type="password" id="user-confirm-password" class="form-input" placeholder="Bevestig nieuw wachtwoord" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary" style="width:100%;margin-top:var(--space-sm);">Wachtwoord Wijzigen</button>
+                        <button type="button" id="cancel-password-change" class="btn btn-secondary" style="width:100%;margin-top:var(--space-sm);">Annuleren</button>
+                        <p id="user-password-status" class="text-sm" style="margin-top:var(--space-sm);text-align:center;"></p>
+                    </form>
+                </div>
             </div>
         </div>
     </div>
@@ -262,6 +286,87 @@ $users = $tenantModel->getUsersWithWallets($tenantId);
 <script>
 const CSRF = '<?= generateCSRFToken() ?>';
 const TENANT_ID = <?= $tenantId ?>;
+
+// User selection and password change functionality
+document.querySelectorAll('.select-user-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        const userId = this.dataset.userId;
+        const userEmail = this.dataset.userEmail;
+        
+        // Show the password change form
+        document.getElementById('user-password-change-form').style.display = 'block';
+        document.getElementById('selected-user-id').value = userId;
+        document.getElementById('selected-user-email').value = userEmail;
+        
+        // Scroll to the form
+        document.getElementById('user-password-change-form').scrollIntoView({ behavior: 'smooth' });
+    });
+});
+
+// Cancel password change
+document.getElementById('cancel-password-change')?.addEventListener('click', function() {
+    document.getElementById('user-password-change-form').style.display = 'none';
+    document.getElementById('selected-user-id').value = '';
+    document.getElementById('selected-user-email').value = '';
+    document.getElementById('user-new-password').value = '';
+    document.getElementById('user-confirm-password').value = '';
+    document.getElementById('user-password-status').textContent = '';
+});
+
+// Password change form handler
+document.getElementById('user-password-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const statusEl = document.getElementById('user-password-status');
+    const userId = document.getElementById('selected-user-id').value;
+    const userEmail = document.getElementById('selected-user-email').value;
+    const newPassword = document.getElementById('user-new-password').value;
+    const confirmPassword = document.getElementById('user-confirm-password').value;
+    
+    statusEl.textContent = 'Wachtwoord wijzigen...';
+    statusEl.style.color = 'var(--text-secondary)';
+    
+    // Validate password match
+    if (newPassword !== confirmPassword) {
+        statusEl.textContent = 'Wachtwoorden komen niet overeen';
+        status2El.style.color = '#f44336';
+        return;
+    }
+    
+    // Validate password strength (at least 8 characters)
+    if (newPassword.length < 8) {
+        statusEl.textContent = 'Wachtwoord moet minimaal 8 tekens bevatten';
+        statusEl.style.color = '#f44336';
+        return;
+    }
+    
+    try {
+        const res = await fetch((window.__BASE_URL || '') + '/api/superadmin/tenants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+            body: JSON.stringify({ 
+                action: 'change_password', 
+                tenant_id: parseInt(TENANT_ID), 
+                user_id: parseInt(userId),
+                new_password: newPassword 
+            })
+        });
+        const result = await res.json();
+        if (result.success) {
+            statusEl.textContent = '✓ Wachtwoord gewijzigd';
+            statusEl.style.color = '#4CAF50';
+            // Clear form fields
+            document.getElementById('user-new-password').value = '';
+            document.getElementById('user-confirm-password').value = '';
+        } else {
+            statusEl.textContent = '✗ ' + (result.error || 'Fout bij wijzigen wachtwoord');
+            statusEl.style.color = '#f44336';
+        }
+    } catch (err) {
+        statusEl.textContent = '✗ Netwerkfout';
+        statusEl.style.color = '#f44336';
+    }
+    setTimeout(() => { statusEl.textContent = ''; }, 3000);
+});
 
 // NAW form save
 document.getElementById('naw-form')?.addEventListener('submit', async (e) => {
@@ -347,61 +452,6 @@ document.querySelectorAll('.role-select').forEach(sel => {
             this.style.background = originalBg || '';
         }
     });
-});
-
-// Password change form handler
-document.getElementById('password-form')?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const statusEl = document.getElementById('password-status');
-    statusEl.textContent = 'Wachtwoord wijzigen...';
-    statusEl.style.color = 'var(--text-secondary)';
-    
-    const email = document.getElementById('admin-email').value.trim();
-    const newPassword = document.getElementById('new-password').value;
-    const confirmPassword = document.getElementById('confirm-password').value;
-    
-    // Validate password match
-    if (newPassword !== confirmPassword) {
-        statusEl.textContent = 'Wachtwoorden komen niet overeen';
-        statusEl.style.color = '#f44336';
-        return;
-    }
-    
-    // Validate password strength (at least 8 characters)
-    if (newPassword.length < 8) {
-        statusEl.textContent = 'Wachtwoord moet minimaal 8 tekens bevatten';
-        statusEl.style.color = '#f44336';
-        return;
-    }
-    
-    try {
-        const res = await fetch('/api/superadmin/tenants', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
-            body: JSON.stringify({ 
-                action: 'change_password', 
-                tenant_id: TENANT_ID, 
-                email: email,
-                new_password: newPassword 
-            })
-        });
-        const result = await res.json();
-        if (result.success) {
-            statusEl.textContent = '✓ Wachtwoord gewijzigd';
-            statusEl.style.color = '#4CAF50';
-            // Clear form fields
-            document.getElementById('admin-email').value = '';
-            document.getElementById('new-password').value = '';
-            document.getElementById('confirm-password').value = '';
-        } else {
-            statusEl.textContent = '✗ ' + (result.error || 'Fout bij wijzigen wachtwoord');
-            statusEl.style.color = '#f44336';
-        }
-    } catch (err) {
-        statusEl.textContent = '✗ Netwerkfout';
-        statusEl.style.color = '#f44336';
-    }
-    setTimeout(() => { statusEl.textContent = ''; }, 3000);
 });
 </script>
 

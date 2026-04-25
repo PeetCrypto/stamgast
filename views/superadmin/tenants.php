@@ -186,7 +186,12 @@ if (!empty($search)) {
                         <td style="padding: var(--space-sm);"><span class="badge"><?= sanitize($t['mollie_status']) ?></span></td>
                         <td style="padding: var(--space-sm);"><?= $t['created_at'] ?></td>
                         <td style="padding: var(--space-sm);">
-                            <a href="<?= BASE_URL ?>/superadmin/tenant/<?= (int) $t['id'] ?>" class="btn btn-secondary btn-sm">Bewerk</a>
+                            <button class="btn btn-secondary btn-sm toggle-tenant-btn"
+                                    data-tenant-id="<?= (int) $t['id'] ?>"
+                                    data-active="<?= $isActive ? '1' : '0' ?>">
+                                <?= $isActive ? 'Uitschakelen' : 'Inschakelen' ?>
+                            </button>
+                            <a href="<?= BASE_URL ?>/superadmin/tenant/<?= (int) $t['id'] ?>" class="btn btn-secondary btn-sm" style="margin-left: 8px;">Bewerk</a>
                         </td>
                     </tr>
                     <?php endforeach; ?>
@@ -256,8 +261,6 @@ window.addEventListener('click', function(event) {
         if (btn) btn.style.display = 'inline-block';
     }
 });
-</script>
-</script>
 
 // Toggle tenant active/inactive
 document.querySelectorAll('.toggle-tenant-btn').forEach(btn => {

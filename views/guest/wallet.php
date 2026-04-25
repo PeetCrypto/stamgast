@@ -143,7 +143,7 @@ require __DIR__ . '/../shared/header.php';
 <!-- Alerts Container -->
 <div class="alerts-container"></div>
 
-<script src="/public/js/app.js"></script>
-<script src="/public/js/wallet.js"></script>
+<script src="<?= BASE_URL ?>/public/js/app.js"></script>
+<script src="<?= BASE_URL ?>/public/js/wallet.js"></script>
 
 <?php require __DIR__ . '/../shared/footer.php'; ?>

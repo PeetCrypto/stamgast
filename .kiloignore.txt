@@ -1,0 +1,6 @@
+.git/
+.kilo/
+.vscode/
+.amazonq/
+vendor/
+node_modules/

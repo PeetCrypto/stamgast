@@ -3,8 +3,8 @@ declare(strict_types=1);
 
 /**
  * Admin Users API
- * GET  /api/admin/users?page=1&limit=20&search=&role=
- * POST /api/admin/users  { action: 'update'|'block', user_id, ... }
+ * GET  /api/admin/users?page=1&limit=20&search=&role=&tier=
+ * POST /api/admin/users  { action: 'create'|'update'|'block'|'unblock'|'reset_password', ... }
  */
 
 $tenantId = currentTenantId();
@@ -19,6 +19,7 @@ $userModel     = new User($db);
 $walletModel   = new Wallet($db);
 $tierModel     = new LoyaltyTier($db);
 $txModel       = new Transaction($db);
+$audit         = new Audit($db);
 
 $method = $_SERVER['REQUEST_METHOD'];
 
@@ -108,6 +109,7 @@ if ($method === 'GET') {
             'last_name'      => $row['last_name'],
             'photo_url'      => $row['photo_url'],
             'photo_status'   => $row['photo_status'],
+            'is_blocked'     => $row['photo_status'] === 'blocked',
             'balance_cents'  => (int) ($row['balance_cents'] ?? 0),
             'points_cents'   => (int) ($row['points_cents'] ?? 0),
             'tier_name'      => $tierName,
@@ -131,11 +133,92 @@ if ($method === 'GET') {
     ]);
 
 } elseif ($method === 'POST') {
-    // --- UPDATE USER ---
     $input = getJsonInput();
     $action = $input['action'] ?? '';
 
-    if ($action === 'update') {
+    // ========================================
+    // CREATE USER
+    // ========================================
+    if ($action === 'create') {
+        $firstName = trim($input['first_name'] ?? '');
+        $lastName  = trim($input['last_name'] ?? '');
+        $email     = trim($input['email'] ?? '');
+        $password  = $input['password'] ?? '';
+        $role      = trim($input['role'] ?? 'guest');
+
+        // Validate required fields
+        if ($firstName === '' || $lastName === '' || $email === '' || $password === '') {
+            Response::error('Alle velden zijn verplicht (voornaam, achternaam, email, wachtwoord)', 'INVALID_INPUT', 400);
+        }
+
+        // Validate email
+        if (!isValidEmail($email)) {
+            Response::error('Ongeldig e-mailadres', 'INVALID_EMAIL', 400);
+        }
+
+        // Validate password length
+        if (mb_strlen($password) < 8) {
+            Response::error('Wachtwoord moet minimaal 8 tekens lang zijn', 'INVALID_PASSWORD', 400);
+        }
+
+        // Validate role - admin can only create admin/bartender/guest (never superadmin)
+        $allowedRoles = ['admin', 'bartender', 'guest'];
+        if (!in_array($role, $allowedRoles, true)) {
+            Response::error('Ongeldige rol. Toegestaan: admin, bartender, guest', 'INVALID_ROLE', 400);
+        }
+
+        // Check email uniqueness within tenant
+        if ($userModel->emailExists($email, $tenantId)) {
+            Response::error('Dit e-mailadres is al in gebruik binnen deze locatie', 'EMAIL_EXISTS', 409);
+        }
+
+        // Hash password with Argon2id + pepper
+        $pepperedPassword = $password . (defined('APP_PEPPER') ? APP_PEPPER : '');
+        $passwordHash = password_hash($pepperedPassword, PASSWORD_ARGON2ID);
+
+        if ($passwordHash === false) {
+            Response::error('Wachtwoord hashing mislukt', 'HASH_ERROR', 500);
+        }
+
+        try {
+            $db->beginTransaction();
+
+            // Create user
+            $newUserId = $userModel->create([
+                'tenant_id'     => $tenantId,
+                'email'         => $email,
+                'password_hash' => $passwordHash,
+                'role'          => $role,
+                'first_name'    => $firstName,
+                'last_name'     => $lastName,
+                'photo_status'  => 'unvalidated',
+            ]);
+
+            // Create wallet for the new user
+            $walletModel->create($newUserId, $tenantId);
+
+            $db->commit();
+
+            // Audit log
+            $audit->log($tenantId, currentUserId(), 'user.created', 'user', $newUserId, [
+                'role'  => $role,
+                'email' => $email,
+            ]);
+
+            Response::success([
+                'message' => 'Gebruiker aangemaakt',
+                'user_id' => $newUserId,
+            ], 201);
+
+        } catch (\Throwable $e) {
+            $db->rollBack();
+            Response::error('Gebruiker aanmaken mislukt: ' . $e->getMessage(), 'CREATE_FAILED', 500);
+        }
+
+    // ========================================
+    // UPDATE USER
+    // ========================================
+    } elseif ($action === 'update') {
         $userId   = (int) ($input['user_id'] ?? 0);
         $firstName = trim($input['first_name'] ?? '');
         $lastName  = trim($input['last_name'] ?? '');
@@ -152,10 +235,25 @@ if ($method === 'GET') {
             Response::error('Gebruiker niet gevonden', 'NOT_FOUND', 404);
         }
 
+        // Cannot edit superadmins
+        if ($user['role'] === 'superadmin') {
+            Response::error('Superadmins kunnen niet bewerkt worden', 'FORBIDDEN', 403);
+        }
+
         // Validate role
         $allowedRoles = ['admin', 'bartender', 'guest'];
         if (!in_array($role, $allowedRoles, true)) {
             Response::error('Ongeldige rol', 'INVALID_ROLE', 400);
+        }
+
+        // Validate email if changed
+        if (!isValidEmail($email)) {
+            Response::error('Ongeldig e-mailadres', 'INVALID_EMAIL', 400);
+        }
+
+        // Check email uniqueness if email changed
+        if ($email !== $user['email'] && $userModel->emailExists($email, $tenantId)) {
+            Response::error('Dit e-mailadres is al in gebruik binnen deze locatie', 'EMAIL_EXISTS', 409);
         }
 
         // Update user fields
@@ -175,7 +273,7 @@ if ($method === 'GET') {
         ]);
 
         // Audit log
-        (new Audit($db))->log($tenantId, currentUserId(), 'user.update', 'user', $userId, [
+        $audit->log($tenantId, currentUserId(), 'user.update', 'user', $userId, [
             'role' => $role,
             'email' => $email,
         ]);
@@ -185,6 +283,53 @@ if ($method === 'GET') {
             'user_id' => $userId,
         ]);
 
+    // ========================================
+    // RESET PASSWORD
+    // ========================================
+    } elseif ($action === 'reset_password') {
+        $userId      = (int) ($input['user_id'] ?? 0);
+        $newPassword = $input['new_password'] ?? '';
+
+        if ($userId <= 0) {
+            Response::error('Ongeldig user_id', 'INVALID_INPUT', 400);
+        }
+
+        if (mb_strlen($newPassword) < 8) {
+            Response::error('Wachtwoord moet minimaal 8 tekens lang zijn', 'INVALID_PASSWORD', 400);
+        }
+
+        // Verify user belongs to this tenant
+        $user = $userModel->findById($userId);
+        if (!$user || (int) $user['tenant_id'] !== $tenantId) {
+            Response::error('Gebruiker niet gevonden', 'NOT_FOUND', 404);
+        }
+
+        // Cannot reset superadmin passwords
+        if ($user['role'] === 'superadmin') {
+            Response::error('Superadmin wachtwoorden kunnen niet hier gereset worden', 'FORBIDDEN', 403);
+        }
+
+        // Hash new password with Argon2id + pepper
+        $pepperedPassword = $newPassword . (defined('APP_PEPPER') ? APP_PEPPER : '');
+        $passwordHash = password_hash($pepperedPassword, PASSWORD_ARGON2ID);
+
+        if ($passwordHash === false) {
+            Response::error('Wachtwoord hashing mislukt', 'HASH_ERROR', 500);
+        }
+
+        $userModel->updatePassword($userId, $passwordHash);
+
+        // Audit log
+        $audit->log($tenantId, currentUserId(), 'user.password_reset', 'user', $userId);
+
+        Response::success([
+            'message' => 'Wachtwoord gewijzigd',
+            'user_id' => $userId,
+        ]);
+
+    // ========================================
+    // BLOCK USER
+    // ========================================
     } elseif ($action === 'block') {
         $userId = (int) ($input['user_id'] ?? 0);
         if ($userId <= 0) {
@@ -196,18 +341,50 @@ if ($method === 'GET') {
             Response::error('Gebruiker niet gevonden', 'NOT_FOUND', 404);
         }
 
-        // Block by setting photo_status to blocked (simple MVP block mechanism)
-        $stmt = $db->prepare(
-            "UPDATE `users` SET `photo_status` = 'blocked' WHERE `id` = :id AND `tenant_id` = :tid"
-        );
-        $stmt->execute([':id' => $userId, ':tid' => $tenantId]);
+        // Cannot block superadmins
+        if ($user['role'] === 'superadmin') {
+            Response::error('Superadmins kunnen niet geblokkeerd worden', 'FORBIDDEN', 403);
+        }
 
-        (new Audit($db))->log($tenantId, currentUserId(), 'user.blocked', 'user', $userId);
+        // Cannot block yourself
+        if ($userId === currentUserId()) {
+            Response::error('Je kunt jezelf niet blokkeren', 'SELF_BLOCK', 400);
+        }
+
+        // Block by setting photo_status to blocked
+        $userModel->updatePhotoStatus($userId, 'blocked');
+
+        $audit->log($tenantId, currentUserId(), 'user.blocked', 'user', $userId);
 
         Response::success(['message' => 'Gebruiker geblokkeerd', 'user_id' => $userId]);
 
+    // ========================================
+    // UNBLOCK USER
+    // ========================================
+    } elseif ($action === 'unblock') {
+        $userId = (int) ($input['user_id'] ?? 0);
+        if ($userId <= 0) {
+            Response::error('Ongeldig user_id', 'INVALID_INPUT', 400);
+        }
+
+        $user = $userModel->findById($userId);
+        if (!$user || (int) $user['tenant_id'] !== $tenantId) {
+            Response::error('Gebruiker niet gevonden', 'NOT_FOUND', 404);
+        }
+
+        if ($user['photo_status'] !== 'blocked') {
+            Response::error('Deze gebruiker is niet geblokkeerd', 'NOT_BLOCKED', 400);
+        }
+
+        // Unblock by resetting photo_status to unvalidated
+        $userModel->updatePhotoStatus($userId, 'unvalidated');
+
+        $audit->log($tenantId, currentUserId(), 'user.unblocked', 'user', $userId);
+
+        Response::success(['message' => 'Gebruiker gedeblokkeerd', 'user_id' => $userId]);
+
     } else {
-        Response::error('Ongeldige actie. Gebruik: update, block', 'INVALID_ACTION', 400);
+        Response::error('Ongeldige actie. Gebruik: create, update, block, unblock, reset_password', 'INVALID_ACTION', 400);
     }
 
 } else {

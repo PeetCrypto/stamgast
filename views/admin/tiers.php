@@ -47,7 +47,7 @@ $tenantName = $_SESSION['tenant_name'] ?? APP_NAME;
     </div>
 
     <div style="text-align: center;">
-        <a href="/admin" class="btn btn-secondary">Terug naar Dashboard</a>
+        <a href="<?= BASE_URL ?>/admin" class="btn btn-secondary">Terug naar Dashboard</a>
     </div>
 </div>
 
@@ -82,7 +82,7 @@ $tenantName = $_SESSION['tenant_name'] ?? APP_NAME;
                 <div class="form-group">
                     <label for="tier-food-discount">Etenswaren korting (%)</label>
                     <input type="number" id="tier-food-discount" class="form-input" min="0" max="100" value="0">
-                    <small class="help-text">Maximaal 100%</small>
+                    <small class="help-text">Maximaus 100%</small>
                 </div>
                 
                 <div class="form-group">
@@ -104,7 +104,7 @@ $tenantName = $_SESSION['tenant_name'] ?? APP_NAME;
 <div class="alerts-container"></div>
 
 <?php require VIEWS_PATH . 'shared/footer.php'; ?>
-<script src="/public/js/app.js"></script>
-<script src="/public/js/admin.js"></script>
+<script src="<?= BASE_URL ?>/public/js/app.js"></script>
+<script src="<?= BASE_URL ?>/public/js/admin.js"></script>
 </body>
 </html>

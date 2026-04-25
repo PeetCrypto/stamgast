@@ -141,7 +141,7 @@ function handleCreate(Tenant $model, User $userModel, array $input, PDO $db): vo
     $userModel->create([
         'tenant_id'     => $tenantId,
         'email'         => $adminEmail,
-        'password_hash' => password_hash($adminPassword, PASSWORD_ARGON2ID),
+        'password_hash' => password_hash($adminPassword . APP_PEPPER, PASSWORD_ARGON2ID),
         'role'          => 'admin',
         'first_name'    => $firstName,
         'last_name'     => $lastName,
@@ -368,7 +368,7 @@ function handleChangePassword(User $userModel, array $input, PDO $db): void
     }
 
     // Update password
-    $passwordHash = password_hash($newPassword, PASSWORD_ARGON2ID);
+    $passwordHash = password_hash($newPassword . APP_PEPPER, PASSWORD_ARGON2ID);
     $userModel->updatePassword($userId, $passwordHash);
 
     $audit = new Audit($db);

@@ -30,10 +30,31 @@ if (empty($email) || empty($password)) {
 }
 
 // Determine tenant_id for tenant users
-// If not provided, use default tenant 1
-// Superadmins don't need a tenant_id — AuthService handles this
+// Strategy: look up the user's actual tenant_id from the database first.
+// This ensures correct tenant isolation — a user from tenant 2 cannot
+// accidentally be validated against tenant 1.
+// Superadmins have tenant_id = NULL — AuthService handles this separately.
 if ($tenantId === null) {
-    $tenantId = currentTenantId() ?? 1;
+    // Try session first (in case tenant context is already known)
+    $sessionTenant = currentTenantId();
+    if ($sessionTenant !== null) {
+        $tenantId = $sessionTenant;
+    } else {
+        // No session context — look up the user to find their tenant_id
+        // This is the critical fix: without this, login defaults to tenant 1
+        // and rejects users belonging to other tenants.
+        require_once __DIR__ . '/../../models/User.php';
+        $db = Database::getInstance()->getConnection();
+        $userLookup = (new User($db))->findByEmailGlobal($email);
+        if ($userLookup && $userLookup['tenant_id'] !== null) {
+            $tenantId = (int) $userLookup['tenant_id'];
+        } else {
+            // Superadmin or user not found — use fallback
+            // AuthService will handle superadmin (no tenant check)
+            // and unknown users (will fail password check)
+            $tenantId = 1;
+        }
+    }
 }
 
 // Validate email format

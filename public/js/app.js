@@ -180,7 +180,7 @@
     }
 
     function redirectToLogin() {
-        window.location.href = '/login';
+        window.location.href = (window.__BASE_URL || '') + '/login';
     }
 
     function getUserRole() {

@@ -7,18 +7,22 @@
  * - Push event placeholder (Phase 5)
  */
 
-const CACHE_VERSION = 'stamgast-shell-v1';
+const CACHE_VERSION = 'stamgast-shell-v2';
+
+// Derive base path from service worker registration scope
+// Works for both domain root (stamgast.test) and subdirectory (localhost/stamgast)
+const BASE = new URL(self.registration.scope).pathname.replace(/\/$/, '');
 
 // Shell assets to pre-cache on install
 const SHELL_ASSETS = [
-    '/css/midnight-lounge.css',
-    '/css/components.css',
-    '/css/views.css',
-    '/js/app.js',
-    '/js/wallet.js',
-    '/js/qr.js',
-    '/js/pos.js',
-    '/js/admin.js',
+    BASE + '/css/midnight-lounge.css',
+    BASE + '/css/components.css',
+    BASE + '/css/views.css',
+    BASE + '/js/app.js',
+    BASE + '/js/wallet.js',
+    BASE + '/js/qr.js',
+    BASE + '/js/pos.js',
+    BASE + '/js/admin.js',
 ];
 
 // External assets to cache on first fetch (not pre-cached to avoid CORS issues)
@@ -28,7 +32,7 @@ const EXTERNAL_CACHE_PATTERNS = [
 ];
 
 // API routes that should always be network-first
-const API_PREFIX = '/api/';
+const API_PREFIX = BASE + '/api/';
 
 // ============================================
 // INSTALL — Pre-cache shell assets
@@ -161,7 +165,7 @@ async function networkFirst(request) {
         }
         // For navigation requests, we could serve a cached page
         if (request.mode === 'navigate') {
-            const cached = await caches.match('/');
+            const cached = await caches.match(BASE + '/');
             if (cached) return cached;
         }
         return new Response(JSON.stringify({ success: false, error: 'Offline' }), {
@@ -197,9 +201,9 @@ async function staleWhileRevalidate(request) {
 
 function isShellAsset(pathname) {
     return (
-        pathname.startsWith('/css/') ||
-        pathname.startsWith('/js/') ||
-        pathname.startsWith('/icons/') ||
+        pathname.startsWith(BASE + '/css/') ||
+        pathname.startsWith(BASE + '/js/') ||
+        pathname.startsWith(BASE + '/icons/') ||
         pathname.endsWith('.css') ||
         pathname.endsWith('.js') ||
         pathname.endsWith('.png') ||

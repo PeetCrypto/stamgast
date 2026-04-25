@@ -18,7 +18,7 @@ $firstName = $_SESSION['first_name'] ?? 'Bartender';
         <div class="scanner-header">
             <span class="scanner-header__title">QR Scanner</span>
             <span class="nav-user">Hoi, <?= sanitize($firstName) ?></span>
-            <button class="btn btn-ghost btn-sm" id="btn-logout" onclick="location.href='/logout'">Uit</button>
+            <button class="btn btn-ghost btn-sm" id="btn-logout" onclick="location.href=(window.__BASE_URL||'')+'/logout'">Uit</button>
         </div>
 
         <div class="scanner-viewport">
@@ -234,7 +234,7 @@ $firstName = $_SESSION['first_name'] ?? 'Bartender';
 
     // --- QR Validation ---
     function validateQR(payload) {
-        fetch('/api/pos/scan', {
+        fetch((window.__BASE_URL || '') + '/api/pos/scan', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -402,7 +402,7 @@ $firstName = $_SESSION['first_name'] ?? 'Bartender';
         var payBtn = $('#btn-pay');
         if (payBtn) payBtn.disabled = true;
 
-        fetch('/api/pos/process_payment', {
+        fetch((window.__BASE_URL || '') + '/api/pos/process_payment', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

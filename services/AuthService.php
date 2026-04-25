@@ -49,6 +49,11 @@ class AuthService
             return null;
         }
 
+        // Check if user is blocked (photo_status = 'blocked' is used as block mechanism)
+        if (($user['photo_status'] ?? '') === 'blocked') {
+            return null;
+        }
+
         // Verify password with Argon2id (with optional pepper)
         $pepperedPassword = $password . (defined('APP_PEPPER') ? APP_PEPPER : '');
         if (!password_verify($pepperedPassword, $user['password_hash'])) {
