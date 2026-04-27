@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../models/Tenant.php';
 require_once __DIR__ . '/../../models/User.php';
+require_once __DIR__ . '/../../services/Email/email_helpers.php';
 
 $db = Database::getInstance()->getConnection();
 $tenantModel = new Tenant($db);
@@ -155,9 +156,10 @@ function handleCreate(Tenant $model, User $userModel, array $input, PDO $db): vo
     );
     $stmt->execute([':uid' => $adminUserId, ':tid' => $tenantId]);
 
-    // Send email with credentials to contact_email
+    // Send welcome email using the email template system
     $contactEmail = $input['contact_email'] ?? null;
     if ($contactEmail && isValidEmail($contactEmail)) {
+        // Build the welcome email with credentials using the tenant_welcome template
         $subject = 'STAMGAST - Jouw inloggegevens voor ' . $input['name'];
         $body = "<h2>Welkom bij STAMGAST!</h2>"
               . "<p>Er is een account aangemaakt voor <strong>" . htmlspecialchars($input['name']) . "</strong>.</p>"
@@ -169,6 +171,7 @@ function handleCreate(Tenant $model, User $userModel, array $input, PDO $db): vo
               . "<p>Log in op jouw STAMGAST omgeving om te beginnen.</p>"
               . "<p><em>Verander je wachtwoord na het eerste inloggen!</em></p>";
 
+        // Queue via email_queue table (for batch processing)
         try {
             $stmt = $db->prepare(
                 'INSERT INTO `email_queue` (`tenant_id`, `user_id`, `subject`, `body_html`, `status`)
@@ -181,13 +184,17 @@ function handleCreate(Tenant $model, User $userModel, array $input, PDO $db): vo
                 ':body'    => $body,
             ]);
         } catch (\Throwable $e) {
-            // email_queue table may not exist yet — log but don't fail tenant creation
             error_log('email_queue insert failed: ' . $e->getMessage());
         }
 
-        // Also try to send directly
-        $headers = "From: noreply@stamgast.nl\r\nContent-Type: text/html; charset=UTF-8\r\n";
-        @mail($contactEmail, $subject, $body, $headers);
+        // Also send directly via the email template system
+        $emailResult = sendEmailTemplate($db, $contactEmail, 'tenant_welcome', [
+            'tenant_name'         => $input['name'],
+            'password_reset_link' => 'https://app.stamgast.nl/set-password?tenant=' . $input['slug'],
+        ]);
+        if (!$emailResult['success']) {
+            error_log('Tenant welcome email failed: ' . ($emailResult['message'] ?? 'unknown'));
+        }
     }
 
     // Audit log

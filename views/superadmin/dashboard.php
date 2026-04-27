@@ -44,7 +44,11 @@ $tenants = $tenantModel->getAllWithUserCount();
     <div class="glass-card" style="padding: var(--space-lg);">
         <div style="margin-bottom: var(--space-md);">
             <h2 style="margin-bottom: var(--space-sm);">Tenants</h2>
-            <a href="<?= BASE_URL ?>/superadmin/tenants" class="btn btn-primary">Beheer Tenants</a>
+            <div style="display: flex; gap: var(--space-sm); flex-wrap: wrap;">
+                <a href="<?= BASE_URL ?>/superadmin/tenants" class="btn btn-primary">Beheer Tenants</a>
+                <a href="<?= BASE_URL ?>/superadmin/email-settings" class="btn btn-secondary">Email Instellingen</a>
+                <a href="<?= BASE_URL ?>/superadmin/email-templates" class="btn btn-secondary">Email Templates</a>
+            </div>
         </div>
 
         <?php if (empty($tenants)): ?>

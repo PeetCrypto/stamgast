@@ -255,6 +255,38 @@ function handleApiRoute(string $route, string $method): void
             }
             break;
 
+        // --- EMAIL ---
+        case 'email':
+            require_once __DIR__ . '/middleware/auth_check.php';
+            require_once __DIR__ . '/middleware/role_check.php';
+            switch ($action) {
+                case 'templates':
+                    require __DIR__ . '/api/email/templates.php';
+                    break;
+                case 'config':
+                    require __DIR__ . '/api/email/config.php';
+                    break;
+                default:
+                    Response::notFound('Email endpoint not found');
+            }
+            break;
+
+        // --- EMAIL ---
+        case 'email':
+            require_once __DIR__ . '/middleware/auth_check.php';
+            require_once __DIR__ . '/middleware/role_check.php';
+            switch ($action) {
+                case 'templates':
+                    require __DIR__ . '/api/email/templates.php';
+                    break;
+                case 'config':
+                    require __DIR__ . '/api/email/config.php';
+                    break;
+                default:
+                    Response::notFound('Email endpoint not found');
+            }
+            break;
+
         // --- SUPERADMIN ---
         case 'superadmin':
             require_once __DIR__ . '/middleware/auth_check.php';
@@ -415,10 +447,26 @@ function handleViewRoute(string $route, string $method): void
         'admin/push'        => 'admin/push.php',
 
         // Super-admin
-        'superadmin'            => 'superadmin/dashboard.php',
-        'superadmin/tenants'    => 'superadmin/tenants.php',
-        'superadmin/tenant'     => 'superadmin/tenant_detail.php',
+        'superadmin'                => 'superadmin/dashboard.php',
+        'superadmin/tenants'        => 'superadmin/tenants.php',
+        'superadmin/tenant'         => 'superadmin/tenant_detail.php',
+        'superadmin/email-settings'   => 'superadmin/email_settings.php',
+        'superadmin/email-templates'  => 'superadmin/email_templates.php',
     ];
+
+    // Handle API routes first
+    if (str_starts_with($route, 'api/')) {
+        $apiFile = str_replace('/', '_', $route) . '.php';
+        $apiPath = __DIR__ . '/' . $apiFile;
+        if (file_exists($apiPath)) {
+            require $apiPath;
+            exit;
+        } else {
+            http_response_code(404);
+            echo json_encode(['error' => 'API endpoint not found']);
+            exit;
+        }
+    }
 
     // Handle logout (both GET and POST destroy the session)
     if ($route === 'logout') {
@@ -451,7 +499,7 @@ function handleViewRoute(string $route, string $method): void
 
     // Enforce role-based access
     $roleViews = [
-        'superadmin' => ['superadmin/dashboard.php', 'superadmin/tenants.php', 'superadmin/tenant_detail.php'],
+        'superadmin' => ['superadmin/dashboard.php', 'superadmin/tenants.php', 'superadmin/tenant_detail.php', 'superadmin/email_settings.php', 'superadmin/email_templates.php'],
         'admin'      => ['admin/dashboard.php', 'admin/users.php', 'admin/tiers.php', 'admin/settings.php', 'admin/marketing.php', 'admin/push.php'],
         'bartender'  => ['bartender/scanner.php', 'bartender/payment.php'],
     ];

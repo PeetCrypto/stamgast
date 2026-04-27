@@ -1,6 +1,6 @@
-# STAMGAST LOYALTY PLATFORM - THE MASTER BLUEPRINT (v10)
+# RREGULR.vip LOYALTY PLATFORM - THE MASTER BLUEPRINT (v10)
 
-This document is the definitive, exhaustive Technical Specification and UI/UX Design Guide for the Stamgast Loyalty Platform. It has been expanded to cover every granular detail, ensuring the system is "Hufterproof," multi-tenant, and premium.
+This document is the definitive, exhaustive Technical Specification and UI/UX Design Guide for the REGULR.vip Loyalty Platform. It has been expanded to cover every granular detail, ensuring the system is "Hufterproof," multi-tenant, and premium.
 
 ---
 
@@ -219,13 +219,32 @@ Modular system for the owner (if enabled):
 - [x] Marketing segment/compose/queue API endpoints.
 - [x] Dynamic PWA Icon generation (GD library).
 
+### Phase 6: Email System — ✅ COMPLEET (100%)
+- [x] Database migration: `email_config`, `email_templates`, `email_log` tables (`sql/email_system_migration.sql`).
+- [x] Migration runner with prepared statements (`migrate_email.php`).
+- [x] 5 default HTML email templates (tenant_welcome, admin_invite, guest_confirmation, guest_password_reset, marketing).
+- [x] EmailConfig model with AES-256-CBC encryption for SMTP credentials (`models/EmailConfig.php`).
+- [x] EmailTemplate model with RBAC template access control (`models/EmailTemplate.php`).
+- [x] EmailService with provider pattern — BREVO, Sender.net, AWS SES (`services/Email/EmailService.php`).
+- [x] Email helper functions for workflow integration (`services/Email/email_helpers.php`).
+- [x] Email provider configuration defaults (`config/email.php`).
+- [x] API: Template CRUD with session auth + RBAC (`api/email/templates.php`).
+- [x] API: SMTP config management, superadmin-only (`api/email/config.php`).
+- [x] Superadmin UI: SMTP settings form + test email (`views/superadmin/email_settings.php`).
+- [x] Superadmin UI: Template management (`views/superadmin/email_templates.php`).
+- [x] Admin UI: Template management for tenant-specific templates (`views/admin/email_templates.php`).
+- [x] Integration: Tenant welcome email on tenant creation (`api/superadmin/tenants.php`).
+- [x] Integration: Guest confirmation email on registration (`api/auth/register.php`).
+- [x] Routes registered in `index.php` with role-based access control.
+- [x] 19/19 automated tests passing (`test_email.php`).
+
 ---
 
 ## 10. ROLES & MODULE GOVERNANCE
 
 ### 10.1 Role Definitions
 
-The STAMGAST platform has 4 distinct user roles with clear separation of responsibilities:
+The REGULR.vip platform has 4 distinct user roles with clear separation of responsibilities:
 
 | Role | Description | Access Level | Notes |
 |------|-------------|-------------|-------|
@@ -259,9 +278,9 @@ For complete testing procedures, see `test_plan.md` which contains detailed end-
 
 ## 9. IMPLEMENTATIE STATUS & VOORTGANG
 
-> **Laatst bijgewerkt**: 2026-04-22 16:44
-> **Huidige status**: ✅ Alle fasen (1-5) compleet
-> **Totaal bestanden met code**: 63 van ~65 gepland (~97%)
+> **Laatst bijgewerkt**: 2026-04-26
+> **Huidige status**: ✅ Alle fasen (1-6) compleet
+> **Totaal bestanden met code**: 68 van ~70 gepland (~97%)
 > **Bekende problemen**: Geen — alle geplande functionaliteit geïmplementeerd
 
 ### 9.1 Overzicht per Fase

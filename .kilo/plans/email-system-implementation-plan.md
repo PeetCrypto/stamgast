@@ -1,100 +1,95 @@
-# Email System Implementation Plan
+# STAMGAST Email System Implementation Plan
 
 ## Overview
-This plan details the implementation of an email system for the STAMGAST Loyalty Platform, supporting multiple email providers (BREVO, SENDER.NET, Amazon SES), with role-based template management and secure SMTP configuration.
+This document outlines the implementation plan for the email system in the REGULR.vip Loyalty Platform, including the email template system, provider integration, and administrative interfaces.
 
-## 1. Project Structure
-- Create `services/email` directory with subdirectories for providers and templates.
-  - `services/email/providers/`: Contains provider-specific implementations (BrevoProvider.js, SenderNetProvider.js, AwsSesProvider.js).
-  - `services/email/templates/`: Stores email templates (HTML/Text format).
-  - `services/email/email.service.js`: Core service for sending emails.
-- `config/email.js`: Global email configuration (provider selection, default settings).
-- `models/email-config.model.js`: Database model for SMTP configuration.
-- `models/email-template.model.js`: Database model for email templates.
+## System Components
 
-## 2. Database Schema Changes
-- **`email_config` table**:
-  - `id`: Primary key (UUID)
-  - `provider`: ENUM ('brevo', 'sender_net', 'aws_ses')
-  - `smtp_host`: String
-  - `smtp_port`: Integer
-  - `smtp_user`: Encrypted String
-  - `smtp_pass`: Encrypted String
-  - `created_at`: Timestamp
-  - `updated_at`: Timestamp
+### 1. Database Structure
+- **email_config**: SMTP provider settings table
+- **email_templates**: Template management per tenant
+- **email_log**: Sent email tracking
 
-- **`email_templates` table**:
-  - `id`: Primary key (UUID)
-  - `type`: ENUM ('tenant_welcome', 'admin_invite', 'guest_confirmation', 'marketing')
-  - `subject`: String
-  - `content`: Text (HTML)
-  - `tenant_id`: Foreign key to `tenants` table
-  - `created_at`: Timestamp
-  - `updated_at`: Timestamp
+### 2. Email Template System
 
-## 3. Email Service Layer
-- **`EmailService` class**:
-  - `sendEmail(to, subject, content, options)`: Sends email using configured provider.
-  - Uses dependency injection to select provider based on `email_config`.
-- **Provider Implementations**:
-  - Each provider implements a common interface (e.g., `send()` method).
-  - Example: `BrevoProvider` uses BREVO's API; `AwsSesProvider` uses AWS SDK.
+#### 2.1 Template Types
+The system supports five template types:
+- `tenant_welcome`: For new tenant signups
+- `admin_invite`: For admin invitations
+- `guest_confirmation`: For guest registration confirmations
+- `guest_password_reset`: For guest password resets
+- `marketing`: For marketing campaigns
 
-## 4. Template Management
-- **Superadmin**:
-  - Can manage `tenant_welcome` templates (global tenant welcome email).
-- **Admin (Manager)**:
-  - Can manage `admin_invite`, `guest_confirmation`, and `marketing` templates.
-  - Templates are tenant-specific (linked via `tenant_id`).
+#### 2.2 Template Variables
+Templates use Mustache-style placeholders:
+- `{{tenant_name}}`: Tenant name
+- `{{user_name}}`: Username
+- `{{password_reset_link}}`: Password reset link
+- `{{invitation_link}}`: Invitation link
+- `{{verification_code}}`: Verification code
+- `{{campaign_name}}`: Campaign name
+- `{{campaign_message}}`: Campaign message
+- `{{action_url}}`: Action URL
+- `{{action_text}}`: Action text
+- `{{unsubscribe_url}}`: Unsubscribe URL
 
-## 5. Workflow Details
-### 5.1 New Tenant Creation (Superadmin)
-- Trigger: Tenant created in Superadmin.
-- Steps:
-  1. Retrieve `tenant_welcome` template from `email_templates` for the new tenant.
-  2. Generate password setup link with token.
-  3. Send email from `no-reply@regulr.vip` with display name = Tenant name.
-  4. Set reply-to to tenant's configured email address.
+### 3. Email Providers
+The system supports three email providers:
+- BREVO (default)
+- Sender.net
+- AWS SES
 
-### 5.2 Admin/Bartender Creation (Admin)
-- Trigger: Admin creates new admin/bartender.
-- Steps:
-  1. Retrieve `admin_invite` template for the tenant.
-  2. Generate invitation link with token.
-  3. Send email from `no-reply@regulr.vip` with display name = Tenant name.
-  4. Set reply-to to tenant's configured email address.
+## Implementation Phases
 
-### 5.3 Guest Registration
-- Trigger: New guest registers.
-- Steps:
-  1. Send confirmation email (`guest_confirmation` template) with verification code.
-  2. After verification, send password setup link email.
+### Phase 1: Database Setup
+1. Create database tables (email_config, email_templates, email_log)
+2. Implement database migrations
+3. Seed default templates
 
-### 5.4 Marketing Emails
-- Trigger: Admin initiates marketing campaign.
-- Steps:
-  1. Retrieve marketing template for the tenant.
-  2. Send email from `no-reply@regulr.vip` with display name = Tenant name.
-  3. Set reply-to to tenant's configured email address.
+### Phase 2: Email Service Implementation
+1. Create EmailService class
+2. Implement provider integrations:
+   - BREVO API integration
+   - Sender.net API integration
+   - AWS SES integration
+3. Implement template rendering engine
+4. Add email logging functionality
 
-## 6. Security
-- SMTP credentials stored encrypted in `email_config` table.
-- Access to SMTP settings restricted to Superadmin role via RBAC.
-- Environment variables for secrets (e.g., email service API keys) should be used where applicable.
+### Phase 3: Administrative Interface
+1. Superadmin interface for:
+   - Managing global email templates
+   - Configuring email providers
+2. Admin interface for:
+   - Managing tenant-specific templates
+   - Viewing email logs
+3. Implement template editor with live preview
 
-## 7. Testing Strategy
-- **Unit Tests**:
-  - Test each provider's `send()` method with mock responses.
-  - Verify template rendering with placeholder data.
-- **Integration Tests**:
-  - Test email sending in a test environment using a test SMTP server.
-  - Validate role-based access for template management.
+### Phase 4: Frontend Integration
+1. Create email template editor UI
+2. Implement real-time template preview
+3. Add template variable documentation
+4. Create email log viewer
 
-## 8. Deployment Steps
-1. Update database schema with new tables.
-2. Implement service layer and providers.
-3. Create template management UI components for Superadmin/Admin roles.
-4. Configure SMTP settings in Superadmin interface.
-5. Test all email triggers in staging environment.
+### Phase 5: Testing and Deployment
+1. Unit testing of email functionality
+2. Integration testing with all providers
+3. Performance testing
+4. Deployment to staging environment
+5. Production deployment
 
-This plan provides a clear roadmap for implementation. Once approved, proceed with coding as per the outlined steps.
+## Access Control
+- Superadmin: Full access to all template types
+- Admin: Limited to admin_invite, guest_confirmation, marketing templates
+- Guest: No template management access
+
+## Security Considerations
+- SMTP credentials encryption
+- Input sanitization for templates
+- Access control implementation
+- Audit logging for all email activities
+
+## Performance Requirements
+- Template rendering under 100ms
+- Email sending under 500ms
+- Support for bulk email operations
+- Caching for frequently used templates

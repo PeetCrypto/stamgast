@@ -8,8 +8,10 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../services/AuthService.php';
 require_once __DIR__ . '/../../models/User.php';
+require_once __DIR__ . '/../../models/Tenant.php';
 require_once __DIR__ . '/../../utils/validator.php';
 require_once __DIR__ . '/../../utils/audit.php';
+require_once __DIR__ . '/../../services/Email/email_helpers.php';
 
 // Only allow POST
 if ($method !== 'POST') {
@@ -86,6 +88,19 @@ $audit->log(
     'user',
     $result['user_id']
 );
+
+// Send guest confirmation email (non-blocking — failure does not affect registration)
+try {
+    $tenantModel = new Tenant($db);
+    $tenant      = $tenantModel->findById($tenantId);
+    $tenantName  = $tenant ? $tenant['name'] : 'STAMGAST';
+
+    $verificationCode = strtoupper(substr(bin2hex(random_bytes(4)), 0, 8));
+
+    sendGuestConfirmationEmail($db, $email, $tenantName, $verificationCode, $tenantId);
+} catch (\Throwable $e) {
+    error_log('Guest confirmation email failed: ' . $e->getMessage());
+}
 
 Response::success([
     'user_id'  => $result['user_id'],
