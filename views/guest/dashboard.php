@@ -17,6 +17,11 @@ $walletModel = new Wallet($db);
 $wallet = $walletModel->findByUserId($userId);
 $balanceCents = $wallet ? (int) $wallet['balance_cents'] : 0;
 $pointsCents = $wallet ? (int) $wallet['points_cents'] : 0;
+
+// Get account status for gated onboarding
+$userModel = new User($db);
+$accountStatus = $userModel->getAccountStatus($userId);
+$isUnverified = ($accountStatus !== 'active');
 ?>
 
 <?php require VIEWS_PATH . 'shared/header.php'; ?>
@@ -29,8 +34,19 @@ $pointsCents = $wallet ? (int) $wallet['points_cents'] : 0;
         <p class="text-secondary text-sm">Je saldo</p>
         <p style="font-size: 48px; font-weight: 700; color: var(--accent-primary);">&euro; <?= number_format($balanceCents / 100, 2, ',', '.') ?></p>
         <p class="text-secondary text-sm" style="margin-top: var(--space-xs);"><?= number_format($pointsCents / 100, 0) ?> punten</p>
+        <?php if (!$isUnverified): ?>
         <a href="<?= BASE_URL ?>/wallet" class="btn btn-primary" style="margin-top: var(--space-md);">Opwaarderen</a>
+        <?php endif; ?>
     </div>
+
+    <?php if ($isUnverified): ?>
+    <!-- Unverified Account Banner -->
+    <div class="glass-card" style="padding: var(--space-lg); margin-bottom: var(--space-lg); border: 2px solid rgba(255,193,7,0.4); background: rgba(255,193,7,0.06); text-align: center;">
+        <p style="font-size: 18px; color: #FFC107; font-weight: 600; margin-bottom: 0.5rem;">⚠️ Account niet geactiveerd</p>
+        <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 1rem;">Hoi! Om je wallet te activeren en saldo te storten, moet je eenmalig je ID laten zien bij de bar. Zo houden we het veilig en legaal.</p>
+        <a href="<?= BASE_URL ?>/qr" class="btn btn-outline" style="border-color: #FFC107; color: #FFC107;">Laat je QR zien aan de bar</a>
+    </div>
+    <?php endif; ?>
 
     <!-- Quick Actions -->
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-md); margin-bottom: var(--space-xl);">

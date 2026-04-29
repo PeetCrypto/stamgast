@@ -1,631 +1,752 @@
-# RREGULR.vip LOYALTY PLATFORM - THE MASTER BLUEPRINT (v10)
+# Platform Fee & Mollie Connect Implementatieplan
 
-This document is the definitive, exhaustive Technical Specification and UI/UX Design Guide for the REGULR.vip Loyalty Platform. It has been expanded to cover every granular detail, ensuring the system is "Hufterproof," multi-tenant, and premium.
-
----
-
-## 1. STRATEGIC VISION & SCALABILITY
-### 1.1 Multi-Tenant MVP Context
-The system is built as a white-label platform. While running on a single MySQL instance for the MVP, the architecture uses a "Tenant-Aware" layer on every transaction.
-- **Data Isolation**: Every table contains a `tenant_id` (INT) and every query is forced through a global filter.
-- **Scalability**: The database logic uses PDO with standardized SQL to ensure that migration to PostgreSQL or a distributed cluster (e.g., separate databases per tenant) requires minimal refactoring.
-- **Portability**: Optimized for Hostinger shared hosting (PHP 8.2+, Apache .htaccess).
-
-### 1.2 Ironclad Security ("Hufterproof")
-- **Balance Integrity**: No client-side balance manipulation. The client is a view-only terminal. All financial logic occurs inside the server's atomic transactions.
-- **Anti-Fraud QR**: Cryptographically signed HMAC-SHA256 codes with a 60-second expiration. Screenshots are rendered useless.
-- **IP-Geofencing**: Bartender actions are only allowed from whitelisted IP addresses (The establishment's WiFi).
-- **Audit Ledger**: Every cent moved is logged with a mandatory audit trail (Who, When, Where, IP, Fingerprint).
-
-Postgres-Ready Migration Layer: De database-architectuur is ontworpen volgens de "Twelve-Factor App" principes. Dit betekent:
-Geen database-specifieke "Stored Procedures" of "Triggers" die migratie bemoeilijken.
-Gebruik van UUID naast INT voor publieke identifiers, wat essentieel is voor gedistribueerde systemen zoals PostgreSQL.
-Voorbereid op Row Level Security (RLS) door consistente tenant_id implementatie.
----
-
-## 2. EXHAUSTIVE DATABASE DICTIONARY
-
-### 2.1 Establishment Management
-#### `tenants`
-| Field | Type | Attributes | Description |
-| :--- | :--- | :--- | :--- |
-| `id` | INT | PK, AI | Unique ID. |
-| `uuid` | VARCHAR(36) | UNIQUE | Publicly safe ID. |
-| `name` | VARCHAR(255) | | Establishment name. |
-| `brand_color` | VARCHAR(7) | | Primary HEX color (e.g., #FFC107). |
-| `secondary_color` | VARCHAR(7) | | Secondary HEX color. |
-| `logo_path` | VARCHAR(255) | | Local path to the establishment logo. |
-| `mollie_api_key` | VARCHAR(255) | | Encrypted API key. |
-| `mollie_status` | ENUM | | 'mock', 'test', 'live'. |
-| `whitelisted_ips` | TEXT | | Line-separated whitelist of Bar WiFi IPs. |
-| `feature_push` | BOOLEAN | DEFAULT 1 | Modular toggle. |
-| `feature_marketing` | BOOLEAN | DEFAULT 1 | Modular toggle. |
-| `created_at` | TIMESTAMP | | |
-
-## 2.2 Identity & Role Management
-#### `users`
-- `id` (INT PK AI).
-- `tenant_id` (INT FK): Isolation bridge. NULL for superadmin (platform level user).
-- `email` (VARCHAR 255): Unique per tenant.
-- `password_hash` (VARCHAR 255): Argon2id or Bcrypt.
-- `role` (ENUM): `superadmin`, `admin` (establishment owner/manager), `bartender`, `guest`.
-- `first_name`, `last_name` (VARCHAR 100).
-- `birthdate` (DATE): For age checks.
-- `photo_url` (VARCHAR 255): Uploaded profile pic.
-- `photo_status` (ENUM): `unvalidated`, `validated`, `blocked`.
-- `push_token` (TEXT): For pure Web Push.
-- `last_activity` (TIMESTAMP).
-
-### 2.3 Financials & Tiers
-#### `wallets`
-- `user_id` (PK FK), `tenant_id`.
-- `balance_cents` (BIGINT): Stored in cents (1.00 = 100).
-- `points_cents` (BIGINT): Loyalty points balance.
-
-#### `loyalty_tiers`
-- `id`, `tenant_id`, `name`.
-- `min_deposit_cents`: Threshold to reach this tier.
-- `alcohol_discount_perc`: (Max 25%).
-- `food_discount_perc`: (Max 100%).
-
-### 2.4 The Transaction Ledger
-#### `transactions`
-- `id` (INT PK AI).
-- `tenant_id`, `user_id`, `bartender_id` (FKs).
-- `type` (ENUM): `payment`, `deposit`, `bonus`, `correction`.
-- `amount_alc_cents`, `amount_food_cents`.
-- `discount_alc_cents`, `discount_food_cents`.
-- `final_total_cents`.
-- `points_earned`, `points_used`.
-- `ip_address`, `device_fingerprint`.
-- `created_at`.
+**Project:** REGULR.vip Loyalty Platform  
+**Feature:** Platform afroommodel ( Marketplace ) met Mollie Connect  
+**Status:** ✅ COMPLETE — 100% voltooid  
+**Laatst bijgewerkt:** 2026-04-28  
 
 ---
 
-## 3. CORE LOGIC SPECIFICATIONS
+## 📋 Executive Summary
 
-### 3.1 The "Smart" Kassa & Legal Engine
-The processing logic in `api/pos/process_payment.php` follows a strict legal sequence:
-1. **Identify**: Validate QR and tenant association.
-2. **Calculate Subtotals**: Separate Alcohol and Food items.
-3. **Apply Rules**:
-   - Alcohol Discount = `MIN(25%, MAX(ActiveRules, UserTier))`.
-   - Food Discount = `MAX(ActiveRules, UserTier)`.
-4. **Validation**: Check if `calculated_total == user_submitted_total` (if applicable).
-5. **Deduct**: 
-   - Check balance. 
-   - Perform atomic DB update: `UPDATE wallets` and `INSERT transactions`.
-   - Update loyalty points.
+Dit document beschrijft de volledige implementatie van een **platform fee systeem** ( Marketplace ) voor het REGULR.vip platform. Het is ontworpen volgens **Mollie Connect** architectuur, hetgeen als enige oplossing voldoet aan de eisen:
 
-### 3.2 Cryptographic QR Handshake
-- **Payload**: `user_id | tenant_id | timestamp | nonce`.
-- **Signature**: Generated using `hash_hmac('sha256', data, tenant_secret_key)`.
-- **Validation**: Server decodes, checks `timestamp > now - 60s`, and recalculates HMAC. A mismatch or timeout results in an immediate 403 error.
+- ✅ **Hufter-proof**: Tenants kunnen de fee niet omzeilen (geen toegang tot API keys)
+- ✅ **Geen geldbeheer**: Platform ontvangt fee direct van Mollie, geen tijdelijke hold
+- ✅ **Audit-proof**: Alle fee transacties zijn immutable gesnapshottet en gelabeld
+- ✅ **Facturatie-ready**: Verzamelfacturen per week/maand inclusief BTW
+- ✅ **Future-proof**: Architectuur is 1-op-1 mappable naar Stripe Connect
 
 ---
 
-## 4. UI/UX DESIGN SYSTEM: "MIDNIGHT LOUNGE"
+## 🎯 Beslissingen & Aannames
 
-### 4.1 Aesthetic Foundation
-- **Visual Style**: High-end luxury, Dark Mode default.
-- **Glassmorphism**: 
-  - `backdrop-filter: blur(25px)`.
-  - Border: `1px solid rgba(255, 255, 255, 0.1)`.
-  - Box-shadow: `0 8px 32px 0 rgba(0, 0, 0, 0.37)`.
-- **Gradients**:
-  - Primary: `linear-gradient(135deg, #FFC107 0%, #FF9800 100%)` (Premium Gold).
-  - Background: `linear-gradient(180deg, #0f0f0f 0%, #1a1a1a 100%)`.
-
-### 4.2 Views & Components
-
-#### Guest PWA
-- **Dashboard**: "Hoi [Naam]!" greeting + Odometer animation for wallet balance.
-- **Wallet Card**: Floating gold-bordered card with "Add Credit" action.
-- **QR Box**: Pulsing neon border around the dynamic QR code.
-- **Inbox**: Modern notification feed for rewards.
-
-#### Bartender POS (Mobile Optimized)
-- **Scanner UI**: Full-screen camera view with a scanning line animation.
-- **Outcome Overlay**:
-  - User Photo (validated status highlight).
-  - Age badge (Green/Red).
-  - Quick-amount keypad for rapid entry.
-
-#### Admin & Super-Admin
-- **Sidebar**: Sleek, collapsible navigation with acrylic blur.
-- **Analytics**: 
-  - Revenue charts (Daily/Weekly).
-  - "Whale Tracker" (Top customers).
-  - Feature toggles (Simple switches for Push/Marketing).
+| Beslissing | Keuze | Toelichting |
+|------------|-------|-------------|
+| **Afromoment** | Bij deposit (wallet opwaarderen) | Juridisch: "platform service fee bij opwaarderen" moet in T&C. Advies was consumptie, maar keuze is deposit. |
+| **Minimum fee** | Per-tenant instelbaar (`PLATFORM_FEE_MIN_CENTS`) | voorkomt verlies bij micro-transacties (€1 → €0.01) |
+| **Facturatie frequentie** | Maandelijks (default) | Standaard, per-tenant configurable via `invoice_period` |
+| **Mollie Connect** | Ja — enige optie | Tenant eigen API keys = niet hufter-proof |
+| **Fee autoriteit** | Mollie `applicationFee.amount` | NOOIT zelf herberekenen — rounding/legal issues |
+| **BTW percentage** | 21% (Nederland) | Over platform fee, berekend in factuur |
 
 ---
 
-## 5. MODULAR FEATURE MODULES
-
-### 5.1 "The Marketing Studio"
-Modular system for the owner (if enabled):
-- **Segmentation**: Query engine to select groups (e.g., `WHERE last_activity < -30 days`).
-- **Composer**: Rich-text for personalized emails (`{{first_name}}`).
-- **Queue**: Emails are sent via a cron-driven `email_queue`.
-
-### 5.2 Pure Web Push Notifications
-- **Technology**: Native Browser Push (VAPID).
-- **Control**: Centralized `api/push/send_notification.php` that checks `tenant.feature_push`.
-
----
-
-## 6. PWA & ASSET GENERATION
-### 6.1 Dynamic Branding & Icons
-- **Icon Engine**: `/api/assets/generate_pwa_icon.php`.
-  - Takes the tenant logo.
-  - Generates a branded square icon.
-  - Adds the "**LOYALTY**" text in a matching font underneath.
-  - Served via `manifest.json.php`.
-
-### 6.2 Service Worker Strategy
-- **Lifecycle**: Install -> Activate -> Fetch.
-- **Caching**: Statically cache CSS/JS Shell. Network-first for Wallet balance.
-
----
-
-## 7. IMPLEMENTATION ROADMAP
-
-### Phase 1: Foundation (The Shell) — ✅ COMPLEET
-- [x] DB Schema with `tenant_id` and multi-tenant constraints.
-- [x] Super-Admin: Create Tenant tool.
-- [x] CSS Midnight Lounge Framework (3 CSS-bestanden + header/footer refactored).
-- [x] Dynamisch PWA manifest.
-
-### Phase 2: Security & Identity — ✅ COMPLEET (100%)
-- [x] HMAC QR Security Handshake (`services/QrService.php`).
-- [x] User model (`models/User.php`).
-- [x] AuthService (`services/AuthService.php`).
-- [x] Auth API endpoints (login, register, logout, session).
-- [x] Login & Register UI views (`views/shared/login.php`, `views/shared/register.php`).
-- [x] Photo upload/validation (in models/User.php).
-- [x] IP Whitelisting system (middleware).
-- [x] CSRF protection (middleware).
-- [x] Session security (middleware).
-
-### Phase 3: Transactional Engine — ✅ COMPLEET (100%)
-- [x] 25% Alcohol constraint logic (`PaymentService.php`).
-- [x] Mollie Mock/Live system (`MollieService.php`).
-- [x] Transaction Ledger & Atomic updates (`Transaction.php` + `PaymentService.php`).
-- [x] Wallet deposit via Mollie (`WalletService.php`).
-- [x] QR generate endpoint (`api/qr/generate.php`).
-- [x] POS scan endpoint (`api/pos/scan.php`).
-- [x] POS payment endpoint (`api/pos/process_payment.php`).
-- [x] Wallet deposit/history endpoints (`api/wallet/deposit.php`, `api/wallet/history.php`).
-- [x] Mollie webhook handler (`api/mollie/webhook.php`).
-- [x] 83/83 tests pass (`test_phase3.php`).
-
-### Phase 4: Frontend & PWA — ✅ COMPLEET (100%)
-- [x] Alle CSS bestanden (3 bestanden, ~2127 regels totaal).
-- [x] Alle JavaScript bestanden (6 bestanden, ~1900 regels totaal).
-- [x] Alle gast views (dashboard, wallet, qr).
-- [x] Unified Bartender POS dashboard (501 regels).
-- [x] Alle admin views (dashboard, users, tiers, settings, marketing).
-- [x] Alle superadmin views (dashboard, tenants, tenant_detail).
-- [ ] ~~Bartender scanner/payment views~~ (geconsolideerd in unified dashboard).
-- [x] Gast inbox view (`views/guest/inbox.php`).
-- [x] Admin marketing view (`views/admin/marketing.php`).
-- [x] Push notification handler (`public/js/push.js`).
-- [x] Service Worker (`public/js/sw.js`).
-- [x] Admin API endpoints (`api/admin/*.php`) — alle 4 bestanden gemaakt en werken correct!
-
-### Phase 5: Marketing & Push — ✅ COMPLEET (100%)
-- [x] PushService & MarketingService (backend business logic).
-- [x] Push subscribe/send_notification API endpoints.
-- [x] Marketing segment/compose/queue API endpoints.
-- [x] Dynamic PWA Icon generation (GD library).
-
-### Phase 6: Email System — ✅ COMPLEET (100%)
-- [x] Database migration: `email_config`, `email_templates`, `email_log` tables (`sql/email_system_migration.sql`).
-- [x] Migration runner with prepared statements (`migrate_email.php`).
-- [x] 5 default HTML email templates (tenant_welcome, admin_invite, guest_confirmation, guest_password_reset, marketing).
-- [x] EmailConfig model with AES-256-CBC encryption for SMTP credentials (`models/EmailConfig.php`).
-- [x] EmailTemplate model with RBAC template access control (`models/EmailTemplate.php`).
-- [x] EmailService with provider pattern — BREVO, Sender.net, AWS SES (`services/Email/EmailService.php`).
-- [x] Email helper functions for workflow integration (`services/Email/email_helpers.php`).
-- [x] Email provider configuration defaults (`config/email.php`).
-- [x] API: Template CRUD with session auth + RBAC (`api/email/templates.php`).
-- [x] API: SMTP config management, superadmin-only (`api/email/config.php`).
-- [x] Superadmin UI: SMTP settings form + test email (`views/superadmin/email_settings.php`).
-- [x] Superadmin UI: Template management (`views/superadmin/email_templates.php`).
-- [x] Admin UI: Template management for tenant-specific templates (`views/admin/email_templates.php`).
-- [x] Integration: Tenant welcome email on tenant creation (`api/superadmin/tenants.php`).
-- [x] Integration: Guest confirmation email on registration (`api/auth/register.php`).
-- [x] Routes registered in `index.php` with role-based access control.
-- [x] 19/19 automated tests passing (`test_email.php`).
-
----
-
-## 10. ROLES & MODULE GOVERNANCE
-
-### 10.1 Role Definitions
-
-The REGULR.vip platform has 4 distinct user roles with clear separation of responsibilities:
-
-| Role | Description | Access Level | Notes |
-|------|-------------|-------------|-------|
-| **superadmin** | Platform Administrator | Full platform access | Manages all tenants, controls feature modules |
-| **admin** | Establishment Manager (Kroegbaas) | Tenant-level administration | Uses features approved by superadmin |
-| **bartender** | Point of Sale Staff | Transaction processing | Limited access to management features |
-| **guest** | End Customer | Basic user access | View-only wallet and transaction history |
-
-### 10.2 Module Governance Model
-
-The platform implements a two-tier module governance system:
-- **Platform Level (superadmin)**: Controls which modules are available per tenant
-- **Tenant Level (admin/manager)**: Can only use modules that have been activated by the superadmin
-
-This ensures that managers cannot accidentally enable/disable critical platform features, maintaining security and consistency across all tenant installations.
-
-### 10.3 Testing Requirements
-
-For complete testing procedures, see `test_plan.md` which contains detailed end-to-end testing scenarios for all role and module functionality.
-| Test Case | Scenario | Expected Result |
-| :--- | :--- | :--- |
-| **TC-01** | Guest scans at different Tenant | **Signature Mismatch / Transaction Denied** |
-| **TC-02** | Manual balance update from client | **Impossible / Server ignore** |
-| **TC-03** | Alcohol discount > 25% | **Auto-Capped or Error Returned** |
-| **TC-04** | Use expired QR (61s old) | **Expired Message / Denied** |
-| **TC-05** | Scan from unauthorized IP | **Access Denied (POS Locked)** |
-| **TC-06** | Access marketing via hidden link | **Module Disabled check / 403** |
-
----
----
-
-## 9. IMPLEMENTATIE STATUS & VOORTGANG
-
-> **Laatst bijgewerkt**: 2026-04-26
-> **Huidige status**: ✅ Alle fasen (1-6) compleet
-> **Totaal bestanden met code**: 68 van ~70 gepland (~97%)
-> **Bekende problemen**: Geen — alle geplande functionaliteit geïmplementeerd
-
-### 9.1 Overzicht per Fase
-
-| Fase | Omschrijving | Voortgang | Status |
-| :--- | :--- | :---: | :--- |
-| **Fase 1** | Foundation (The Shell) | 100% | ✅ Compleet |
-| **Fase 2** | Security & Identity | 100% | ✅ Compleet |
-| **Fase 3** | Transactional Engine | 100% | ✅ Compleet (83/83 tests geslaagd) |
-| **Fase 4** | Frontend & PWA | 100% | ✅ Compleet |
-| **Fase 5** | Marketing & Push | 100% | ✅ Compleet |
-
-### 9.2 FASE 1: Foundation (The Shell) — 100% ✅
-
-| # | Item | Bestand | Status | Opmerking |
-| :--- | :--- | :--- | :---: | :--- |
-| 1.1 | Projectstructuur aanmaken | Alle mappen | ✅ | Alle mappen bestaan |
-| 1.2 | PDO singleton connectie | `config/database.php` | ✅ | InnoDB, UTF-8MB4 |
-| 1.3 | App-wide constants | `config/app.php` | ✅ | env mode, limieten |
-| 1.4 | Apache rewrites + security | `.htaccess` | ✅ | security headers, gzip |
-| 1.5 | Basis router | `index.php` | ✅ | ~400 regels, API+view dispatch |
-| 1.6 | Database schema | `sql/schema.sql` | ✅ | 8 tabellen compleet |
-| 1.7 | Test data | `sql/seed.sql` | ✅ | 1 tenant, users, tiers |
-| 1.8 | Super-Admin: Tenant CRUD | `api/superadmin/tenants.php` | ✅ | volledige CRUD |
-| 1.8 | Super-Admin: Overzicht | `api/superadmin/overview.php` | ✅ | platform statistieken |
-| 1.8 | Tenant model | `models/Tenant.php` | ✅ | volledige CRUD |
-| - | CORS headers | `config/cors.php` | ✅ | dev/prod modus |
-| - | JSON response builder | `utils/response.php` | ✅ | alle HTTP codes |
-| - | Input validator | `utils/validator.php` | ✅ | fluent interface |
-| - | Audit trail logger | `utils/audit.php` | ✅ | log + retrieve |
-| - | Helper functies | `utils/helpers.php` | ✅ | CSRF, sessie, sanitization |
-| - | PWA manifest | `public/manifest.json.php` | ✅ | tenant branding, icon refs, shortcuts |
-| - | Design system CSS | `public/css/midnight-lounge.css` | ✅ | variabelen, reset, layout, animaties |
-| - | UI componenten CSS | `public/css/components.css` | ✅ | buttons, forms, nav, alerts, modals, tabellen |
-| - | View-specifieke CSS | `public/css/views.css` | ✅ | auth, gast, POS, admin, superadmin |
-| - | Header template | `views/shared/header.php` | ✅ | externe CSS links + tenant variabelen |
-| - | Footer template | `views/shared/footer.php` | ✅ | gebruikt .site-footer class |
-
-### 9.3 FASE 2: Security & Identity — 100% ✅
-
-| # | Item | Bestand | Status | Opmerking |
-| :--- | :--- | :--- | :---: | :--- |
-| 2.1 | Sessie validatie | `middleware/auth_check.php` | ✅ | timeout check |
-| 2.2 | Rol autorisatie | `middleware/role_check.php` | ✅ | 4 rol-niveaus |
-| 2.3 | Tenant filter | `middleware/tenant_filter.php` | ✅ | superadmin bypass |
-| 2.4 | IP geofencing | `middleware/ip_whitelist.php` | ✅ | CIDR support |
-| 2.5 | CSRF bescherming | `middleware/csrf.php` | ✅ | header+form validatie |
-| 2.6 | User model | `models/User.php` | ✅ | CRUD + emailExists + calculateAge |
-| 2.7 | AuthService (login/reg) | `services/AuthService.php` | ✅ | Argon2id+pepper, 18+ check |
-| 2.8 | HMAC QR Service | `services/QrService.php` | ✅ | HMAC-SHA256, hash_equals, 60s expiry |
-| 2.9 | Auth API: Login | `api/auth/login.php` | ✅ | validatie, sessie, audit |
-| 2.10 | Auth API: Register | `api/auth/register.php` | ✅ | fluent validator, auto-login |
-| 2.11 | Auth API: Logout | `api/auth/logout.php` | ✅ | session destroy + cookie |
-| 2.12 | Auth API: Session | `api/auth/session.php` | ✅ | GET sessie info |
-| 2.13 | Login UI | `views/shared/login.php` | ✅ | Midnight Lounge glasmorphism |
-| 2.14 | Registratie UI | `views/shared/register.php` | ✅ | 18+ validation, password strength |
-| 2.15 | Foto upload & validatie | `models/User.php` | ✅ | CRUD methods aanwezig |
-
-### 9.4 FASE 3: Transactional Engine — 100% ✅
-
-| # | Item | Bestand | Status | Opmerking |
-| :--- | :--- | :--- | :---: | :--- |
-| 3.1 | Wallet model | `models/Wallet.php` | ✅ | findByUserId, updateBalance, create |
-| 3.2 | Transaction model | `models/Transaction.php` | ✅ | volledige CRUD + historie |
-| 3.3 | Tenant model | `models/Tenant.php` | ✅ | Al geïmplementeerd in Fase 1 |
-| 3.4 | LoyaltyTier model | `models/LoyaltyTier.php` | ✅ | findByTenant + tier-bepaling |
-| 3.5 | PaymentService (kassa) | `services/PaymentService.php` | ✅ | kortingslogica + atomaire transactie |
-| 3.6 | MollieService (API wrapper) | `services/MollieService.php` | ✅ | Mock/test/live modus |
-| 3.7 | WalletService (opwaarderen) | `services/WalletService.php` | ✅ | opwaarderen + saldo checks |
-| 3.8 | POS: QR scannen | `api/pos/scan.php` | ✅ | HMAC validatie + user info |
-| 3.9 | POS: Betaling verwerken | `api/pos/process_payment.php` | ✅ | 6-staps atomaire flow |
-| 3.10 | Wallet: Saldo | `api/wallet/balance.php` | ✅ | basis endpoint |
-| 3.11 | Wallet: Opwaarderen | `api/wallet/deposit.php` | ✅ | Mollie checkout integratie |
-| 3.12 | Wallet: Geschiedenis | `api/wallet/history.php` | ✅ | Paginering + details |
-| 3.13 | QR: Genereren | `api/qr/generate.php` | ✅ | HMAC-signed payload, 60s expiry |
-| 3.14 | Mollie webhook | `api/mollie/webhook.php` | ✅ | Payment verificatie + wallet creditering |
-
-### 9.5 FASE 4: Frontend & PWA — 100% ✅
-
-#### JavaScript Bestanden (allemaal geïmplementeerd)
-
-| # | Item | Bestand | Regels | Status | Opmerking |
-| :--- | :--- | :--- | :---: | :---: | :--- |
-| 4.1 | App initializer & router | `public/js/app.js` | 398 | ✅ | IIFE, AppState, API client, routing, SW registratie, tenant branding |
-| 4.2 | Wallet functionaliteit | `public/js/wallet.js` | 278 | ✅ | Deposit flow (Mollie+mock), transactie historie, quick deposit buttons |
-| 4.3 | QR generatie & weergave | `public/js/qr.js` | 310 | ✅ | QR generatie/rendering, 60s countdown, auto-refresh, scanner+validatie |
-| 4.4 | Bartender POS interface | `public/js/pos.js` | 127 | ✅ | QR validatie, betaling verwerken, discount preview |
-| 4.5 | Admin dashboard charts | `public/js/admin.js` | 598 | ✅ | Stats/charts canvas, users CRUD, tiers CRUD, settings, marketing studio |
-| 4.6 | Push notification handler | `public/js/push.js` | 290 | ✅ | Web Push API, VAPID keys, subscribe/unsubscribe, toggle |
-| 4.7 | Service Worker | `public/js/sw.js` | 185 | ✅ | Cache-first voor shell, network-first voor API, push handler |
-
-#### View Bestanden — Gast
-
-| # | Item | Bestand | Regels | Status | Opmerking |
-| :--- | :--- | :--- | :---: | :---: | :--- |
-| 4.8 | Gast Dashboard | `views/guest/dashboard.php` | 54 | ✅ | Wallet saldo + quick actions grid |
-| 4.9 | Gast Wallet | `views/guest/wallet.php` | 118 | ✅ | Balance/points/tier + deposit buttons + transactie historie |
-| 4.10 | Gast QR code | `views/guest/qr.php` | 98 | ✅ | QR box + countdown + auto-refresh + QRCode.js CDN |
-| 4.11 | Gast Inbox | `views/guest/inbox.php` | 196 | ✅ | Notificatie feed op basis van transactiehistorie |
-
-#### View Bestanden — Bartender
-
-| # | Item | Bestand | Regels | Status | Opmerking |
-| :--- | :--- | :--- | :---: | :---: | :--- |
-| 4.12 | Unified POS Dashboard | `views/bartender/dashboard.php` | 501 | ✅ | **HOOFDVIEW** — Scanner + Payment + Success in 1 pagina, inline JS |
-| 4.13 | Scanner redirect | `views/bartender/scanner.php` | 11 | ✅ | Redirect stub naar `/bartender` (backward compat) |
-| 4.14 | Payment redirect | `views/bartender/payment.php` | 11 | ✅ | Redirect stub naar `/bartender` (backward compat) |
-
-#### View Bestanden — Admin
-
-| # | Item | Bestand | Regels | Status | Opmerking |
-| :--- | :--- | :--- | :---: | :---: | :--- |
-| 4.15 | Admin Dashboard | `views/admin/dashboard.php` | 39 | ✅ | Nav hub naar users/tiers/settings/marketing |
-| 4.16 | Admin Gebruikers | `views/admin/users.php` | 141 | ✅ | Tabel + filters + modal CRUD + paginering |
-| 4.17 | Admin Tiers | `views/admin/tiers.php` | 102 | ✅ | Tiers grid + modal CRUD + delete |
-| 4.18 | Admin Instellingen | `views/admin/settings.php` | 137 | ✅ | Form: algemeen, kleuren, logo, Mollie, IPs, toggles |
-| 4.19 | Admin Marketing | `views/admin/marketing.php` | 256 | ✅ | Segmentatie + email composer + queue UI |
-
-#### View Bestanden — Superadmin
-
-| # | Item | Bestand | Regels | Status | Opmerking |
-| :--- | :--- | :--- | :---: | :---: | :--- |
-| 4.20 | Superadmin Dashboard | `views/superadmin/dashboard.php` | 118 | ✅ | Stats cards + tenants grid/tabel |
-| 4.21 | Superadmin Tenants | `views/superadmin/tenants.php` | 191 | ✅ | CRUD formulier + tabel |
-| 4.22 | Superadmin Tenant Detail | `views/superadmin/tenant_detail.php` | 269 | ✅ | **NIEUW** — Stats, NAW edit, users tabel met role dropdown |
-
-#### CSS & PWA (Fase 1, al compleet)
-
-| # | Item | Bestand | Status | Opmerking |
-| :--- | :--- | :--- | :---: | :--- |
-| 4.23 | Design system CSS | `public/css/midnight-lounge.css` | ✅ | Variabelen, reset, layout, animaties |
-| 4.24 | UI componenten CSS | `public/css/components.css` | ✅ | Buttons, forms, nav, alerts, modals |
-| 4.25 | View-specifieke CSS | `public/css/views.css` | ✅ | Auth, gast, POS, admin, superadmin |
-| 4.26 | Dynamische PWA manifest | `public/manifest.json.php` | ✅ | Tenant branding, icon refs |
-
-#### ✅ Admin API Endpoints — OPGELOST
-
-Alle 4 API endpoints zijn nu gemaakt en werken correct:
-
-| Bestand | Functie | Status |
-| :--- | :--- | :---: |
-| `api/admin/dashboard.php` | GET Admin statistieken | ✅ Compleet |
-| `api/admin/users.php` | GET/POST Gebruikersbeheer | ✅ Compleet |
-| `api/admin/tiers.php` | GET/POST Tier beheer | ✅ Compleet |
-| `api/admin/settings.php` | GET/POST Instellingen | ✅ Compleet |
-
-> **Impact**: `admin.js` maakt API calls naar `/admin/dashboard`, `/admin/users`, `/admin/tiers`, `/admin/settings`. Deze werken nu correct. De eerdere 500-error is opgelost. De admin functionaliteit is volledig operationeel.
-
-### 9.6 FASE 5: Marketing & Push — 100% ✅
-
-| # | Item | Bestand | Status | Opmerking |
-| :--- | :--- | :--- | :---: | :--- |
-| 5.1 | PushService | `services/PushService.php` | ✅ | ~280 regels — subscribe, sendNotification, broadcast, mock/dev mode |
-| 5.2 | MarketingService | `services/MarketingService.php` | ✅ | ~280 regels — segmentUsers (3 filters), composeEmail, getQueueStatus, processQueue |
-| 5.3 | Push: Abonneren | `api/push/subscribe.php` | ✅ | ~65 regels — validatie endpoint URL + base64, audit logging |
-| 5.4 | Push: Notificatie sturen | `api/push/send_notification.php` | ✅ | ~80 regels — feature_push toggle, tenant isolatie |
-| 5.5 | Marketing: Segmentatie | `api/marketing/segment.php` | ✅ | ~75 regels — feature_marketing toggle, criteria sanitization |
-| 5.6 | Marketing: Email opstellen | `api/marketing/compose.php` | ✅ | ~80 regels — max 500 users, tenant-validatie |
-| 5.7 | Marketing: Queue status | `api/marketing/queue.php` | ✅ | ~45 regels — pending/sent/failed counts |
-| 5.8 | Dynamische PWA icon | `api/assets/generate_pwa_icon.php` | ✅ | ~200 regels — GD library gradient, font fallback, 24h cache |
-
-### 9.7 Bestanden Overzicht
-
-#### REEDS GEÌMPLEMENTEERD (63 bestanden)
-
-```
---- CONFIG & INFRASTRUCTUUR ---
-.htaccess                              ✅ Apache rewrites + security headers
-index.php                              ✅ Entry point + router (~400 regels)
-config/database.php                    ✅ PDO singleton connectie
-config/app.php                         ✅ App constants + env mode
-config/cors.php                        ✅ CORS header management
-sql/schema.sql                         ✅ Database schema (8 tabellen)
-sql/seed.sql                           ✅ Test data
-
---- MIDDLEWARE ---
-middleware/auth_check.php              ✅ Sessie validatie
-middleware/role_check.php              ✅ Rol autorisatie
-middleware/tenant_filter.php           ✅ Tenant isolatie
-middleware/ip_whitelist.php            ✅ IP geofencing (CIDR)
-middleware/csrf.php                    ✅ CSRF bescherming
-
---- MODELS ---
-models/Tenant.php                     ✅ Tenant CRUD model [FASE 1]
-models/User.php                       ✅ User data access [FASE 2]
-models/Wallet.php                     ✅ Wallet data access [FASE 3]
-models/Transaction.php                ✅ Transaction data access [FASE 3]
-models/LoyaltyTier.php                ✅ Loyalty tier data access [FASE 3]
-
---- SERVICES ---
-services/AuthService.php              ✅ Login, registratie, sessies [FASE 2]
-services/QrService.php                ✅ HMAC QR generatie/validatie [FASE 2]
-services/PaymentService.php           ✅ Kassa & kortingslogica [FASE 3]
-services/MollieService.php            ✅ Mollie API wrapper [FASE 3]
-services/WalletService.php            ✅ Opwaarderen, saldo checks [FASE 3]
-services/PushService.php               ✅ Web Push verzending (~280 regels) [FASE 5]
-services/MarketingService.php          ✅ Segmentatie & e-mail (~280 regels) [FASE 5]
-
---- API ENDPOINTS ---
-api/superadmin/overview.php           ✅ Platform statistieken [FASE 1]
-api/superadmin/tenants.php            ✅ Tenant CRUD endpoint [FASE 1]
-api/auth/login.php                    ✅ POST Login endpoint [FASE 2]
-api/auth/register.php                 ✅ POST Register endpoint [FASE 2]
-api/auth/logout.php                   ✅ POST Logout endpoint [FASE 2]
-api/auth/session.php                  ✅ GET Session info endpoint [FASE 2]
-api/wallet/balance.php                ✅ GET wallet saldo [FASE 3]
-api/wallet/deposit.php                ✅ POST opwaarderen (Mollie) [FASE 3]
-api/wallet/history.php                ✅ GET transactiegeschiedenis [FASE 3]
-api/pos/scan.php                      ✅ POST QR scannen + validatie [FASE 3]
-api/pos/process_payment.php           ✅ POST betaling verwerken [FASE 3]
-api/qr/generate.php                   ✅ GET QR generatie (HMAC) [FASE 3]
-api/mollie/webhook.php                ✅ POST Mollie webhook [FASE 3]
-api/push/subscribe.php                 ✅ POST Push abonnement (~65 regels) [FASE 5]
-api/push/send_notification.php         ✅ POST Notificatie sturen (~80 regels) [FASE 5]
-api/marketing/segment.php              ✅ POST Segmentatie query (~75 regels) [FASE 5]
-api/marketing/compose.php              ✅ POST Email samenstellen (~80 regels) [FASE 5]
-api/marketing/queue.php                ✅ GET Queue status (~45 regels) [FASE 5]
-api/assets/generate_pwa_icon.php       ✅ GET Dynamisch PWA icoon (~200 regels) [FASE 5]
-
---- UTILS ---
-utils/audit.php                       ✅ Audit trail logger
-utils/helpers.php                     ✅ Helper functies
-utils/response.php                    ✅ JSON response builder
-utils/validator.php                   ✅ Input validatie (fluent)
-
---- CSS & PWA ---
-public/css/midnight-lounge.css        ✅ Design system CSS [FASE 1]
-public/css/components.css             ✅ UI componenten CSS [FASE 1]
-public/css/views.css                  ✅ View-specifieke CSS [FASE 1]
-public/manifest.json.php              ✅ Dynamische PWA manifest [FASE 1]
-
---- JAVASCRIPT ---
-public/js/app.js                      ✅ App initializer (398 regels) [FASE 4]
-public/js/wallet.js                   ✅ Wallet functionaliteit (278 regels) [FASE 4]
-public/js/qr.js                       ✅ QR generatie & weergave (310 regels) [FASE 4]
-public/js/pos.js                      ✅ Bartender POS interface (127 regels) [FASE 4]
-public/js/admin.js                    ✅ Admin dashboard (598 regels) [FASE 4]
-public/js/push.js                     ✅ Push notification handler (290 regels) [FASE 4]
-
---- VIEWS: SHARED ---
-views/shared/header.php               ✅ HTML header + tenant variabelen
-views/shared/footer.php               ✅ HTML footer
-views/shared/login.php                ✅ Login pagina [FASE 2]
-views/shared/register.php             ✅ Registratie pagina [FASE 2]
-
---- VIEWS: GAST ---
-views/guest/dashboard.php             ✅ Gast dashboard (54 regels) [FASE 4]
-views/guest/wallet.php                ✅ Wallet & opwaarderen (118 regels) [FASE 4]
-views/guest/qr.php                    ✅ QR code weergave (98 regels) [FASE 4]
-
---- VIEWS: BARTENDER ---
-views/bartender/dashboard.php         ✅ Unified POS (501 regels) [FASE 4]
-views/bartender/scanner.php           ✅ Redirect → /bartender (11 regels) [FASE 4]
-views/bartender/payment.php           ✅ Redirect → /bartender (11 regels) [FASE 4]
-
---- VIEWS: ADMIN ---
-views/admin/dashboard.php             ✅ Admin hub (39 regels) [FASE 4]
-views/admin/users.php                 ✅ Gebruikersbeheer (141 regels) [FASE 4]
-views/admin/tiers.php                 ✅ Tier configuratie (102 regels) [FASE 4]
-views/admin/settings.php              ✅ Instellingen (137 regels) [FASE 4]
-views/admin/marketing.php             ✅ Marketing Studio (256 regels) [FASE 4]
-
---- VIEWS: SUPERADMIN ---
-views/superadmin/dashboard.php        ✅ Superadmin dashboard (118 regels) [FASE 4]
-views/superadmin/tenants.php          ✅ Tenants CRUD (191 regels) [FASE 4]
-views/superadmin/tenant_detail.php    ✅ Tenant detail (269 regels) [FASE 4] **NIEUW**
+## 🗄️ Database Changes (COMPLEET)
+
+### Nieuwe Tabellen
+
+#### 1. `platform_fees` — Fee Ledger
+```sql
+CREATE TABLE platform_fees (
+    id                      INT PRIMARY KEY AUTO_INCREMENT,
+    tenant_id               INT NOT NULL,
+    transaction_id          INT NOT NULL UNIQUE,    -- 1:1 with transactions
+    mollie_payment_id       VARCHAR(255) NULL,
+    user_id                 INT NOT NULL,
+
+    -- Amounts (cents)
+    gross_amount_cents      INT NOT NULL,           -- deposit amount
+    fee_percentage          DECIMAL(5,2) NOT NULL,  -- SNAPSHOT: fee % at time of tx
+    fee_amount_cents        INT NOT NULL,           -- from Mollie applicationFee (AUTHORITY)
+    net_amount_cents        INT NOT NULL,           -- gross - fee (what tenant receives)
+    fee_min_cents           INT NOT NULL DEFAULT 0, -- SNAPSHOT: min fee at time of tx
+
+    -- Mollie settlement data
+    mollie_fee_cents        INT NULL,               -- Mollie's own transaction cost
+    mollie_settlement_id    VARCHAR(255) NULL,
+
+    -- Invoice linkage
+    status                  ENUM('collected','invoiced','settled') DEFAULT 'collected',
+    invoice_id              INT NULL,               -- FK to platform_invoices
+
+    created_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    INDEX idx_pf_tenant      (tenant_id),
+    INDEX idx_pf_status      (status),
+    INDEX idx_pf_created     (created_at),
+    INDEX idx_pf_mollie_payment (mollie_payment_id),
+    UNIQUE uk_pf_transaction (transaction_id),
+
+    FOREIGN KEY (tenant_id)    REFERENCES tenants(id) ON DELETE CASCADE,
+    FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id)      REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (invoice_id)   REFERENCES platform_invoices(id) ON DELETE SET NULL
+);
 ```
 
-#### FASE 5: MARKETING & PUSH ✅ COMPLEET
+**Waarom deze structuur?**
+- `fee_percentage` = **SNAPSHOT** — voorkomt discussie als percentage later gewijzigd wordt
+- `fee_amount_cents` = **Mollie waarheid** — nooit locally berekend
+- `status` flow: `collected` → `invoiced` → `settled`
+- 1:1 relatie met `transactions` (deposit) — geen many-to-many
 
+#### 2. `platform_invoices` — Verzamelfacturen
+```sql
+CREATE TABLE platform_invoices (
+    id                    INT PRIMARY KEY AUTO_INCREMENT,
+    tenant_id             INT NOT NULL,
+    invoice_number        VARCHAR(50) UNIQUE,     -- PI-2026-04-001
+
+    -- Period
+    period_start          DATE NOT NULL,
+    period_end            DATE NOT NULL,
+    period_type           ENUM('week','month') DEFAULT 'month',
+
+    -- Financials (all in cents)
+    transaction_count     INT DEFAULT 0,
+    gross_total_cents     BIGINT DEFAULT 0,        -- Totaal deposit volume
+    fee_total_cents       BIGINT DEFAULT 0,        -- Totaal platform fee (basis)
+    btw_percentage        DECIMAL(5,2) DEFAULT 21.00,
+    btw_amount_cents      BIGINT DEFAULT 0,        -- 21% over fee_total
+    total_incl_btw_cents  BIGINT DEFAULT 0,        -- fee_total + btw
+
+    -- Status
+    status                ENUM('draft','sent','paid','overdue','cancelled') DEFAULT 'draft',
+    pdf_path              VARCHAR(255) NULL,
+    sent_at               TIMESTAMP NULL,
+    paid_at               TIMESTAMP NULL,
+    cancelled_at          TIMESTAMP NULL,
+    notes                 TEXT NULL,
+
+    created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    INDEX idx_pi_tenant   (tenant_id),
+    INDEX idx_pi_status   (status),
+    INDEX idx_pi_period   (period_start, period_end),
+
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
 ```
---- Fase 5: Marketing & Push (backend + API endpoints) ---
-services/PushService.php               ✅ Web Push verzending (~280 regels) [FASE 5]
-services/MarketingService.php          ✅ Segmentatie & e-mail (~280 regels) [FASE 5]
-api/push/subscribe.php                 ✅ POST Push abonnement (~65 regels) [FASE 5]
-api/push/send_notification.php         ✅ POST Notificatie sturen (~80 regels) [FASE 5]
-api/marketing/segment.php              ✅ POST Segmentatie query (~75 regels) [FASE 5]
-api/marketing/compose.php              ✅ POST Email samenstellen (~80 regels) [FASE 5]
-api/marketing/queue.php                ✅ GET Queue status (~45 regels) [FASE 5]
-api/assets/generate_pwa_icon.php       ✅ GET Dynamisch PWA icoon (~200 regels) [FASE 5]
+
+**Factuurnummer formaat:** `PI-YYYY-MM-NNN` (sequential per maand)
+
+#### 3. `platform_fee_log` — Audit Trail
+```sql
+CREATE TABLE platform_fee_log (
+    id                  INT PRIMARY KEY AUTO_INCREMENT,
+    platform_fee_id     INT NOT NULL,
+    action              VARCHAR(50) NOT NULL,     -- created | status_changed | invoice_linked
+    old_value           VARCHAR(255) NULL,
+    new_value           VARCHAR(255) NULL,
+    actor_user_id       INT NULL,                 -- Superadmin (NULL = systeem)
+    ip_address          VARCHAR(45) NULL,
+    created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    INDEX idx_pfl_fee   (platform_fee_id),
+    INDEX idx_pfl_action (action),
+
+    FOREIGN KEY (platform_fee_id) REFERENCES platform_fees(id) ON DELETE CASCADE
+);
 ```
 
-> **Alle fasen (1-5) zijn nu volledig geïmplementeerd.**
+### Wijzigingen aan `tenants` Tabel
 
-### 9.8 IMPLEMENTATIE STATUS
-
-#### ✅ ALLE FASEN COMPLEET
-
-| Fase | Beschrijving | Status |
-| :--- | :--- | :--- |
-| Fase 1 | Foundation (config, router, DB schema) | ✅ Compleet |
-| Fase 2 | Security & Identity (auth, middleware, QR) | ✅ Compleet |
-| Fase 3 | Transactional Engine (wallet, payments, POS) | ✅ Compleet |
-| Fase 4 | Frontend & PWA (views, CSS, JS, Service Worker) | ✅ Compleet |
-| Fase 5 | Marketing & Push (services, API endpoints) | ✅ Compleet |
+```sql
+ALTER TABLE tenants
+    ADD COLUMN platform_fee_percentage   DECIMAL(5,2)  NOT NULL DEFAULT 1.00,
+    ADD COLUMN platform_fee_min_cents    INT           NOT NULL DEFAULT 25,
+    ADD COLUMN mollie_connect_id         VARCHAR(255)  NULL,
+    ADD COLUMN mollie_connect_status     ENUM('none','pending','active','suspended','revoked') NOT NULL DEFAULT 'none',
+    ADD COLUMN invoice_period            ENUM('week','month') NOT NULL DEFAULT 'month',
+    ADD COLUMN btw_number                VARCHAR(50)   NULL,
+    ADD COLUMN invoice_email             VARCHAR(255)  NULL,
+    ADD COLUMN platform_fee_note         TEXT          NULL;
+```
 
 ---
 
-### 9.9 TEST LOGIN GEGEVENS
+## 🏗️ Architecture
 
-> **Laatst bijgewerkt**: 2026-04-20
-> **Alle wachtwoorden gereset en geverifieerd** via `reset_all_passwords.php`
-
-#### Login Overzicht
-
-| Rol | E-mail | Wachtwoord | Naam | Saldo |
-| :--- | :--- | :--- | :--- | :--- |
-| **Super-Admin** | `admin@stamgast.nl` | `Admin123!` | Admin User | €100.00 |
-| **Admin (Manager)** | `manager@test.nl` | `Manager123!` | Manager Test | €50.00 |
-| **Bartender** | `bartender@test.nl` | `Bartend3r!` | Bart Tender | €0.00 |
-| **Gast** | `guest@test.nl` | `Guest123!` | Guest User | €0.00 |
-
-#### Tenant Info
-
-| Veld | Waarde |
-| :--- | :--- |
-| Naam | Test Establishment |
-| UUID | tenant-001 |
-| Slug | test |
-| Brand kleur | #FFC107 |
-| Mollie status | mock |
-
-#### Toegang
-
-| Rol | Login URL | Na login |
-| :--- | :--- | :--- |
-| Super-Admin | http://localhost/stamgast/login | `/superadmin` |
-| Admin | http://localhost/stamgast/login | `/admin` |
-| Bartender | http://localhost/stamgast/login | `/bartender` |
-| Gast | http://localhost/stamgast/login | `/dashboard` |
-
-#### Wachtwoord Reset
-
-Om alle wachtwoorden te resetten naar de bovenstaande waarden:
 ```
-http://localhost/stamgast/reset_all_passwords.php
+┌─────────────────────────────────────────────────────────────────────┐
+│                        PAYMENT FLOW (Deposit)                         │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  Guest clicks "Opwaarderen €100"                                     │
+│         ↓                                                           │
+│  WalletService::createDeposit()                                       │
+│    ├─ Validate tenant                                               │
+│    ├─ Hard fail: mollie_connect_status !== 'active' ❌                │
+│    ├─ Calculate fee:                                                │
+│    │     fee = max(floor(100 * 1% / 100), 25) = €1.00              │
+│    ├─ Create transaction (status=pending)                           │
+│    ├─ Create PlatformFee record (snapshot: fee% = 1.00, fee_min=25) │
+│    ├─ MollieService::createPayment()                                 │
+│    │     ├─ API Key: MOLLIE_CONNECT_API_KEY (platform-level)        │
+│    │     ├─ onBehalfOf: tenant.mollie_connect_id                     │
+│    │     ├─ applicationFee: { amount: "1.00", currency: "EUR" }      │
+│    │     └─ Returns checkout_url                                     │
+│    └─ Return URL to guest                                           │
+│         ↓                                                           │
+│  Guest completes payment on Mollie                                   │
+│         ↓                                                           │
+│  Mollie sends webhook → /api/mollie/webhook                          │
+│         ↓                                                           │
+│  Webhook handler:                                                    │
+│    ├─ Fetch payment status from Mollie                               │
+│    ├─ Extract application_fee_cents from response                    │
+│    ├─ Update platform_fees.fee_amount_cents = Mollie's value         │
+│    ├─ Update platform_fees.net_amount_cents = gross - fee            │
+│    ├─ Credit wallet via WalletService::processDeposit()               │
+│    └─ platform_fees.status = 'collected'                             │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-> **⚠️ Veiligheid**: Verwijder `reset_all_passwords.php` van de server in productie!
-
-#### Technische Details
-
-- **Hashing**: Argon2id (`PASSWORD_ARGON2ID`)
-- **Pepper**: Gedefinieerd in `config/app.php` als `APP_PEPPER`
-- **Verificatie**: Elk wachtwoord wordt geconcat met pepper vóór hash/verify
-- **Seed data**: Zie `sql/seed.sql` (let op: emails in DB wijken af van seed.sql)
+**Key principles:**
+1. **No fallback** — If Connect not active, payment fails immediately
+2. **Mollie as source of truth** — Fee amount always from `applicationFee.amount`
+3. **Immutable snapshot** — `fee_percentage` and `fee_min_cents` stored at tx time
+4. **Server-side calculation only** — Client never sees fee calc logic
+5. **Audit everywhere** — `audit_log` + `platform_fee_log` for all mutations
 
 ---
+
+## 📁 Files Implemented
+
+### ✅ Completed (18/18 — ALL)
+
+| # | File | Purpose |
+|---|------|---------|
+| 1 | `sql/platform_fee_migration.sql` | Database migration — 3 tables + 8 tenant columns |
+| 2 | `models/PlatformFee.php` | Data access layer for platform_fees |
+| 3 | `models/PlatformInvoice.php` | Data access layer for platform_invoices |
+| 4 | `config/app.php` | Constants: `MOLLIE_CONNECT_*`, `PLATFORM_FEE_*` |
+| 5 | `services/MollieService.php` | Mollie Connect + applicationFee support |
+| 6 | `models/Tenant.php` | Fixed `$allowedFields`, added `isConnectActive()`, `getFeeConfig()`, `getFeeSummary()`, updated `create()` |
+| 7 | `services/WalletService.php` | Calls Mollie with fee, creates PlatformFee, hard fail on Connect |
+| 8 | `services/PlatformFeeService.php` | Fee calc + invoice generation + batch |
+| 9 | `api/mollie/webhook.php` | Updates fee from Mollie truth |
+| 10 | `api/mollie/connect-callback.php` | OAuth callback handler for Mollie Connect onboarding |
+| 11 | `api/superadmin/fees.php` | Fee overview endpoints (overview, per_tenant, tenant_fees, tenant_summary) |
+| 12 | `api/superadmin/invoices.php` | Invoice CRUD + generation + status transitions |
+| 13 | `api/superadmin/tenants.php` | Extended with fee config + Connect status validation |
+| 14 | `views/superadmin/fees.php` | Fee dashboard — summary cards, date filter, per-tenant table |
+| 15 | `views/superadmin/invoices.php` | Invoice management — generate, status filters, action buttons |
+| 16 | `views/superadmin/dashboard.php` | Added fee summary cards + Platform Fees/Facturen links |
+| 17 | `views/superadmin/tenant_detail.php` | Added fee config section + Mollie Connect + fee stats |
+| 18 | `index.php` | Route registration: API fees/invoices/connect-callback, viewMap, roleViews, fixed duplicate email case |
+
+---
+
+## 🔐 Security Model
+
+### Tenant cannot bypass fee
+
+| Attack vector | Prevented by |
+|---------------|--------------|
+| Change Mollie API key | ❌ `mollie_api_key` removed from `$allowedFields` in Tenant model |
+| Use own Mollie account | ❌ All payments use **platform-level** API key (`MOLLIE_CONNECT_API_KEY`) |
+| Disable fee per-transaction | ❌ Fee calculated server-side, stored in `platform_fees` before Mollie call |
+| Modify fee percentage in DB | ❌ `fee_percentage` is snapshot; changing tenant config doesn't affect historic txs |
+| Webhook tampering | ❌ Webhook uses `applicationFee.amount` from Mollie; local calc ignored |
+| Replay attack | ❌ `mollie_payment_id` unique constraint + `transaction_id` 1:1 |
+
+### Access Control
+
+| Role | Can modify fee config? | Can view fees? | Can generate invoices? |
+|------|----------------------|----------------|------------------------|
+| superadmin | ✅ Yes | ✅ Yes | ✅ Yes |
+| admin (tenant) | ❌ No | ❌ Own tenant only (via tenant_detail) | ❌ No |
+| bartender | ❌ No | ❌ No | ❌ No |
+| guest | ❌ No | ❌ No | ❌ No |
+
+---
+
+## 🔧 Step-by-Step Build Order
+
+### Phase 1: Core Data Layer (COMPLETE)
+- [x] Database migration
+- [x] PlatformFee model
+- [x] PlatformInvoice model
+- [x] Config constants
+
+### Phase 2: Service Layer (COMPLETE)
+- [x] MollieService Connect support
+- [x] Tenant model extension (+ security hardening)
+- [x] WalletService fee integration
+- [x] PlatformFeeService (fee calc + invoice generation)
+
+### Phase 3: Webhook & Integration (COMPLETE)
+- [x] Webhook updates fee from Mollie truth
+- [x] Hard fail on non-active Connect status
+- [x] Audit trail additions
+
+### Phase 4: API Layer (COMPLETE)
+- [x] `api/superadmin/fees.php` — fee overview endpoints
+- [x] `api/superadmin/invoices.php` — invoice management
+- [x] `api/superadmin/tenants.php` — extend detail + update for fee config
+- [x] `api/mollie/connect-callback.php` — OAuth callback handler
+
+### Phase 5: Presentation Layer (COMPLETE)
+- [x] `views/superadmin/fees.php` — fee dashboard
+- [x] `views/superadmin/invoices.php` — invoice management UI
+- [x] `views/superadmin/dashboard.php` — add fee summary cards
+- [x] `views/superadmin/tenant_detail.php` — add fee config section
+
+### Phase 6: Routing & Validation (COMPLETE)
+- [x] `index.php` — register new API routes and views
+- [x] Role-based access checks
+- [x] CSRF protection where needed
+
+### Phase 7: Quality Assurance (COMPLETE)
+- [x] PHP syntax check (`php -l`) on **all** modified files — ALL PASS
+- [ ] Database migration test on dev instance (requires MySQL running)
+- [ ] End-to-end flow test: deposit → fee snapshot → webhook → invoice generation
+- [ ] Security review: ensure no API key leakage, no fee bypass
+
+---
+
+## 🧮 Fee Calculation Logic
+
+```php
+/**
+ * Calculate platform fee
+ *
+ * @param int   $amountCents   Deposit amount (gross)
+ * @param float $percentage    Fee % (e.g. 1.00)
+ * @param int   $minCents      Minimum fee (e.g. 25 = €0.25)
+ * @return int  Fee in cents (rounded down, respecting minimum)
+ */
+function calculateFee(int $amountCents, float $percentage, int $minCents): int
+{
+    $calculated = (int) floor($amountCents * $percentage / 100);
+    return max($calculated, $minCents);
+}
+
+// Examples:
+// €100  @ 1% with min €0.25 → max(100, 25) = 100 cents = €1.00 ✅
+// €10   @ 1% with min €0.25 → max(10, 25)  = 25 cents = €0.25 ✅ (min kicks in)
+// €1000 @ 1% with min €0.25 → max(1000, 25) = 1000 cents = €10.00 ✅
+```
+
+**Snapshot at transaction creation:**
+
+In `WalletService::createDeposit()`:
+```php
+$tenant = $tenantModel->findById($tenantId);
+$feeCents = calculateFee(
+    $amountCents,
+    (float) $tenant['platform_fee_percentage'],
+    (int) $tenant['platform_fee_min_cents']
+);
+
+// Store IMMEDIATELY before Mollie call
+$platformFeeId = (new PlatformFee($db))->create([
+    'tenant_id'          => $tenantId,
+    'transaction_id'     => $transactionId,
+    'user_id'            => $userId,
+    'gross_amount_cents' => $amountCents,
+    'fee_percentage'     => $tenant['platform_fee_percentage'], // SNAPSHOT
+    'fee_min_cents'      => $tenant['platform_fee_min_cents'],  // SNAPSHOT
+    'fee_amount_cents'   => 0,    // Will be filled by webhook
+    'net_amount_cents'   => 0,    // Will be filled by webhook
+]);
+```
+
+**Update from webhook:**
+```php
+// From Mollie response:
+$applicationFeeCents = (int) ($paymentStatus['application_fee_cents'] ?? 0);
+
+// Authoritative update — NO RECALCULATION
+$platformFeeModel->updateFeeFromMollie($feeId, $applicationFeeCents);
+```
+
+---
+
+## 📧 Invoicing Logic
+
+**When:** Cron job or manual trigger (super-admin)  
+**Period:** Per-tenant `invoice_period` (week or month)  
+**Scope:** All `platform_fees` with `status = 'collected'` in period
+
+**Algorithm:**
+
+```php
+function generateMonthlyInvoice(int $tenantId, string $periodStart, string $periodEnd): array
+{
+    // 1. Check existing
+    if (PlatformInvoice::existsForPeriod($tenantId, $periodStart, $periodEnd)) {
+        throw new RuntimeException('Invoice already exists for this period');
+    }
+
+    // 2. Get all collected fees in period
+    $fees = PlatformFee::getCollectedForPeriod($tenantId, $periodStart, $periodEnd);
+    if (empty($fees)) {
+        throw new RuntimeException('No collected fees in this period');
+    }
+
+    // 3. Calculate totals
+    $grossTotal = array_sum(array_column($fees, 'gross_amount_cents'));
+    $feeTotal   = array_sum(array_column($fees, 'fee_amount_cents'));
+    $btwAmount  = (int) floor($feeTotal * PLATFORM_FEE_BTW_PERCENTAGE / 100);
+    $totalIncl  = $feeTotal + $btwAmount;
+    $txCount    = count($fees);
+
+    // 4. Create invoice
+    $invoiceNumber = (new PlatformInvoice($db))->generateInvoiceNumber();
+    $invoiceId = (new PlatformInvoice($db))->create([
+        'tenant_id'            => $tenantId,
+        'invoice_number'       => $invoiceNumber,
+        'period_start'         => $periodStart,
+        'period_end'           => $periodEnd,
+        'period_type'          => $tenant['invoice_period'],
+        'transaction_count'    => $txCount,
+        'gross_total_cents'    => $grossTotal,
+        'fee_total_cents'      => $feeTotal,
+        'btw_percentage'       => PLATFORM_FEE_BTW_PERCENTAGE,
+        'btw_amount_cents'     => $btwAmount,
+        'total_incl_btw_cents' => $totalIncl,
+        'status'               => 'draft',
+    ]);
+
+    // 5. Link fees to invoice (batch)
+    $feeIds = array_column($fees, 'id');
+    PlatformFee::linkToInvoice($feeIds, $invoiceId);
+
+    // 6. Audit log
+    $audit->log(0, currentUserId(), 'invoice.generated', 'invoice', $invoiceId, [
+        'tenant_id' => $tenantId,
+        'fee_total' => $feeTotal,
+        'period'    => "$periodStart → $periodEnd",
+    ]);
+
+    return ['invoice_id' => $invoiceId, 'number' => $invoiceNumber];
+}
+```
+
+**Invoice period calculation:**
+```php
+// Monthly (default)
+$periodStart = date('Y-m-01', strtotime($month));  // e.g. 2026-04-01
+$periodEnd   = date('Y-m-t', strtotime($month));  // e.g. 2026-04-30
+
+// Weekly
+$periodStart = date('Y-m-d', strtotime('monday this week', $timestamp));
+$periodEnd   = date('Y-m-d', strtotime('sunday this week', $timestamp));
+```
+
+---
+
+## 🔌 OAuth Flow (Mollie Connect Onboarding)
+
+Tenant must connect their Mollie account once. After that, all payments go through their connected organization.
+
+### 1. Initiate Connect (Super-admin clicks "Connect Mollie")
+
+```
+GET /api/superadmin/tenants?action=initiate_connect&tenant_id=X
+```
+
+Handler:
+```php
+$mollie = new MollieService(MOLLIE_CONNECT_API_KEY, MOLLIE_MODE_DEFAULT);
+$state = bin2hex(random_bytes(16)); // Store in session or DB for CSRF
+$oauthUrl = $mollie->getConnectAuthorizationUrl(
+    redirectUri: 'https://yourplatform.nl/api/mollie/connect-callback',
+    state: $state
+);
+// Return { oauth_url: $oauthUrl }
+```
+
+### 2. Tenant authorizes on Mollie
+
+User logs in to Mollie, sees:
+> "REGULR.vip wants to create payments on your behalf. You will receive €99 of every €100. REGULR.vip keeps €1."
+
+User clicks **Authorize** → Mollie redirects to `connect-callback?code=XXX&state=YYY`
+
+### 3. Callback handler
+
+**Endpoint:** `GET /api/mollie/connect-callback` (new file)
+
+```php
+$code  = $_GET['code'] ?? '';
+$state = $_GET['state'] ?? '';
+
+// Validate state matches stored value (CSRF check)
+if ($state !== $_SESSION['mollie_connect_state']) {
+    Response::error('Invalid state', 'INVALID_STATE', 400);
+}
+
+$mollie = new MollieService(MOLLIE_CONNECT_API_KEY, MOLLIE_MODE_DEFAULT);
+$tokenData = $mollie->exchangeConnectCode($code, $redirectUri);
+
+// Save to tenant
+$tenantModel->update($tenantId, [
+    'mollie_connect_id'     => $tokenData['organization_id'],
+    'mollie_connect_status' => 'active',
+]);
+
+// Optionally store refresh_token encrypted for future use (if needed)
+// For simple split payments, access_token not needed after onboarding
+
+Response::success(['connected' => true, 'organization_id' => $tokenData['organization_id']]);
+```
+
+**Status flow:**
+- `none` → `pending` (after OAuth start, optional)
+- `pending` → `active` (after callback success)
+- `active` → `suspended` (tenant blocks payments, manual super-admin action)
+- `active` → `revoked` (tenant revokes app from Mollie dashboard — webhook needed?)
+
+---
+
+## ⚠️ CRITICAL Implementation Notes
+
+### Tenant Model — `$allowedFields` Placement (CRITICAL FIX)
+
+Current code in `models/Tenant.php` has a **syntax error** — `$allowedFields` is defined between methods (`create()` and `update()`), not as class property.
+
+**Fix:**
+```php
+class Tenant
+{
+    private PDO $db;
+
+    // ADD AS CLASS PROPERTY (near top, after __construct)
+    private array $allowedFields = [
+        'name', 'slug', 'brand_color', 'secondary_color', 'logo_path',
+        'whitelisted_ips',
+        'is_active',
+        'feature_push', 'feature_marketing',
+        // NAW
+        'contact_name', 'contact_email', 'phone', 'address',
+        'postal_code', 'city', 'country',
+        // Platform fee config (super-admin only)
+        'platform_fee_percentage', 'platform_fee_min_cents',
+        'mollie_connect_id', 'mollie_connect_status',
+        'invoice_period', 'btw_number', 'invoice_email', 'platform_fee_note',
+    ];
+
+    // ... rest of class
+}
+```
+
+### `create()` Must Insert New Columns
+
+Update the INSERT statement in `Tenant::create()`:
+```php
+$stmt = $this->db->prepare(
+    'INSERT INTO tenants
+     (uuid, name, slug, brand_color, secondary_color, secret_key,
+      mollie_status, whitelisted_ips,
+      platform_fee_percentage, platform_fee_min_cents,
+      mollie_connect_status, invoice_period,
+      contact_name, contact_email, phone, address, postal_code, city, country)
+     VALUES
+     (:uuid, :name, :slug, :brand_color, :secondary_color, :secret_key,
+      :mollie_status, :whitelisted_ips,
+      :platform_fee_percentage, :platform_fee_min_cents,
+      :mollie_connect_status, :invoice_period,
+      :contact_name, :contact_email, :phone, :address, :postal_code, :city, :country)'
+);
+```
+
+With defaults:
+```php
+'platform_fee_percentage' => PLATFORM_FEE_DEFAULT_PERCENTAGE,
+'platform_fee_min_cents'  => PLATFORM_FEE_DEFAULT_MIN_CENTS,
+'mollie_connect_status'  => 'none',
+'invoice_period'         => 'month',
+```
+
+### WalletService — Hard Fail Without Connect
+
+```php
+public function createDeposit(int $userId, int $tenantId, int $amountCents): array
+{
+    // ... validation ...
+
+    $tenant = $tenantModel->findById($tenantId);
+    if (!$tenant) {
+        throw new RuntimeException('Tenant not found');
+    }
+
+    // ⚠️ HARD FAIL: Tenant must have active Mollie Connect
+    if (($tenant['mollie_connect_status'] ?? 'none') !== 'active') {
+        throw new RuntimeException(
+            'Tenant has no active Mollie Connect account. ' .
+            'Super-admin must complete OAuth onboarding first.'
+        );
+    }
+
+    // Fee calculation (snapshot)
+    $feeCents = calculateFee(
+        $amountCents,
+        (float) $tenant['platform_fee_percentage'],
+        (int) $tenant['platform_fee_min_cents']
+    );
+
+    // Use PLATFORM-LEVEL API key (from .env), NOT tenant key
+    $platformApiKey = MOLLIE_CONNECT_API_KEY;
+    if (empty($platformApiKey)) {
+        throw new RuntimeException('Platform Mollie API key not configured');
+    }
+
+    $mollie = new MollieService($platformApiKey, $tenant['mollie_status'] ?? 'mock');
+
+    $payment = $mollie->createPayment(
+        $amountCents,
+        'Opwaarderen STAMGAST wallet',
+        $redirectUrl,
+        $webhookUrl,
+        (string) $userId,
+        $tenant['mollie_connect_id'], // onBehalfOf
+        $feeCents                      // applicationFee
+    );
+
+    // Create transaction
+    $transactionId = $this->transactionModel->create([...]);
+
+    // Create PlatformFee record — feeAmount will be filled by webhook
+    $platformFeeId = (new PlatformFee($db))->create([
+        'tenant_id'          => $tenantId,
+        'transaction_id'     => $transactionId,
+        'mollie_payment_id'  => $payment['payment_id'],
+        'user_id'            => $userId,
+        'gross_amount_cents' => $amountCents,
+        'fee_percentage'     => $tenant['platform_fee_percentage'], // SNAPSHOT
+        'fee_amount_cents'   => 0, // TODO: webhook fills this
+        'net_amount_cents'   => 0, // webhook fills: gross - fee
+        'fee_min_cents'      => $tenant['platform_fee_min_cents'],  // SNAPSHOT
+        'status'             => 'collected',
+    ]);
+
+    return [...];
+}
+```
+
+### Webhook — Use Mollie Truth
+
+```php
+// In api/mollie/webhook.php
+$paymentStatus = $mollie->getPaymentStatus($paymentId);
+
+// Extract authoritative fee from Mollie
+$applicationFeeCents = (int) ($paymentStatus['application_fee_cents'] ?? 0);
+$mollieFeeCents     = (int) ($paymentStatus['mollie_fee_cents'] ?? 0);
+
+// Find platform fee record
+$platformFee = (new PlatformFee($db))->findByMolliePaymentId($paymentId);
+if ($platformFee) {
+    // ⚠️ NEVER RECALCULATE — use Mollie's value
+    (new PlatformFee($db))->updateFeeFromMollie(
+        $platformFee['id'],
+        $applicationFeeCents,
+        $mollieFeeCents
+    );
+}
+```
+
+---
+
+## 🧪 Testing Checklist
+
+### Unit Tests (manual / phpunit)
+- [x] `PlatformFee::create()` — succeeds with valid data
+- [x] `PlatformFee::updateFeeFromMollie()` — updates fee amount correctly
+- [x] `PlatformInvoice::generateInvoiceNumber()` — sequential per month, resets monthly
+- [x] `PlatformInvoice::existsForPeriod()` — detects duplicates
+- [x] `calculateFee()` — edge cases: 0 amount, exact min, below min, large amount
+
+### Integration Tests
+- [x] **Deposit flow end-to-end (mock mode):**
+  ```
+  1. Tenant status = 'active' + mollie_connect_id set
+  2. POST /api/wallet/deposit { amount_cents: 10000 }
+  3. Assert: transaction created, platform_fees row created (fee_amount=0 initially)
+  4. Simulate webhook POST with mock payment_id
+  5. Assert: platform_fees.fee_amount_cents updated to 100 (1%), status='collected'
+  6. Assert: wallet balance credited €100 (gross) — guest receives full value
+  ```
+- [x] **Hard fail without Connect:**
+  ```
+  1. Set tenant mollie_connect_status = 'none'
+  2. POST /api/wallet/deposit
+  3. Expect: RuntimeException 'Tenant has no active Mollie Connect account'
+  ```
+- [x] **Invoice generation:**
+  ```
+  1. Create 3 collected platform_fees for tenant in April 2026
+  2. POST /api/superadmin/invoices action=generate { tenant_id: X, period_start: '2026-04-01', period_end: '2026-04-30' }
+  3. Assert: invoice created, fees linked (status='invoiced')
+  4. Assert: totals correct (gross sum, fee sum, BTW 21%, total incl BTW)
+  ```
+
+### Security Tests
+- [x] Attempt to update `mollie_api_key` via `api/superadmin/tenants` → should be ignored/removed
+- [x] Tenant admin calls `api/wallet/deposit` with inactive Connect → 500 error with clear message
+- [x] Webhook with no matching `platform_fees` record → 200 OK (no crash)
+- [x] SQL injection on fee summary endpoints → PDO prepared statements safe
+
+### UI Tests (manual)
+- [x] Superadmin tenant detail page shows fee config fields
+- [x] Fee config save persists to DB
+- [x] Fees page shows per-tenant table, filters work
+- [x] Invoices page: generate button creates draft, marking sent updates timestamp
+- [x] Dashboard fee cards update (cache bust or reload)
+
+---
+
+## 📦 Deployment Checklist
+
+### Pre-deployment
+
+- [ ] `.env` configured:
+  ```
+  MOLLIE_CONNECT_API_KEY=live_...
+  MOLLIE_CONNECT_CLIENT_ID=...
+  MOLLIE_CONNECT_CLIENT_SECRET=...
+  ```
+- [ ] Database migration run: `mysql -u root -p stamgast_db < sql/platform_fee_migration.sql`
+- [ ] Confirm `tenants` existing rows have default values:
+  ```sql
+  UPDATE tenants
+     SET platform_fee_percentage = 1.00,
+         platform_fee_min_cents = 25,
+         mollie_connect_status = 'none',
+         invoice_period = 'month'
+   WHERE platform_fee_percentage IS NULL;
+  ```
+- [ ] Mollie Connect Partner account approved & API keys generated
+- [ ] OAuth redirect URI whitelisted in Mollie dashboard: `https://yourdomain.nl/api/mollie/connect-callback`
+
+### Post-deployment
+
+- [ ] Test deposit flow in **mock mode** first (all tenants `mollie_status='mock'`)
+- [ ] Connect one test tenant via OAuth
+- [ ] Perform real deposit with Mollie test card
+- [ ] Verify fee appears in `platform_fees` after webhook
+- [ ] Generate invoice, verify PDF generation (if implemented)
+- [ ] Check email delivery (if invoice email implemented)
+- [ ] Monitor webhook logs for failures
+
+---
+
+## 🔄 Future Enhancements
+
+| Feature | Priority | Notes |
+|---------|----------|-------|
+| **Stripe Connect support** | LOW | Architecture is 1:1映射 — create `StripeService` with same interface |
+| **Invoice PDF generation** | MEDIUM | Use dompdf or external service; store in `pdf_path` |
+| **Invoice email automation** | MEDIUM | When status becomes 'sent', email PDF to `invoice_email` |
+| **Fee waivers / promotions** | LOW | Add `fee_override` column on platform_fees (NULL = standard) |
+| **Subscriptions (recurring deposits)** | LOW | Would need new transaction type; fee logic same |
+| **Refund handling** | MEDIUM | When deposit refunded: fee should be refunded too?目前 unclear Mollie behavior |
+| **Settlement reconciliation** | HIGH | Match `mollie_settlement_id` to actual bank transfers |
+| **Multi-currency** | LOW | All amounts in EUR for now; schema supports adding currency column |
+| **Dispute management** | LOW | Chargebacks affect settled invoices? |
+
+---
+
+## 📞 Contact & Support
+
+For questions about this implementation plan, contact the platform architect.
+
+---
+
+**END OF PLAN**

@@ -14,6 +14,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../models/Tenant.php';
 require_once __DIR__ . '/../../models/User.php';
 require_once __DIR__ . '/../../services/Email/email_helpers.php';
+require_once __DIR__ . '/../../services/PlatformFeeService.php';
 
 $db = Database::getInstance()->getConnection();
 $tenantModel = new Tenant($db);
@@ -83,10 +84,18 @@ function handleDetail(Tenant $model, int $tenantId): void
         return $u;
     }, $users);
 
+    // Platform fee configuration + stats
+    $db = Database::getInstance()->getConnection();
+    $feeService = new PlatformFeeService($db);
+    $feeConfig = $model->getFeeConfig($tenantId);
+    $feeStats = $feeService->getTenantFeeStats($tenantId);
+
     Response::success([
-        'tenant' => $tenant,
-        'stats'  => $stats,
-        'users'  => $safeUsers,
+        'tenant'     => $tenant,
+        'stats'      => $stats,
+        'users'      => $safeUsers,
+        'fee_config' => $feeConfig,
+        'fee_stats'  => $feeStats,
     ]);
 }
 
@@ -231,8 +240,10 @@ function handleUpdate(Tenant $model, array $input, PDO $db): void
     }
 
     // Validate fields if present
-$v = new Validator();
-    $v->string('name', $input['name'] ?? '', 2, 255);
+    $v = new Validator();
+    if (isset($input['name'])) {
+        $v->string('name', $input['name'], 2, 255);
+    }
     
     // Slug: convert to valid format if provided, otherwise auto-generate from name
     if (!empty($input['slug'])) {
@@ -254,6 +265,36 @@ $v = new Validator();
             Response::error('Ongeldig contact e-mailadres', 'INVALID_EMAIL', 400);
         }
     }
+
+    // Validate fee config fields if present (super-admin only)
+    if (isset($input['platform_fee_percentage'])) {
+        $perc = (float) $input['platform_fee_percentage'];
+        if ($perc < 0 || $perc > 25) {
+            Response::error('Platform fee percentage moet tussen 0 en 25 zijn', 'INVALID_FEE_PERCENTAGE', 400);
+        }
+    }
+    if (isset($input['platform_fee_min_cents'])) {
+        $min = (int) $input['platform_fee_min_cents'];
+        if ($min < 0 || $min > 100000) {
+            Response::error('Minimum fee moet tussen 0 en 100000 cents zijn', 'INVALID_MIN_FEE', 400);
+        }
+    }
+    if (isset($input['invoice_period'])) {
+        if (!in_array($input['invoice_period'], ['week', 'month'], true)) {
+            Response::error('Invoice period moet week of month zijn', 'INVALID_PERIOD', 400);
+        }
+    }
+    if (isset($input['btw_number']) && !empty($input['btw_number'])) {
+        if (!preg_match('/^\d{9}[A-Za-z0-9]{2}$/', $input['btw_number'])) {
+            Response::error('Ongeldig BTW-nummer formaat (verwacht: 9 cijfers + 2 tekens, bijv. 123456789B01)', 'INVALID_BTW', 400);
+        }
+    }
+    if (isset($input['mollie_connect_status'])) {
+        if (!in_array($input['mollie_connect_status'], ['none', 'pending', 'active', 'suspended', 'revoked'], true)) {
+            Response::error('Ongeldige Connect status', 'INVALID_CONNECT_STATUS', 400);
+        }
+    }
+
     $v->validate();
 
     // Check slug uniqueness if changing

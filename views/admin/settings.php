@@ -113,6 +113,30 @@ if (!$tenant) {
             </div>
         </div>
 
+        <!-- Verificatie Limieten (Gated Onboarding) -->
+        <div style="margin-bottom: var(--space-xl);">
+            <h2 style="margin-bottom: var(--space-md); color: var(--accent-primary);">Verificatie Limieten</h2>
+            <p class="text-sm" style="color: var(--text-secondary); margin-bottom: var(--space-md);">Configureer hoeveel gasten een barman per uur mag verifieren en hoe vaak een gast het mag proberen.</p>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md);">
+                <div class="form-group">
+                    <label for="verification-soft-limit">Waarschuwingslimiet per barman/uur</label>
+                    <input type="number" id="verification-soft-limit" class="form-input" value="<?= (int) ($tenant['verification_soft_limit'] ?? 15) ?>" min="3">
+                </div>
+                <div class="form-group">
+                    <label for="verification-hard-limit">Maximale limiet per barman/uur</label>
+                    <input type="number" id="verification-hard-limit" class="form-input" value="<?= (int) ($tenant['verification_hard_limit'] ?? 30) ?>" min="5">
+                </div>
+                <div class="form-group">
+                    <label for="verification-cooldown-sec">Cooldown na mismatch (sec)</label>
+                    <input type="number" id="verification-cooldown-sec" class="form-input" value="<?= (int) ($tenant['verification_cooldown_sec'] ?? 180) ?>" min="0" max="600">
+                </div>
+                <div class="form-group">
+                    <label for="verification-max-attempts">Max pogingen per gast/24u</label>
+                    <input type="number" id="verification-max-attempts" class="form-input" value="<?= (int) ($tenant['verification_max_attempts'] ?? 2) ?>" min="1" max="10">
+                </div>
+            </div>
+        </div>
+
         <!-- Features (READ-ONLY — bepaald door platform beheerder) -->
         <div style="margin-bottom: var(--space-xl);">
             <h2 style="margin-bottom: var(--space-md); color: var(--accent-primary);">Modules
@@ -142,8 +166,7 @@ if (!$tenant) {
 <!-- Alerts -->
 <div class="alerts-container"></div>
 
-<?php require VIEWS_PATH . 'shared/footer.php'; ?>
 <script src="<?= BASE_URL ?>/public/js/app.js"></script>
 <script src="<?= BASE_URL ?>/public/js/admin.js"></script>
-</body>
-</html>
+
+<?php require VIEWS_PATH . 'shared/footer.php'; ?>

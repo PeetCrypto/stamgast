@@ -49,29 +49,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Handle search parameter
-$search = trim($_GET['search'] ?? '');
-if (!empty($search)) {
-    // Search tenants by name
-    $stmt = $db->prepare(
-        'SELECT t.*,
-                (SELECT COUNT(*) FROM `users` u WHERE u.`tenant_id` = t.`id`) AS user_count,
-                (SELECT COUNT(*) FROM `users` u WHERE u.`tenant_id` = t.`id` AND u.`role` = \'guest\') AS guest_count,
-                (SELECT COUNT(*) FROM `users` u WHERE u.`tenant_id` = t.`id` AND u.`role` IN (\'admin\',\'bartender\')) AS staff_count
-         FROM `tenants` t
-         WHERE t.`name` LIKE :search
-         ORDER BY t.`created_at` DESC'
-    );
-    $stmt->execute([':search' => '%' . $search . '%']);
-    $tenants = $stmt->fetchAll();
-} else {
-    $tenants = $tenantModel->getAllWithUserCount();
-}
+$tenants = $tenantModel->getAllWithUserCount();
 ?>
 
 <?php require VIEWS_PATH . 'shared/header.php'; ?>
 
-<div class="container" style="padding: var(--space-lg);">
+<div class="container" style="padding: var(--space-lg); max-width: 1100px; margin: 0 auto;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
         <h1>Tenant Beheer</h1>
         <a href="<?= BASE_URL ?>/superadmin" class="btn btn-secondary">&larr; Terug</a>
@@ -125,83 +108,110 @@ if (!empty($search)) {
 
     <!-- Tenants Table -->
     <div class="glass-card" style="padding: var(--space-lg);">
-        <h2 style="margin-bottom: var(--space-md);">Bestaande Tenants (<?= count($tenants) ?>)</h2>
-        
-        <!-- Search Form -->
-        <div style="margin-bottom: var(--space-md);">
-            <form method="GET" id="tenant-search-form" style="display: flex; gap: var(--space-sm);">
-                <input type="text" 
-                       name="search" 
-                       placeholder="Zoek op naam..." 
-                       value="<?= htmlspecialchars($search) ?>"
-                       style="flex: 1; padding: 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2); color: white;"
-                       autocomplete="off">
-                <button type="submit" class="btn btn-primary" style="padding: 10px 20px;">Zoeken</button>
-                <?php if (!empty($search)): ?>
-                    <a href="<?= BASE_URL ?>/superadmin/tenants" class="btn btn-secondary" style="padding: 10px 20px;">Wis</a>
-                <?php endif; ?>
-            </form>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-md); flex-wrap: wrap; gap: var(--space-sm);">
+            <h2 style="margin: 0;">Bestaande Tenants (<span id="tenant-count"><?= count($tenants) ?></span>)</h2>
+            <button id="show-create-form" class="btn btn-primary">+ Nieuwe Tenant</button>
         </div>
         
-        <div style="margin: var(--space-md) 0;">
-            <button id="show-create-form" class="btn btn-primary">+ Nieuwe Tenant</button>
+        <!-- Instant Search -->
+        <div style="margin-bottom: var(--space-md);">
+            <input type="text" 
+                   id="tenant-search"
+                   placeholder="Zoek op naam, slug, contact..."
+                   autocomplete="off"
+                   style="width: 100%; padding: 10px 14px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); background: rgba(0,0,0,0.2); color: white; font-size: 14px; box-sizing: border-box;">
         </div>
         
         <?php if (empty($tenants)): ?>
             <p class="text-secondary">Nog geen tenants.</p>
         <?php else: ?>
-            <table style="width: 100%; border-collapse: collapse;">
-                <thead>
-                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
-                        <th style="text-align: left; padding: var(--space-sm);">ID</th>
-                        <th style="text-align: left; padding: var(--space-sm);">Naam</th>
-                        <th style="text-align: left; padding: var(--space-sm);">Status</th>
-                        <th style="text-align: left; padding: var(--space-sm);">Contact</th>
-                        <th style="text-align: left; padding: var(--space-sm);">Gebruikers</th>
-                        <th style="text-align: left; padding: var(--space-sm);">Slug</th>
-                        <th style="text-align: left; padding: var(--space-sm);">Mollie</th>
-                        <th style="text-align: left; padding: var(--space-sm);">Aangemaakt</th>
-                        <th style="text-align: left; padding: var(--space-sm);">Acties</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($tenants as $t): ?>
-                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);" data-tenant-id="<?= (int) $t['id'] ?>">
-                        <td style="padding: var(--space-sm);"><?= (int) $t['id'] ?></td>
-                        <td style="padding: var(--space-sm);"><?= sanitize($t['name']) ?></td>
-                        <td style="padding: var(--space-sm);">
-                            <?php $isActive = (bool) ($t['is_active'] ?? true); ?>
-                            <span class="badge tenant-status-badge" data-tenant-id="<?= (int) $t['id'] ?>" style="background:<?= $isActive ? 'rgba(76,175,80,0.2)' : 'rgba(244,67,54,0.2)' ?>;color:<?= $isActive ? '#4CAF50' : '#f44336' ?>;cursor:default;">
-                                <?= $isActive ? 'Actief' : 'Inactief' ?>
-                            </span>
-                        </td>
-                        <td style="padding: var(--space-sm); font-size: 13px;">
-                            <?= sanitize($t['contact_name'] ?? '') ?>
-                            <br><small><?= sanitize($t['contact_email'] ?? '') ?></small>
-                        </td>
-                        <td style="padding: var(--space-sm); text-align: center;">
-                            <?= (int) ($t['user_count'] ?? 0) ?>
-                        </td>
-                        <td style="padding: var(--space-sm);"><code><?= sanitize($t['slug']) ?></code></td>
-                        <td style="padding: var(--space-sm);"><span class="badge"><?= sanitize($t['mollie_status']) ?></span></td>
-                        <td style="padding: var(--space-sm);"><?= $t['created_at'] ?></td>
-                        <td style="padding: var(--space-sm);">
-                            <button class="btn btn-secondary btn-sm toggle-tenant-btn"
-                                    data-tenant-id="<?= (int) $t['id'] ?>"
-                                    data-active="<?= $isActive ? '1' : '0' ?>">
-                                <?= $isActive ? 'Uitschakelen' : 'Inschakelen' ?>
-                            </button>
-                            <a href="<?= BASE_URL ?>/superadmin/tenant/<?= (int) $t['id'] ?>" class="btn btn-secondary btn-sm" style="margin-left: 8px;">Bewerk</a>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
+            <div style="overflow-x: auto; -webkit-overflow-scrolling: touch;">
+                <table style="width: 100%; border-collapse: collapse; min-width: 800px;">
+                    <thead>
+                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+                            <th style="text-align: left; padding: var(--space-sm); white-space: nowrap;">Naam</th>
+                            <th style="text-align: left; padding: var(--space-sm); white-space: nowrap;">Status</th>
+                            <th style="text-align: left; padding: var(--space-sm); white-space: nowrap;">Contact</th>
+                            <th style="text-align: center; padding: var(--space-sm); white-space: nowrap;">Gebruikers</th>
+                            <th style="text-align: left; padding: var(--space-sm); white-space: nowrap;">Slug</th>
+                            <th style="text-align: left; padding: var(--space-sm); white-space: nowrap;">Mollie</th>
+                            <th style="text-align: left; padding: var(--space-sm); white-space: nowrap;">Aangemaakt</th>
+                            <th style="text-align: left; padding: var(--space-sm); white-space: nowrap;">Acties</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tenants-tbody">
+                        <?php foreach ($tenants as $t): ?>
+                        <?php $isActive = (bool) ($t['is_active'] ?? true); ?>
+                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);" 
+                            data-tenant-id="<?= (int) $t['id'] ?>"
+                            data-search="<?= strtolower(htmlspecialchars(($t['name'] ?? '') . ' ' . ($t['slug'] ?? '') . ' ' . ($t['contact_name'] ?? '') . ' ' . ($t['contact_email'] ?? ''), ENT_QUOTES)) ?>">
+                            <td style="padding: var(--space-sm); white-space: nowrap; max-width: 200px; overflow: hidden; text-overflow: ellipsis;"><?= sanitize($t['name']) ?></td>
+                            <td style="padding: var(--space-sm); white-space: nowrap;">
+                                <span class="badge tenant-status-badge" data-tenant-id="<?= (int) $t['id'] ?>" style="background:<?= $isActive ? 'rgba(76,175,80,0.2)' : 'rgba(244,67,54,0.2)' ?>;color:<?= $isActive ? '#4CAF50' : '#f44336' ?>;cursor:default;">
+                                    <?= $isActive ? 'Actief' : 'Inactief' ?>
+                                </span>
+                            </td>
+                            <td style="padding: var(--space-sm); font-size: 13px; white-space: nowrap; max-width: 200px; overflow: hidden; text-overflow: ellipsis;">
+                                <?= sanitize($t['contact_name'] ?? '') ?>
+                                <?php if (!empty($t['contact_email'])): ?>
+                                    <br><small style="opacity: 0.7;"><?= sanitize($t['contact_email']) ?></small>
+                                <?php endif; ?>
+                            </td>
+                            <td style="padding: var(--space-sm); text-align: center; white-space: nowrap;">
+                                <?= (int) ($t['user_count'] ?? 0) ?>
+                            </td>
+                            <td style="padding: var(--space-sm); white-space: nowrap;"><code><?= sanitize($t['slug']) ?></code></td>
+                            <td style="padding: var(--space-sm); white-space: nowrap;"><span class="badge"><?= sanitize($t['mollie_status']) ?></span></td>
+                            <td style="padding: var(--space-sm); white-space: nowrap; font-size: 13px;"><?= $t['created_at'] ?></td>
+                            <td style="padding: var(--space-sm); white-space: nowrap;">
+                                <button class="btn btn-secondary btn-sm toggle-tenant-btn"
+                                        data-tenant-id="<?= (int) $t['id'] ?>"
+                                        data-active="<?= $isActive ? '1' : '0' ?>">
+                                    <?= $isActive ? 'Uitschakelen' : 'Inschakelen' ?>
+                                </button>
+                                <a href="<?= BASE_URL ?>/superadmin/tenant/<?= (int) $t['id'] ?>" class="btn btn-secondary btn-sm" style="margin-left: 8px;">Bewerk</a>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <p id="no-results" style="display: none; text-align: center; padding: var(--space-lg); color: var(--text-secondary);">Geen tenants gevonden.</p>
         <?php endif; ?>
     </div>
 </div>
 
 <script>
+// Instant search - filter tenants as you type
+(function() {
+    const searchInput = document.getElementById('tenant-search');
+    const tbody = document.getElementById('tenants-tbody');
+    const countEl = document.getElementById('tenant-count');
+    const noResults = document.getElementById('no-results');
+    if (!searchInput || !tbody) return;
+
+    let debounceTimer;
+
+    searchInput.addEventListener('input', function() {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+            const query = this.value.trim().toLowerCase();
+            const rows = tbody.querySelectorAll('tr');
+            let visibleCount = 0;
+
+            rows.forEach(row => {
+                const searchData = (row.dataset.search || '').toLowerCase();
+                const match = !query || searchData.includes(query);
+                row.style.display = match ? '' : 'none';
+                if (match) visibleCount++;
+            });
+
+            if (countEl) countEl.textContent = visibleCount;
+            if (noResults) noResults.style.display = visibleCount === 0 ? 'block' : 'none';
+        }, 150);
+    });
+})();
+
 // Show/hide create tenant form
 document.getElementById('show-create-form')?.addEventListener('click', function() {
     document.getElementById('create-tenant-modal').style.display = 'block';

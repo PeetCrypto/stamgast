@@ -123,6 +123,56 @@ $firstName = $_SESSION['first_name'] ?? 'Bartender';
         </div>
     </div>
 
+    <!-- ============ STATE: VERIFY (Gated Onboarding) ============ -->
+    <div id="state-verify" style="display:none;">
+        <div class="scanner-header">
+            <button class="btn btn-ghost btn-sm" id="btn-back-scan-verify">&larr; Terug</button>
+            <span class="scanner-header__title">Identiteit Verifiëren</span>
+            <span></span>
+        </div>
+
+        <div style="padding:1rem;">
+            <!-- Scanned user info -->
+            <div style="text-align:center;margin:1rem 0;">
+                <div class="avatar avatar--xl" id="verify-avatar" style="margin:0 auto;">
+                    <div class="avatar__placeholder" id="verify-avatar-initial">?</div>
+                </div>
+            </div>
+            <h2 id="verify-user-name" style="text-align:center;margin-bottom:0.25rem;">-</h2>
+            <p id="verify-status-badge" style="text-align:center;margin-bottom:1.5rem;">
+                <span style="background:rgba(255,193,7,0.2);color:#FFC107;padding:4px 12px;border-radius:12px;font-size:12px;font-weight:600;">NIET GEVERIFIEERD</span>
+            </p>
+
+            <!-- Instructions -->
+            <div class="glass-card" style="padding:1rem;margin-bottom:1rem;background:rgba(255,193,7,0.08);border-color:rgba(255,193,7,0.3);">
+                <p style="font-size:13px;color:var(--text-secondary);margin:0;">
+                    Controleer het ID van de gast. Voer de geboortedatum in zoals op het ID staat.
+                </p>
+            </div>
+
+            <!-- Birthdate input -->
+            <div class="glass-card" style="padding:1rem;margin-bottom:1rem;">
+                <label for="verify-birthdate" style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:0.5rem;">Geboortedatum van ID</label>
+                <input type="date" id="verify-birthdate" class="form-input" style="text-align:center;font-size:18px;" required>
+            </div>
+
+            <!-- Verify button -->
+            <button class="btn btn-primary" id="btn-verify" style="font-size:18px;padding:1rem;width:100%;">
+                Valideer & Activeer
+            </button>
+
+            <!-- Error display -->
+            <div id="verify-error" style="display:none;margin-top:1rem;padding:1rem;border-radius:8px;background:rgba(244,67,54,0.1);border:1px solid rgba(244,67,54,0.3);">
+                <p id="verify-error-msg" style="color:var(--error);font-size:14px;margin:0;"></p>
+            </div>
+
+            <!-- Success display -->
+            <div id="verify-success" style="display:none;margin-top:1rem;padding:1rem;border-radius:8px;background:rgba(76,175,80,0.1);border:1px solid rgba(76,175,80,0.3);">
+                <p style="color:var(--success);font-size:14px;margin:0;">✓ Account geactiveerd! Doorsturen naar betaling...</p>
+            </div>
+        </div>
+    </div>
+
     <!-- ============ STATE: SUCCESS ============ -->
     <div id="state-success" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:999;display:none;flex-direction:column;align-items:center;justify-content:center;padding:2rem;">
         <div style="font-size:64px;margin-bottom:1rem;">&#10003;</div>
@@ -161,6 +211,7 @@ $firstName = $_SESSION['first_name'] ?? 'Bartender';
     function switchState(state) {
         hide('#state-scanner');
         hide('#state-payment');
+        hide('#state-verify');
         hide('#state-success');
         if (state === 'scanner') {
             show('#state-scanner');
@@ -168,6 +219,9 @@ $firstName = $_SESSION['first_name'] ?? 'Bartender';
         } else if (state === 'payment') {
             stopScanner();
             show('#state-payment');
+        } else if (state === 'verify') {
+            stopScanner();
+            show('#state-verify');
         } else if (state === 'success') {
             stopScanner();
             show('#state-success');
@@ -245,11 +299,21 @@ $firstName = $_SESSION['first_name'] ?? 'Bartender';
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
-            if (data.valid) {
-                currentUser = data;
-                showPayment();
+            // API returns { success: true, data: { valid, user } } or { success: false, error }
+            var result = data.data || data;
+            if (data.success && result.valid) {
+                currentUser = result;
+                var status = result.user.account_status || 'active';
+                if (status === 'suspended') {
+                    alert('Dit account is geblokkeerd door de beheerder');
+                    startScanner();
+                } else if (status === 'unverified') {
+                    showVerify();
+                } else {
+                    showPayment();
+                }
             } else {
-                alert(data.error || 'QR validatie mislukt');
+                alert(result.error || data.error || 'QR validatie mislukt');
                 startScanner();
             }
         })
@@ -263,11 +327,11 @@ $firstName = $_SESSION['first_name'] ?? 'Bartender';
     function showPayment() {
         if (!currentUser || !currentUser.user) return;
 
-        // User info
+        // User info — API returns user.name (combined), user.age, user.tier
         var u = currentUser.user;
-        $('#pay-user-name').textContent = (u.first_name || '') + ' ' + (u.last_name || '');
+        $('#pay-user-name').textContent = u.name || '-';
 
-        var initial = (u.first_name || '?').charAt(0).toUpperCase();
+        var initial = (u.name || '?').charAt(0).toUpperCase();
         $('#pay-avatar-initial').textContent = initial;
 
         if (u.photo_url) {
@@ -281,13 +345,13 @@ $firstName = $_SESSION['first_name'] ?? 'Bartender';
 
         // Badges
         var badges = '';
-        if (currentUser.age >= 18) {
+        if (u.age >= 18) {
             badges += '<span class="badge-age badge-age--adult">18+</span>';
         } else {
             badges += '<span class="badge-age badge-age--minor">&lt;18</span>';
         }
-        if (currentUser.tier && currentUser.tier.name) {
-            badges += ' <span class="badge badge--gold">' + currentUser.tier.name + '</span>';
+        if (u.tier && u.tier.name) {
+            badges += ' <span class="badge badge--gold">' + u.tier.name + '</span>';
         }
         $('#pay-badges').innerHTML = badges;
 
@@ -299,13 +363,75 @@ $firstName = $_SESSION['first_name'] ?? 'Bartender';
         switchState('payment');
     }
 
+    // --- Verify State (Gated Onboarding) ---
+    function showVerify() {
+        if (!currentUser || !currentUser.user) return;
+        var u = currentUser.user;
+        $('#verify-user-name').textContent = u.name || '-';
+        $('#verify-avatar-initial').textContent = (u.name || '?').charAt(0).toUpperCase();
+        if (u.photo_url) {
+            var img = document.createElement('img');
+            img.src = u.photo_url;
+            img.alt = 'Gast';
+            var avatar = $('#verify-avatar');
+            avatar.innerHTML = '';
+            avatar.appendChild(img);
+        }
+        $('#verify-birthdate').value = '';
+        hide('#verify-error');
+        hide('#verify-success');
+        var btn = $('#btn-verify');
+        if (btn) btn.disabled = false;
+        switchState('verify');
+    }
+
+    function verifyUser() {
+        if (!currentUser || !currentUser.user) return;
+        var birthdate = $('#verify-birthdate').value;
+        if (!birthdate) {
+            alert('Voer de geboortedatum in zoals op het ID staat');
+            return;
+        }
+        var btn = $('#btn-verify');
+        if (btn) btn.disabled = true;
+
+        fetch((window.__BASE_URL || '') + '/api/pos/verify', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': getCSRF()
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({ user_id: currentUser.user.id, birthdate: birthdate })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                currentUser.user.account_status = 'active';
+                show('#verify-success');
+                hide('#verify-error');
+                setTimeout(function() { showPayment(); }, 1200);
+            } else {
+                hide('#verify-success');
+                show('#verify-error');
+                $('#verify-error-msg').textContent = data.error || 'Verificatie mislukt';
+                if (btn) btn.disabled = false;
+            }
+        })
+        .catch(function(e) {
+            alert('Fout bij verificatie: ' + e.message);
+            if (btn) btn.disabled = false;
+        });
+    }
+
     function updatePaymentUI() {
         var alcDiscount = 0;
         var foodDiscount = 0;
 
-        if (currentUser && currentUser.tier) {
-            var alcPerc = Math.min(currentUser.tier.alcohol_discount_perc || 0, 25);
-            var foodPerc = currentUser.tier.food_discount_perc || 0;
+        if (currentUser && currentUser.user && currentUser.user.tier) {
+            var tier = currentUser.user.tier;
+            var alcPerc = Math.min(tier.alcohol_discount || 0, 25);
+            var foodPerc = tier.food_discount || 0;
             alcDiscount = Math.floor(alcCents * alcPerc / 100);
             foodDiscount = Math.floor(foodCents * foodPerc / 100);
         }
@@ -321,7 +447,7 @@ $firstName = $_SESSION['first_name'] ?? 'Bartender';
         $('#pay-total').textContent = fmtCents(total);
 
         // Balance check
-        var balance = currentUser ? (currentUser.wallet ? currentUser.wallet.balance_cents : 0) : 0;
+        var balance = (currentUser && currentUser.user && currentUser.user.wallet) ? currentUser.user.wallet.balance_cents : 0;
         var balanceEl = $('#pay-balance');
         if (balanceEl) {
             balanceEl.textContent = fmtCents(balance);
@@ -389,8 +515,9 @@ $firstName = $_SESSION['first_name'] ?? 'Bartender';
     function processPayment() {
         if (processing || !currentUser) return;
 
-        var alcDiscount = Math.floor(alcCents * Math.min(currentUser.tier ? currentUser.tier.alcohol_discount_perc : 0, 25) / 100);
-        var foodDiscount = Math.floor(foodCents * (currentUser.tier ? currentUser.tier.food_discount_perc : 0) / 100);
+        var tier = (currentUser.user && currentUser.user.tier) ? currentUser.user.tier : null;
+        var alcDiscount = Math.floor(alcCents * Math.min(tier ? tier.alcohol_discount : 0, 25) / 100);
+        var foodDiscount = Math.floor(foodCents * (tier ? tier.food_discount : 0) / 100);
         var total = (alcCents - alcDiscount) + (foodCents - foodDiscount);
 
         if (total <= 0) {
@@ -478,6 +605,21 @@ $firstName = $_SESSION['first_name'] ?? 'Bartender';
         var payBtn = $('#btn-pay');
         if (payBtn) {
             payBtn.addEventListener('click', processPayment);
+        }
+
+        // Verify state buttons (Gated Onboarding)
+        var verifyBtn = $('#btn-verify');
+        if (verifyBtn) {
+            verifyBtn.addEventListener('click', verifyUser);
+        }
+        var backScanVerify = $('#btn-back-scan-verify');
+        if (backScanVerify) {
+            backScanVerify.addEventListener('click', function() {
+                currentUser = null;
+                alcCents = 0;
+                foodCents = 0;
+                switchState('scanner');
+            });
         }
     }
 

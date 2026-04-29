@@ -17,6 +17,12 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'guest') {
 $user = $_SESSION;
 $tenant = $_SESSION['tenant'] ?? null;
 
+// Account status check for gated onboarding
+$db = Database::getInstance()->getConnection();
+$userModel = new User($db);
+$accountStatus = $userModel->getAccountStatus((int) $user['user_id']);
+$isUnverified = ($accountStatus !== 'active');
+
 require __DIR__ . '/../shared/header.php';
 ?>
 
@@ -53,34 +59,14 @@ require __DIR__ . '/../shared/header.php';
     </div>
 
     <!-- Deposit Section -->
+    <?php if (!$isUnverified): ?>
     <div class="info-card glass-card">
         <h3>Opwaarderen</h3>
 
-        <div class="deposit-options" id="deposit-options">
-            <button class="btn btn-deposit-option" data-amount="500">€5</button>
-            <button class="btn btn-deposit-option" data-amount="1000">€10</button>
-            <button class="btn btn-deposit-option" data-amount="2500">€25</button>
-            <button class="btn btn-deposit-option" data-amount="5000">€50</button>
-            <button class="btn btn-deposit-option" data-amount="10000">€100</button>
-        </div>
-
-        <div class="custom-deposit">
-            <label for="custom-amount">Of eigen bedrag:</label>
-            <div class="custom-deposit__input-row">
-                <span class="custom-deposit__prefix">€</span>
-                <input type="text"
-                       id="custom-amount"
-                       class="form-input custom-deposit__field"
-                       placeholder="5 - 500"
-                       inputmode="decimal">
+        <div id="packages-container">
+            <div class="empty-state" style="padding: var(--space-lg); text-align: center; opacity: 0.5;">
+                <p>Pakketten laden...</p>
             </div>
-            <button class="btn btn-primary" id="custom-deposit-btn">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="12" y1="5" x2="12" y2="19"/>
-                    <line x1="5" y1="12" x2="19" y2="12"/>
-                </svg>
-                Opwaarderen
-            </button>
         </div>
 
         <div class="security-note">
@@ -88,9 +74,25 @@ require __DIR__ . '/../shared/header.php';
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
                 <path d="M7 11V7a5 5 0 0110 0v4"/>
             </svg>
-            <span>Minimum €5, maximum €500. Betaling via Mollie.</span>
+            <span>Betaling via Mollie. Kies een pakket om op te waarderen.</span>
         </div>
     </div>
+    <?php else: ?>
+    <!-- Unverified Account - Verification Banner -->
+    <div class="info-card glass-card" style="border: 2px solid rgba(255,193,7,0.3); background: rgba(255,193,7,0.06);">
+        <h3 style="color: #FFC107;">⚠️ Wallet niet actief</h3>
+        <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 1rem;">
+            Hoi! Om je wallet te activeren en saldo te storten, moet je eenmalig je ID laten zien bij de bar. Zo houden we het veilig en legaal.
+        </p>
+        <a href="<?= BASE_URL ?>/qr" class="btn btn-outline" style="border-color: #FFC107; color: #FFC107;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px;">
+                <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+                <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="3" height="3"/>
+            </svg>
+            Laat je QR zien aan de bar
+        </a>
+    </div>
+    <?php endif; ?>
 
     <!-- Transaction History -->
     <div class="info-card glass-card">

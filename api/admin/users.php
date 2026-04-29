@@ -76,7 +76,7 @@ if ($method === 'GET') {
     // Fetch page with wallet info
     $stmt = $db->prepare(
         "SELECT u.`id`, u.`email`, u.`role`, u.`first_name`, u.`last_name`,
-                u.`photo_url`, u.`photo_status`, u.`last_activity`, u.`created_at`,
+                u.`birthdate`, u.`photo_url`, u.`photo_status`, u.`last_activity`, u.`created_at`,
                 w.`balance_cents`, w.`points_cents`
          FROM `users` u
          LEFT JOIN `wallets` w ON w.`user_id` = u.`id`
@@ -107,6 +107,7 @@ if ($method === 'GET') {
             'role'           => $row['role'],
             'first_name'     => $row['first_name'],
             'last_name'      => $row['last_name'],
+            'birthdate'      => $row['birthdate'],
             'photo_url'      => $row['photo_url'],
             'photo_status'   => $row['photo_status'],
             'is_blocked'     => $row['photo_status'] === 'blocked',
@@ -145,6 +146,7 @@ if ($method === 'GET') {
         $email     = trim($input['email'] ?? '');
         $password  = $input['password'] ?? '';
         $role      = trim($input['role'] ?? 'guest');
+        $birthdate = trim($input['birthdate'] ?? '') ?: null;
 
         // Validate required fields
         if ($firstName === '' || $lastName === '' || $email === '' || $password === '') {
@@ -191,6 +193,7 @@ if ($method === 'GET') {
                 'role'          => $role,
                 'first_name'    => $firstName,
                 'last_name'     => $lastName,
+                'birthdate'     => $birthdate,
                 'photo_status'  => 'unvalidated',
             ]);
 
@@ -219,11 +222,12 @@ if ($method === 'GET') {
     // UPDATE USER
     // ========================================
     } elseif ($action === 'update') {
-        $userId   = (int) ($input['user_id'] ?? 0);
+        $userId    = (int) ($input['user_id'] ?? 0);
         $firstName = trim($input['first_name'] ?? '');
         $lastName  = trim($input['last_name'] ?? '');
         $email     = trim($input['email'] ?? '');
         $role      = trim($input['role'] ?? '');
+        $birthdate = trim($input['birthdate'] ?? '') ?: null;
 
         if ($userId <= 0) {
             Response::error('Ongeldig user_id', 'INVALID_INPUT', 400);
@@ -260,7 +264,7 @@ if ($method === 'GET') {
         $stmt = $db->prepare(
             "UPDATE `users`
              SET `first_name` = :first_name, `last_name` = :last_name,
-                 `email` = :email, `role` = :role
+                 `email` = :email, `role` = :role, `birthdate` = :birthdate
              WHERE `id` = :id AND `tenant_id` = :tid"
         );
         $stmt->execute([
@@ -268,6 +272,7 @@ if ($method === 'GET') {
             ':last_name'  => $lastName,
             ':email'      => $email,
             ':role'       => $role,
+            ':birthdate'  => $birthdate,
             ':id'         => $userId,
             ':tid'        => $tenantId,
         ]);

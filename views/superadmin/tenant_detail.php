@@ -7,6 +7,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/../../models/Tenant.php';
+require_once __DIR__ . '/../../services/PlatformFeeService.php';
 
 $db = Database::getInstance()->getConnection();
 $tenantModel = new Tenant($db);
@@ -19,7 +20,7 @@ $tenantId = (int) ($parts[2] ?? 0);
 if ($tenantId <= 0) {
     http_response_code(404);
     require VIEWS_PATH . 'shared/header.php';
-    echo '<div class="container" style="text-align:center;padding:4rem"><h1>404</h1><p>Tenant niet gevonden</p><a href="<?= BASE_URL ?>/superadmin" class="btn btn-primary">Terug</a></div>';
+    echo '<div class="container" style="text-align:center;padding:4rem"><h1>404</h1><p>Tenant niet gevonden</p><a href="' . BASE_URL . '/superadmin" class="btn btn-primary">Terug</a></div>';
     require VIEWS_PATH . 'shared/footer.php';
     exit;
 }
@@ -28,13 +29,21 @@ $tenant = $tenantModel->findById($tenantId);
 if (!$tenant) {
     http_response_code(404);
     require VIEWS_PATH . 'shared/header.php';
-    echo '<div class="container" style="text-align:center;padding:4rem"><h1>404</h1><p>Tenant niet gevonden</p><a href="<?= BASE_URL ?>/superadmin" class="btn btn-primary">Terug</a></div>';
+    echo '<div class="container" style="text-align:center;padding:4rem"><h1>404</h1><p>Tenant niet gevonden</p><a href="' . BASE_URL . '/superadmin" class="btn btn-primary">Terug</a></div>';
     require VIEWS_PATH . 'shared/footer.php';
     exit;
 }
 
 $stats = $tenantModel->getTenantStats($tenantId);
 $users = $tenantModel->getUsersWithWallets($tenantId);
+
+// Fee config and stats
+$feeConfig = $tenantModel->getFeeConfig($tenantId);
+$feeService = new PlatformFeeService($db);
+$feeStats = $feeService->getTenantFeeStats($tenantId);
+
+// Connect success message
+$connectSuccess = isset($_GET['connect']) && $_GET['connect'] === 'success';
 ?>
 
 <?php require VIEWS_PATH . 'shared/header.php'; ?>
@@ -43,7 +52,7 @@ $users = $tenantModel->getUsersWithWallets($tenantId);
     <!-- Navigation -->
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
         <h1><?= sanitize($tenant['name']) ?></h1>
-        <a href="<?= BASE_URL ?>/superadmin" class="btn btn-secondary">&larr; Terug</a>
+        <a href="<?= BASE_URL ?>/superadmin/tenants" class="btn btn-secondary">&larr; Terug</a>
     </div>
 
     <!-- Stats Cards -->
@@ -73,6 +82,12 @@ $users = $tenantModel->getUsersWithWallets($tenantId);
             <p style="font-size: 24px; font-weight: 700; color: var(--accent-primary);">&euro; <?= number_format($stats['today_revenue'] / 100, 2, ',', '.') ?></p>
         </div>
     </div>
+
+    <?php if ($connectSuccess): ?>
+    <div class="glass-card" style="padding: var(--space-md); margin-bottom: var(--space-lg); background: rgba(76,175,80,0.15); border: 1px solid rgba(76,175,80,0.3);">
+        <p style="color: #4CAF50; font-weight: 600;">Mollie Connect succesvol gekoppeld!</p>
+    </div>
+    <?php endif; ?>
 
     <!-- Two Column Layout -->
     <div style="display: grid; grid-template-columns: 1fr 2fr; gap: var(--space-lg);">
@@ -166,28 +181,94 @@ $users = $tenantModel->getUsersWithWallets($tenantId);
                     <p id="naw-status" class="text-sm" style="margin-top:var(--space-sm);text-align:center;"></p>
                 </form>
             </div>
-            
-            <!-- Password Change Form -->
-            <div class="glass-card" style="padding: var(--space-lg); margin-top: var(--space-md);">
-                <h2 style="margin-bottom: var(--space-md);">Wachtwoord Wijzigen</h2>
-                <form id="password-form">
-                    <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
-                    <div class="form-group">
-                        <label class="text-sm text-secondary">E-mail van Admin</label>
-                        <input type="email" id="admin-email" class="form-input" placeholder="admin@voorbeeld.nl" required>
+
+            <!-- Platform Fee Config -->
+            <div class="glass-card" style="padding: var(--space-lg); margin-top: var(--space-lg);">
+                <h2 style="margin-bottom: var(--space-md);">Platform Fee & Mollie Connect</h2>
+                <form id="fee-form">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-sm);">
+                        <div class="form-group">
+                            <label class="text-sm text-secondary">Fee Percentage (%)</label>
+                            <input type="number" id="fee-percentage" class="form-input" value="<?= number_format((float) $feeConfig['percentage'], 2) ?>" step="0.01" min="0" max="25">
+                        </div>
+                        <div class="form-group">
+                            <label class="text-sm text-secondary">Minimum Fee (cents)</label>
+                            <input type="number" id="fee-min-cents" class="form-input" value="<?= (int) $feeConfig['min_cents'] ?>" min="0" max="100000">
+                        </div>
                     </div>
                     <div class="form-group">
-                        <label class="text-sm text-secondary">Nieuw Wachtwoord</label>
-                        <input type="password" id="new-password" class="form-input" placeholder="Nieuw wachtwoord" required>
+                        <label class="text-sm text-secondary">Factuur Periode</label>
+                        <select id="fee-invoice-period" class="form-input">
+                            <option value="month" <?= ($feeConfig['invoice_period'] ?? 'month') === 'month' ? 'selected' : '' ?>>Maandelijks</option>
+                            <option value="week" <?= ($feeConfig['invoice_period'] ?? 'month') === 'week' ? 'selected' : '' ?>>Wekelijks</option>
+                        </select>
                     </div>
                     <div class="form-group">
-                        <label class="text-sm text-secondary">Bevestig Nieuw Wachtwoord</label>
-                        <input type="password" id="confirm-password" class="form-input" placeholder="Bevestig nieuw wachtwoord" required>
+                        <label class="text-sm text-secondary">BTW Nummer</label>
+                        <input type="text" id="fee-btw-number" class="form-input" value="<?= sanitize($feeConfig['btw_number'] ?? '') ?>" placeholder="bijv. 123456789B01">
                     </div>
-                    <button type="submit" class="btn btn-primary" style="width:100%;margin-top:var(--space-sm);">Wachtwoord Wijzigen</button>
-                    <p id="password-status" class="text-sm" style="margin-top:var(--space-sm);text-align:center;"></p>
+                    <div class="form-group">
+                        <label class="text-sm text-secondary">Factuur E-mail</label>
+                        <input type="email" id="fee-invoice-email" class="form-input" value="<?= sanitize($feeConfig['invoice_email'] ?? '') ?>" placeholder="facturen@tenant.nl">
+                    </div>
+                    <div class="form-group">
+                        <label class="text-sm text-secondary">Interne Notitie</label>
+                        <textarea id="fee-note" class="form-input" rows="2" placeholder="Notitie voor superadmin (niet zichtbaar voor tenant)"><?= sanitize($feeConfig['note'] ?? '') ?></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width:100%;">Fee Config Opslaan</button>
+                    <p id="fee-status" class="text-sm" style="margin-top:var(--space-sm);text-align:center;"></p>
                 </form>
-</div>
+
+                <!-- Mollie Connect Status -->
+                <div style="border-top: 1px solid var(--glass-border); padding-top: var(--space-md); margin-top: var(--space-lg);">
+                    <h3 style="font-size: 14px; font-weight: 600; margin-bottom: var(--space-sm); color: var(--accent-primary);">Mollie Connect</h3>
+                    <?php
+                    $connectStatus = $tenant['mollie_connect_status'] ?? 'none';
+                    $connectColors = [
+                        'none'     => 'rgba(158,158,158,0.2);color:#9e9e9e',
+                        'pending'  => 'rgba(255,152,0,0.2);color:#FF9800',
+                        'active'   => 'rgba(76,175,80,0.2);color:#4CAF50',
+                        'suspended'=> 'rgba(244,67,54,0.2);color:#f44336',
+                        'revoked'  => 'rgba(244,67,54,0.2);color:#f44336',
+                    ];
+                    $connectLabels = ['none' => 'Niet gekoppeld', 'pending' => 'In afwachting', 'active' => 'Actief', 'suspended' => 'Onderbroken', 'revoked' => 'Ingetrokken'];
+                    $sc = $connectColors[$connectStatus] ?? $connectColors['none'];
+                    ?>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-sm);">
+                        <span>Status: <span class="badge" style="background:<?= $sc ?>;"><?= $connectLabels[$connectStatus] ?? $connectStatus ?></span></span>
+                    </div>
+                    <?php if (!empty($tenant['mollie_connect_id'])): ?>
+                        <p class="text-sm text-secondary">Org ID: <code><?= sanitize($tenant['mollie_connect_id']) ?></code></p>
+                    <?php endif; ?>
+                    <?php if ($connectStatus !== 'active'): ?>
+                        <button id="btn-connect-mollie" class="btn btn-secondary" style="width:100%;margin-top:var(--space-sm);">Koppel Mollie Connect</button>
+                    <?php else: ?>
+                        <button id="btn-disconnect-mollie" class="btn btn-secondary" style="width:100%;margin-top:var(--space-sm);background:rgba(244,67,54,0.15);color:#f44336;">Ontkoppelen (zet naar none)</button>
+                    <?php endif; ?>
+                    <p id="connect-status" class="text-sm" style="margin-top:var(--space-sm);text-align:center;"></p>
+                </div>
+
+                <!-- Fee Stats -->
+                <div style="border-top: 1px solid var(--glass-border); padding-top: var(--space-md); margin-top: var(--space-lg);">
+                    <h3 style="font-size: 14px; font-weight: 600; margin-bottom: var(--space-sm); color: var(--accent-primary);">Fee Statistieken</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-sm);">
+                        <div>
+                            <p class="text-sm text-secondary">Vandaag</p>
+                            <p style="font-weight: 600; color: #4CAF50;">&euro; <?= number_format($feeStats['today'] / 100, 2, ',', '.') ?></p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-secondary">Deze Maand</p>
+                            <p style="font-weight: 600; color: #4CAF50;">&euro; <?= number_format($feeStats['this_month'] / 100, 2, ',', '.') ?></p>
+                        </div>
+                    </div>
+                    <?php if ($feeStats['last_invoice_date']): ?>
+                        <p class="text-sm text-secondary" style="margin-top: var(--space-sm);">Laatste factuur periode: <?= $feeStats['last_invoice_date'] ?></p>
+                    <?php endif; ?>
+                    <?php if ($feeStats['next_invoice_date']): ?>
+                        <p class="text-sm text-secondary">Volgende factuur: <?= $feeStats['next_invoice_date'] ?></p>
+                    <?php endif; ?>
+                </div>
+            </div>
         </div>
 
 <!-- Right: Users List -->
@@ -328,7 +409,7 @@ document.getElementById('user-password-form')?.addEventListener('submit', async 
     // Validate password match
     if (newPassword !== confirmPassword) {
         statusEl.textContent = 'Wachtwoorden komen niet overeen';
-        status2El.style.color = '#f44336';
+        statusEl.style.color = '#f44336';
         return;
     }
     
@@ -391,7 +472,7 @@ document.getElementById('naw-form')?.addEventListener('submit', async (e) => {
     if (activeEl) data.is_active = activeEl.checked ? 1 : 0;
 
     try {
-        const res = await fetch('/api/superadmin/tenants', {
+        const res = await fetch((window.__BASE_URL || '') + '/api/superadmin/tenants', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
             body: JSON.stringify(data)
@@ -434,7 +515,7 @@ document.querySelectorAll('.role-select').forEach(sel => {
 
         this.style.background = 'rgba(255,193,7,0.3)';
         try {
-            const res = await fetch('/api/superadmin/tenants', {
+            const res = await fetch((window.__BASE_URL || '') + '/api/superadmin/tenants', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
                 body: JSON.stringify({ action: 'update_role', user_id: parseInt(userId), role: newRole })
@@ -452,6 +533,119 @@ document.querySelectorAll('.role-select').forEach(sel => {
             this.style.background = originalBg || '';
         }
     });
+});
+
+// Fee config form save
+document.getElementById('fee-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const statusEl = document.getElementById('fee-status');
+    statusEl.textContent = 'Opslaan...';
+    statusEl.style.color = 'var(--text-secondary)';
+
+    const data = { action: 'update', tenant_id: TENANT_ID };
+    data.platform_fee_percentage = parseFloat(document.getElementById('fee-percentage').value);
+    data.platform_fee_min_cents = parseInt(document.getElementById('fee-min-cents').value);
+    data.invoice_period = document.getElementById('fee-invoice-period').value;
+    data.btw_number = document.getElementById('fee-btw-number').value.trim();
+    data.invoice_email = document.getElementById('fee-invoice-email').value.trim();
+    data.platform_fee_note = document.getElementById('fee-note').value.trim();
+
+    try {
+        const res = await fetch((window.__BASE_URL || '') + '/api/superadmin/tenants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+            body: JSON.stringify(data)
+        });
+        const result = await res.json();
+        if (result.success) {
+            statusEl.textContent = '✓ Fee config opgeslagen';
+            statusEl.style.color = '#4CAF50';
+        } else {
+            statusEl.textContent = '✗ ' + (result.error || 'Fout');
+            statusEl.style.color = '#f44336';
+        }
+    } catch (err) {
+        statusEl.textContent = '✗ Netwerkfout';
+        statusEl.style.color = '#f44336';
+    }
+    setTimeout(() => { statusEl.textContent = ''; }, 3000);
+});
+
+// Connect Mollie — initiate OAuth flow
+document.getElementById('btn-connect-mollie')?.addEventListener('click', async () => {
+    const statusEl = document.getElementById('connect-status');
+    statusEl.textContent = 'Koppelen voorbereiden...';
+    statusEl.style.color = 'var(--text-secondary)';
+
+    try {
+        // Set status to pending first
+        const res = await fetch((window.__BASE_URL || '') + '/api/superadmin/tenants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+            body: JSON.stringify({ action: 'update', tenant_id: TENANT_ID, mollie_connect_status: 'pending' })
+        });
+        const result = await res.json();
+        if (result.success) {
+            // Generate OAuth state and redirect to Mollie
+            const state = crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(36).substr(2) + Date.now().toString(36));
+            // Store state + tenant_id in session via a quick API call pattern
+            // For now: construct OAuth URL and redirect
+            const clientId = ''; // Must be configured in config/app.php
+            if (!clientId) {
+                statusEl.textContent = 'Configureer MOLLIE_CONNECT_CLIENT_ID in config/app.php om OAuth te gebruiken';
+                statusEl.style.color = '#FF9800';
+                // Revert status
+                await fetch((window.__BASE_URL || '') + '/api/superadmin/tenants', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+                    body: JSON.stringify({ action: 'update', tenant_id: TENANT_ID, mollie_connect_status: 'none' })
+                });
+                return;
+            }
+            // Redirect to Mollie OAuth
+            const redirectUri = window.location.origin + '/api/mollie/connect-callback';
+            const oauthUrl = 'https://my.mollie.com/oauth2/authorize?' + new URLSearchParams({
+                client_id: clientId,
+                redirect_uri: redirectUri,
+                response_type: 'code',
+                scope: 'organizations.read payments.read',
+                state: state
+            });
+            window.location.href = oauthUrl;
+        } else {
+            statusEl.textContent = '✗ ' + (result.error || 'Fout');
+            statusEl.style.color = '#f44336';
+        }
+    } catch (err) {
+        statusEl.textContent = '✗ Netwerkfout';
+        statusEl.style.color = '#f44336';
+    }
+});
+
+// Disconnect Mollie
+document.getElementById('btn-disconnect-mollie')?.addEventListener('click', async () => {
+    if (!confirm('Mollie Connect ontkoppelen? Betalingen zijn dan niet meer mogelijk voor deze tenant.')) return;
+    const statusEl = document.getElementById('connect-status');
+    statusEl.textContent = 'Ontkoppelen...';
+    statusEl.style.color = 'var(--text-secondary)';
+
+    try {
+        const res = await fetch((window.__BASE_URL || '') + '/api/superadmin/tenants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+            body: JSON.stringify({ action: 'update', tenant_id: TENANT_ID, mollie_connect_status: 'none', mollie_connect_id: '' })
+        });
+        const result = await res.json();
+        if (result.success) {
+            window.location.reload();
+        } else {
+            statusEl.textContent = '✗ ' + (result.error || 'Fout');
+            statusEl.style.color = '#f44336';
+        }
+    } catch (err) {
+        statusEl.textContent = '✗ Netwerkfout';
+        statusEl.style.color = '#f44336';
+    }
 });
 </script>
 

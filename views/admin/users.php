@@ -112,6 +112,7 @@ $tiersList = $tierModel->getByTenant($tenantId);
                         <th>Email</th>
                         <th>Rol</th>
                         <th>Tier</th>
+                        <th style="text-align: center;">Status</th>
                         <th style="text-align: center;">Saldo</th>
                         <th style="text-align: center;">Laatste activiteit</th>
                         <th>Acties</th>
@@ -119,7 +120,7 @@ $tiersList = $tierModel->getByTenant($tenantId);
                 </thead>
                 <tbody id="users-table-body">
                     <tr>
-                        <td colspan="7" style="text-align: center; padding: var(--space-xl);">
+                        <td colspan="8" style="text-align: center; padding: var(--space-xl);">
                             <p>Laden...</p>
                         </td>
                     </tr>
@@ -166,6 +167,11 @@ $tiersList = $tierModel->getByTenant($tenantId);
                     <input type="email" id="user-email" class="form-input" required>
                 </div>
 
+                <div class="form-group">
+                    <label for="user-birthdate">Geboortedatum</label>
+                    <input type="date" id="user-birthdate" class="form-input">
+                </div>
+
                 <!-- Password field - only shown when creating new user -->
                 <div class="form-group" id="password-create-group" style="display: none;">
                     <label for="user-password">Wachtwoord <small>(min. 8 tekens)</small></label>
@@ -208,8 +214,7 @@ $tiersList = $tierModel->getByTenant($tenantId);
 <!-- Alerts -->
 <div class="alerts-container"></div>
 
-<?php require VIEWS_PATH . 'shared/footer.php'; ?>
 <script src="<?= BASE_URL ?>/public/js/app.js"></script>
 <script src="<?= BASE_URL ?>/public/js/admin.js"></script>
-</body>
-</html>
+
+<?php require VIEWS_PATH . 'shared/footer.php'; ?>

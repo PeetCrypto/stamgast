@@ -263,6 +263,7 @@ $featureMarketing = (bool) ($_tenant['feature_marketing'] ?? true);
             <a href="<?= BASE_URL ?>/admin/marketing" class="btn btn-secondary btn-sm">Marketing</a>
             <?php endif; ?>
             <a href="<?= BASE_URL ?>/admin/users" class="btn btn-secondary btn-sm">Gebruikers</a>
+            <a href="<?= BASE_URL ?>/admin/tiers" class="btn btn-secondary btn-sm">Pakketten</a>
             <a href="<?= BASE_URL ?>/admin/settings" class="btn btn-secondary btn-sm">Instellingen</a>
             <a href="<?= BASE_URL ?>/logout" class="btn btn-ghost btn-sm">Uitloggen</a>
         </div>

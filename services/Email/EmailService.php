@@ -167,17 +167,9 @@ class BrevoProvider implements EmailProviderInterface
     
     public function send(array $emailData): bool
     {
-        // Implementation for Brevo API
-        // This is a placeholder - actual implementation would use Brevo's API
-        try {
-            // Simulate API call to Brevo
-            // $result = brevo_api_send($emailData);
-            // return $result;
-            return true; // Placeholder
-        } catch (\Exception $e) {
-            error_log("BrevoProvider::send - " . $e->getMessage());
-            return false;
-        }
+        require_once __DIR__ . '/SmtpTransport.php';
+        $transport = new SmtpTransport($this->config);
+        return $transport->send($emailData);
     }
 }
 
@@ -197,17 +189,9 @@ class SenderNetProvider implements EmailProviderInterface
     
     public function send(array $emailData): bool
     {
-        // Implementation for Sender.net API
-        // This is a placeholder - actual implementation would use Sender.net's API
-        try {
-            // Simulate API call to Sender.net
-            // $result = sendernet_api_send($emailData);
-            // return $result;
-            return true; // Placeholder
-        } catch (\Exception $e) {
-            error_log("SenderNetProvider::send - " . $e->getMessage());
-            return false;
-        }
+        require_once __DIR__ . '/SmtpTransport.php';
+        $transport = new SmtpTransport($this->config);
+        return $transport->send($emailData);
     }
 }
 
@@ -227,16 +211,8 @@ class AwsSesProvider implements EmailProviderInterface
     
     public function send(array $emailData): bool
     {
-        // Implementation for AWS SES
-        // This is a placeholder - actual implementation would use AWS SES
-        try {
-            // Simulate AWS SES call
-            // $result = aws_ses_send($emailData);
-            // return $result;
-            return true; // Placeholder
-        } catch (\Exception $e) {
-            error_log("AwsSesProvider::send - " . $e->getMessage());
-            return false;
-        }
+        require_once __DIR__ . '/SmtpTransport.php';
+        $transport = new SmtpTransport($this->config);
+        return $transport->send($emailData);
     }
 }

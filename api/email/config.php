@@ -79,7 +79,8 @@ switch ($method) {
         break;
 
     case 'DELETE':
-        if ($emailConfig->deleteConfig()) {
+        $active = $emailConfig->getActiveConfig();
+        if ($active && $emailConfig->deleteConfig($active['id'])) {
             echo json_encode(['message' => 'Configuration deleted successfully']);
         } else {
             http_response_code(500);

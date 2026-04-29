@@ -22,6 +22,7 @@
         user: null,
         tenant: null,
         wallet: null,
+        accountStatus: null,
         sessionChecked: false,
         currentView: null
     };
@@ -113,6 +114,17 @@
             }
             
             if (!response.ok) {
+                // On 401 Unauthorized, redirect to login for server-rendered pages
+                if (response.status === 401) {
+                    const isServerPage = SERVER_RENDERED_PAGES.includes(
+                        window.location.pathname.replace(/\/$/, '').split('?')[0]
+                    );
+                    if (isServerPage) {
+                        // Server-rendered page with expired session — redirect to login
+                        window.location.href = (window.__BASE_URL || '') + '/login';
+                        throw new Error('Sessie verlopen — doorverwijzen naar login...');
+                    }
+                }
                 throw new Error(data.error || data.message || 'API Error');
             }
             
@@ -156,6 +168,7 @@
             const data = response.data || response;
             if (data.authenticated) {
                 AppState.user = data.user;
+                AppState.accountStatus = data.user.account_status || 'unverified';
                 AppState.sessionChecked = true;
                 log('Session valid:', AppState.user);
                 return true;
@@ -408,6 +421,7 @@
         // Auth
         checkSession,
         isAuthenticated,
+        isAccountActive: () => AppState.accountStatus === 'active',
         getUserRole,
         redirectToLogin,
         

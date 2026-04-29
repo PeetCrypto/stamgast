@@ -157,9 +157,40 @@ class EmailConfig
     }
 
     /**
+     * Send a test email using the active configuration
+     */
+    public function testConfig(string $to): array
+    {
+        try {
+            $config = $this->getActiveConfig();
+            if (!$config) {
+                return ['success' => false, 'message' => 'Geen actieve email configuratie gevonden.'];
+            }
+
+            require_once __DIR__ . '/../services/Email/EmailService.php';
+            $emailService = new EmailService($this->db);
+
+            $subject = 'REGULR.vip Test Email';
+            $htmlContent = '<h2>Test Email</h2><p>Dit is een test email vanuit REGULR.vip.</p>'
+                . '<p>Provider: ' . htmlspecialchars($config['provider']) . '</p>'
+                . '<p>Verzonden om: ' . date('Y-m-d H:i:s') . '</p>';
+
+            $sent = $emailService->sendEmail($to, $subject, $htmlContent, null, null, null, null);
+
+            if ($sent) {
+                return ['success' => true, 'message' => 'Test email succesvol verzonden naar ' . $to];
+            }
+            return ['success' => false, 'message' => 'Test email kon niet worden verzonden. Controleer de SMTP instellingen.'];
+        } catch (\Throwable $e) {
+            error_log("EmailConfig::testConfig - " . $e->getMessage());
+            return ['success' => false, 'message' => 'Fout: ' . $e->getMessage()];
+        }
+    }
+
+    /**
      * Delete email configuration
      */
-    public function deleteConfig(int $id): bool
+    public function deleteConfig(string $id): bool
     {
         try {
             $stmt = $this->db->prepare("DELETE FROM email_config WHERE id = :id");
@@ -174,7 +205,7 @@ class EmailConfig
     /**
      * Set active configuration
      */
-    public function setActiveConfig(int $id): bool
+    public function setActiveConfig(string $id): bool
     {
         try {
             $this->db->beginTransaction();

@@ -191,6 +191,9 @@ function handleApiRoute(string $route, string $method): void
                 case 'history':
                     require __DIR__ . '/api/wallet/history.php';
                     break;
+                case 'packages':
+                    require __DIR__ . '/api/wallet/packages.php';
+                    break;
                 default:
                     Response::notFound('Wallet endpoint not found');
             }
@@ -213,6 +216,9 @@ function handleApiRoute(string $route, string $method): void
                 case 'process_payment':
                     require __DIR__ . '/api/pos/process_payment.php';
                     break;
+                case 'verify':
+                    require __DIR__ . '/api/pos/verify.php';
+                    break;
                 default:
                     Response::notFound('POS endpoint not found');
             }
@@ -229,6 +235,23 @@ function handleApiRoute(string $route, string $method): void
                     break;
                 default:
                     Response::notFound('QR endpoint not found');
+            }
+            break;
+
+        // --- NOTIFICATION (Guest Inbox) ---
+        case 'notification':
+            require_once __DIR__ . '/middleware/auth_check.php';
+            require_once __DIR__ . '/middleware/role_check.php';
+            requireAuthenticated();
+            switch ($action) {
+                case 'delete':
+                    require __DIR__ . '/api/notification/delete.php';
+                    break;
+                case 'mark_read':
+                    require __DIR__ . '/api/notification/mark_read.php';
+                    break;
+                default:
+                    Response::notFound('Notification endpoint not found');
             }
             break;
 
@@ -250,8 +273,10 @@ function handleApiRoute(string $route, string $method): void
                 case 'settings':
                     require __DIR__ . '/api/admin/settings.php';
                     break;
+                case 'suspend_user':
+                    require __DIR__ . '/api/admin/suspend_user.php';
+                    break;
                 default:
-                    Response::notFound('Admin endpoint not found');
             }
             break;
 
@@ -259,22 +284,7 @@ function handleApiRoute(string $route, string $method): void
         case 'email':
             require_once __DIR__ . '/middleware/auth_check.php';
             require_once __DIR__ . '/middleware/role_check.php';
-            switch ($action) {
-                case 'templates':
-                    require __DIR__ . '/api/email/templates.php';
-                    break;
-                case 'config':
-                    require __DIR__ . '/api/email/config.php';
-                    break;
-                default:
-                    Response::notFound('Email endpoint not found');
-            }
-            break;
-
-        // --- EMAIL ---
-        case 'email':
-            require_once __DIR__ . '/middleware/auth_check.php';
-            require_once __DIR__ . '/middleware/role_check.php';
+            requireAdmin();
             switch ($action) {
                 case 'templates':
                     require __DIR__ . '/api/email/templates.php';
@@ -298,6 +308,15 @@ function handleApiRoute(string $route, string $method): void
                     break;
                 case 'overview':
                     require __DIR__ . '/api/superadmin/overview.php';
+                    break;
+                case 'fees':
+                    require __DIR__ . '/api/superadmin/fees.php';
+                    break;
+                case 'invoices':
+                    require __DIR__ . '/api/superadmin/invoices.php';
+                    break;
+                case 'settings':
+                    require __DIR__ . '/api/superadmin/settings.php';
                     break;
                 default:
                     Response::notFound('Super-admin endpoint not found');
@@ -346,10 +365,12 @@ function handleApiRoute(string $route, string $method): void
             }
             break;
 
-        // --- MOLLIE WEBHOOK (no auth) ---
+        // --- MOLLIE WEBHOOK + CONNECT (no auth) ---
         case 'mollie':
             if ($action === 'webhook') {
                 require __DIR__ . '/api/mollie/webhook.php';
+            } elseif ($action === 'connect-callback') {
+                require __DIR__ . '/api/mollie/connect-callback.php';
             } else {
                 Response::notFound('Mollie endpoint not found');
             }
@@ -446,12 +467,13 @@ function handleViewRoute(string $route, string $method): void
         'admin/marketing'   => 'admin/marketing.php',
         'admin/push'        => 'admin/push.php',
 
-        // Super-admin
-        'superadmin'                => 'superadmin/dashboard.php',
-        'superadmin/tenants'        => 'superadmin/tenants.php',
-        'superadmin/tenant'         => 'superadmin/tenant_detail.php',
-        'superadmin/email-settings'   => 'superadmin/email_settings.php',
-        'superadmin/email-templates'  => 'superadmin/email_templates.php',
+// Super-admin
+    'superadmin'                => 'superadmin/dashboard.php',
+    'superadmin/tenants'        => 'superadmin/tenants.php',
+    'superadmin/tenant'         => 'superadmin/tenant_detail.php',
+    'superadmin/fees'             => 'superadmin/fees.php',
+    'superadmin/invoices'         => 'superadmin/invoices.php',
+    'superadmin/settings'         => 'superadmin/settings.php',
     ];
 
     // Handle API routes first
@@ -482,6 +504,14 @@ function handleViewRoute(string $route, string $method): void
     if ($viewFile === null && str_starts_with($route, 'superadmin/tenant/')) {
         $viewFile = 'superadmin/tenant_detail.php';
     }
+    
+    // Redirect old email routes to new settings page
+    if ($viewFile === null && ($route === 'superadmin/email-settings' || $route === 'superadmin/email-templates')) {
+        // Redirect to settings page with appropriate tab parameter
+        $tab = ($route === 'superadmin/email-settings') ? 'email' : 'templates';
+        header('Location: ' . BASE_URL . '/superadmin/settings?tab=' . $tab);
+        exit;
+    }
 
     if ($viewFile === null) {
         http_response_code(404);
@@ -499,7 +529,7 @@ function handleViewRoute(string $route, string $method): void
 
     // Enforce role-based access
     $roleViews = [
-        'superadmin' => ['superadmin/dashboard.php', 'superadmin/tenants.php', 'superadmin/tenant_detail.php', 'superadmin/email_settings.php', 'superadmin/email_templates.php'],
+        'superadmin' => ['superadmin/dashboard.php', 'superadmin/tenants.php', 'superadmin/tenant_detail.php', 'superadmin/fees.php', 'superadmin/invoices.php', 'superadmin/settings.php'],
         'admin'      => ['admin/dashboard.php', 'admin/users.php', 'admin/tiers.php', 'admin/settings.php', 'admin/marketing.php', 'admin/push.php'],
         'bartender'  => ['bartender/scanner.php', 'bartender/payment.php'],
     ];

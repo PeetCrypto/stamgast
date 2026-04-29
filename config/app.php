@@ -27,8 +27,18 @@ define('CSRF_TOKEN_LENGTH', 32);
 define('QR_EXPIRY_SECONDS', 60);
 define('QR_NONCE_LENGTH', 8); // bytes for random_bytes()
 
-// --- MOLLIE (defaults, per-tenant override) ---
+// --- MOLLIE CONNECT (Platform-level) ---
+// ⚠️ SECURITY: Platform API key ONLY in server environment, NEVER in database
+// Tenant Mollie keys are DEPRECATED — all payments go through Mollie Connect
 define('MOLLIE_MODE_DEFAULT', 'mock'); // 'mock' | 'test' | 'live'
+define('MOLLIE_CONNECT_API_KEY', '');  // Platform Mollie API key (set via .env in production)
+define('MOLLIE_CONNECT_CLIENT_ID', ''); // Mollie Connect OAuth client ID
+define('MOLLIE_CONNECT_CLIENT_SECRET', ''); // Mollie Connect OAuth client secret
+
+// --- PLATFORM FEE ---
+define('PLATFORM_FEE_DEFAULT_PERCENTAGE', 1.00); // Default 1%
+define('PLATFORM_FEE_DEFAULT_MIN_CENTS', 25);    // Default €0,25 minimum
+define('PLATFORM_FEE_BTW_PERCENTAGE', 21.00);    // 21% BTW over platform fee (Nederland)
 
 // --- WALLET LIMITS ---
 define('DEPOSIT_MIN_CENTS', 500);    // 5 euro minimum
@@ -37,6 +47,11 @@ define('DEPOSIT_MAX_CENTS', 50000);  // 500 euro maximum
 // --- DISCOUNT LIMITS ---
 define('ALCOHOL_DISCOUNT_MAX', 25);  // 25% hard cap (Dutch law)
 define('FOOD_DISCOUNT_MAX', 100);    // 100% max
+
+// --- VERIFICATION LIMITS (platform minimums) ---
+define('VERIFICATION_SOFT_LIMIT_MIN', 3);    // Absolute minimum soft limit per barman/uur
+define('VERIFICATION_HARD_LIMIT_MIN', 5);    // Absolute minimum hard limit per barman/uur
+define('VERIFICATION_COOLDOWN_MAX', 600);    // Maximum cooldown: 10 minuten
 
 // --- PAGINATION ---
 define('DEFAULT_PAGE_SIZE', 20);

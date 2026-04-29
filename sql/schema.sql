@@ -87,10 +87,14 @@ CREATE TABLE IF NOT EXISTS `loyalty_tiers` (
     `tenant_id`             INT             NOT NULL,
     `name`                  VARCHAR(100)    NOT NULL,
     `min_deposit_cents`     BIGINT          DEFAULT 0 COMMENT 'Threshold to reach this tier',
+    `topup_amount_cents`    INT             NOT NULL DEFAULT 10000 COMMENT 'Fixed top-up amount for this package (min 10000 = EUR100)',
     `alcohol_discount_perc` DECIMAL(5,2)    DEFAULT 0.00 COMMENT 'Max 25% (legal limit)',
     `food_discount_perc`    DECIMAL(5,2)    DEFAULT 0.00 COMMENT 'Max 100%',
     `points_multiplier`     DECIMAL(3,2)    DEFAULT 1.00 COMMENT 'Points multiplier',
+    `is_active`             TINYINT(1)      NOT NULL DEFAULT 1 COMMENT '0 = package disabled by admin, 1 = active',
+    `sort_order`            INT             NOT NULL DEFAULT 0 COMMENT 'Display order, lower = first',
     `created_at`            TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`            TIMESTAMP       DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     INDEX `idx_tiers_tenant` (`tenant_id`),
     CONSTRAINT `fk_tiers_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenants`(`id`) ON DELETE CASCADE
@@ -101,7 +105,7 @@ CREATE TABLE IF NOT EXISTS `loyalty_tiers` (
 -- -------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `transactions` (
     `id`                  INT             NOT NULL AUTO_INCREMENT,
-    `tenant_id`           INT             NOT NULL,
+    `tenant_id`           INT             NULL COMMENT 'NULL for platform-level superadmin actions',
     `user_id`             INT             NOT NULL,
     `bartender_id`        INT             NULL COMMENT 'NULL for deposits',
     `type`                ENUM('payment','deposit','bonus','correction') NOT NULL,

@@ -43,6 +43,10 @@ if ($method === 'GET') {
         'postal_code'        => $tenant['postal_code'] ?? '',
         'city'               => $tenant['city'] ?? '',
         'country'            => $tenant['country'] ?? 'Nederland',
+        'verification_soft_limit'   => (int) ($tenant['verification_soft_limit'] ?? 15),
+        'verification_hard_limit'   => (int) ($tenant['verification_hard_limit'] ?? 30),
+        'verification_cooldown_sec' => (int) ($tenant['verification_cooldown_sec'] ?? 180),
+        'verification_max_attempts' => (int) ($tenant['verification_max_attempts'] ?? 2),
     ]);
 
 } elseif ($method === 'POST') {
@@ -143,6 +147,28 @@ if ($method === 'GET') {
     foreach ($nawFields as $field) {
         if (isset($input[$field])) {
             $data[$field] = trim($input[$field]);
+        }
+    }
+
+    // Verification limits (gated onboarding)
+    $verificationFields = ['verification_soft_limit', 'verification_hard_limit', 'verification_cooldown_sec', 'verification_max_attempts'];
+    foreach ($verificationFields as $field) {
+        if (isset($input[$field])) {
+            $val = (int) $input[$field];
+            if ($val < 0) {
+                Response::error($field . ' moet een positief getal zijn', 'VALIDATION_ERROR', 422);
+            }
+            // Enforce platform minimums
+            if ($field === 'verification_soft_limit' && defined('VERIFICATION_SOFT_LIMIT_MIN')) {
+                $val = max($val, VERIFICATION_SOFT_LIMIT_MIN);
+            }
+            if ($field === 'verification_hard_limit' && defined('VERIFICATION_HARD_LIMIT_MIN')) {
+                $val = max($val, VERIFICATION_HARD_LIMIT_MIN);
+            }
+            if ($field === 'verification_cooldown_sec' && defined('VERIFICATION_COOLDOWN_MAX')) {
+                $val = min($val, VERIFICATION_COOLDOWN_MAX);
+            }
+            $data[$field] = $val;
         }
     }
 

@@ -62,6 +62,14 @@ class PaymentService
             throw new \InvalidArgumentException('Gebruiker niet gevonden binnen deze tenant');
         }
 
+        // Gated onboarding: check account status
+        if (($user['account_status'] ?? '') === 'suspended') {
+            throw new \RuntimeException('Dit account is geblokkeerd door de beheerder.');
+        }
+        if (($user['account_status'] ?? '') !== 'active') {
+            throw new \RuntimeException('Gast is nog niet geverifieerd. Vraag om legitimatie aan de bar.');
+        }
+
         // Calculate total deposits to determine tier
         $transactionModel = new Transaction($this->db);
         $totalDeposits = $transactionModel->getTotalDeposits($userId, $tenantId);
@@ -144,6 +152,18 @@ class PaymentService
         } catch (\Throwable $e) {
             $this->db->rollBack();
             throw new \RuntimeException('Betaling mislukt: ' . $e->getMessage());
+        }
+
+        // Send notification + email to guest (non-critical)
+        try {
+            require_once __DIR__ . '/NotificationService.php';
+            $notifService = new NotificationService($this->db);
+            $notifService->notifyTransaction(
+                $userId, $tenantId, $transactionId, 'payment', $finalTotal,
+                ['discount_alc_cents' => $discountAlcCents, 'discount_food_cents' => $discountFoodCents, 'points_earned' => $pointsEarned, 'description' => 'Betaling via POS']
+            );
+        } catch (\Throwable $e) {
+            error_log('Notification after payment failed: ' . $e->getMessage());
         }
 
         // ── STAP 6: RESPONSE ────────────────────────────────────────

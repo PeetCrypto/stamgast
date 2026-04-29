@@ -54,6 +54,11 @@ class AuthService
             return null;
         }
 
+        // Check if user account is suspended (gated onboarding)
+        if (($user['account_status'] ?? '') === 'suspended') {
+            return null;
+        }
+
         // Verify password with Argon2id (with optional pepper)
         $pepperedPassword = $password . (defined('APP_PEPPER') ? APP_PEPPER : '');
         if (!password_verify($pepperedPassword, $user['password_hash'])) {
@@ -235,13 +240,14 @@ class AuthService
         return [
             'authenticated' => true,
             'user'          => $user ? [
-                'id'         => $user['id'],
-                'role'       => $user['role'],
-                'first_name' => $user['first_name'],
-                'last_name'  => $user['last_name'],
-                'email'      => $user['email'],
-                'tenant_id'  => $user['tenant_id'],
-                'photo_url'  => $user['photo_url'],
+                'id'            => $user['id'],
+                'role'          => $user['role'],
+                'first_name'    => $user['first_name'],
+                'last_name'     => $user['last_name'],
+                'email'         => $user['email'],
+                'tenant_id'     => $user['tenant_id'],
+                'photo_url'     => $user['photo_url'],
+                'account_status' => $user['account_status'] ?? 'unverified',
             ] : null,
         ];
     }

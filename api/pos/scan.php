@@ -15,6 +15,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../services/QrService.php';
 require_once __DIR__ . '/../../models/User.php';
+require_once __DIR__ . '/../../models/Wallet.php';
 require_once __DIR__ . '/../../models/Transaction.php';
 require_once __DIR__ . '/../../models/LoyaltyTier.php';
 
@@ -101,6 +102,11 @@ try {
     $tierModel = new LoyaltyTier($db);
     $tier = $tierModel->determineTier($tenantId, $totalDeposits);
 
+    // Step 5b: Get wallet balance for POS display
+    $walletModel = new Wallet($db);
+    $wallet = $walletModel->findByUserAndTenant($scannedUserId, $tenantId);
+    $balanceCents = $wallet ? (int) $wallet['balance_cents'] : 0;
+
     // Step 6: Log successful scan
     $audit = new Audit($db);
     $audit->log(
@@ -120,7 +126,11 @@ try {
             'name'         => $user['first_name'] . ' ' . $user['last_name'],
             'photo_url'    => $user['photo_url'],
             'photo_status' => $user['photo_status'],
+            'account_status' => $user['account_status'] ?? 'unverified',
             'age'          => $age,
+            'wallet'       => [
+                'balance_cents' => $balanceCents,
+            ],
             'tier'         => [
                 'name'              => $tier['name'],
                 'alcohol_discount'  => (float) $tier['alcohol_discount_perc'],

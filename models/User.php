@@ -242,4 +242,191 @@ class User
             ':id' => $userId,
         ]);
     }
+
+    // ─────────────────────────────────────────────────────────────
+    // Gated Onboarding — Account Status Methods
+    // ─────────────────────────────────────────────────────────────
+
+    /**
+     * Get account_status for a user (fallback: 'unverified')
+     */
+    public function getAccountStatus(int $userId): string
+    {
+        $stmt = $this->db->prepare('SELECT `account_status` FROM `users` WHERE `id` = :id LIMIT 1');
+        $stmt->execute([':id' => $userId]);
+        $result = $stmt->fetchColumn();
+        return $result ?: 'unverified';
+    }
+
+    /**
+     * Update account_status + audit fields
+     */
+    public function updateAccountStatus(int $userId, string $status, ?int $changedBy = null, ?string $reason = null): bool
+    {
+        $allowed = ['unverified', 'active', 'suspended'];
+        if (!in_array($status, $allowed, true)) {
+            return false;
+        }
+
+        $sql = 'UPDATE `users` SET `account_status` = :status';
+        $params = [':status' => $status, ':id' => $userId];
+
+        if ($status === 'active') {
+            $sql .= ', `verified_at` = NOW(), `verified_by` = :changed_by, `verified_birthdate` = :birthdate';
+            $params[':changed_by'] = $changedBy;
+            $params[':birthdate'] = $reason; // For active, reason field carries birthdate
+        } elseif ($status === 'suspended') {
+            $sql .= ', `suspended_reason` = :reason, `suspended_at` = NOW(), `suspended_by` = :changed_by';
+            $params[':reason'] = $reason;
+            $params[':changed_by'] = $changedBy;
+        } elseif ($status === 'active' && $changedBy !== null) {
+            // Unsuspend — clear suspension fields
+            $sql .= ', `suspended_reason` = NULL, `suspended_at` = NULL, `suspended_by` = NULL';
+        }
+
+        $sql .= ' WHERE `id` = :id';
+        $stmt = $this->db->prepare($sql);
+        return $stmt->execute($params);
+    }
+
+    /**
+     * Verify a user: check birthdate match, update to active, log attempt
+     * Returns array with success bool and details
+     */
+    public function verifyUser(int $userId, int $verifiedBy, string $birthdateSeen): array
+    {
+        // Fetch user to compare birthdate
+        $user = $this->findById($userId);
+        if ($user === null) {
+            return ['success' => false, 'error' => 'Gebruiker niet gevonden'];
+        }
+
+        $storedBirthdate = $user['birthdate'] ?? null;
+        $birthdateMatch = ($storedBirthdate !== null && $storedBirthdate === $birthdateSeen);
+        $statusBefore = $user['account_status'] ?? 'unverified';
+
+        // Log attempt in verification_attempts (always, regardless of match)
+        $this->logVerificationAttempt(
+            (int) $user['tenant_id'],
+            $userId,
+            $verifiedBy,
+            $birthdateSeen,
+            $birthdateMatch,
+            $statusBefore,
+            $birthdateMatch ? 'active' : $statusBefore
+        );
+
+        if (!$birthdateMatch) {
+            // Count remaining attempts for this guest
+            $attemptsUsed = $this->countGuestVerificationAttempts($userId);
+            return [
+                'success' => false,
+                'error' => 'Geboortedatum komt niet overeen met registratie. Vraag de gast het ID opnieuw te controleren.',
+                'code' => 'BIRTHDATE_MISMATCH',
+                'data' => [
+                    'verified' => false,
+                    'birthdate_match' => false,
+                    'attempts_remaining' => max(0, 2 - $attemptsUsed), // Default max 2
+                ],
+            ];
+        }
+
+        // Birthdate matches — activate account
+        $this->updateAccountStatus($userId, 'active', $verifiedBy, $birthdateSeen);
+
+        return [
+            'success' => true,
+            'data' => [
+                'verified' => true,
+                'user_id' => $userId,
+                'birthdate_match' => true,
+                'account_status' => 'active',
+            ],
+        ];
+    }
+
+    /**
+     * Suspend a user account
+     */
+    public function suspendUser(int $userId, int $suspendedBy, string $reason): bool
+    {
+        return $this->updateAccountStatus($userId, 'suspended', $suspendedBy, $reason);
+    }
+
+    /**
+     * Unsuspend a user account (back to active)
+     */
+    public function unsuspendUser(int $userId, int $unsuspendedBy): bool
+    {
+        $stmt = $this->db->prepare(
+            'UPDATE `users` SET `account_status` = \'active\', `suspended_reason` = NULL, `suspended_at` = NULL, `suspended_by` = NULL WHERE `id` = :id'
+        );
+        return $stmt->execute([':id' => $userId]);
+    }
+
+    /**
+     * Count verifications by a bartender in a time window (rate limiting)
+     */
+    public function countVerificationsInWindow(int $tenantId, int $bartenderId, int $seconds = 3600): int
+    {
+        $stmt = $this->db->prepare(
+            'SELECT COUNT(*) FROM `verification_attempts`
+             WHERE `tenant_id` = :tenant_id
+               AND `verified_by` = :bartender_id
+               AND `birthdate_match` = 1
+               AND `created_at` >= DATE_SUB(NOW(), INTERVAL :seconds SECOND)'
+        );
+        $stmt->bindValue(':tenant_id', $tenantId, PDO::PARAM_INT);
+        $stmt->bindValue(':bartender_id', $bartenderId, PDO::PARAM_INT);
+        $stmt->bindValue(':seconds', $seconds, PDO::PARAM_INT);
+        $stmt->execute();
+        return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * Count verification attempts for a guest in past N hours (per-guest limit)
+     */
+    public function countGuestVerificationAttempts(int $userId, int $hours = 24): int
+    {
+        $stmt = $this->db->prepare(
+            'SELECT COUNT(*) FROM `verification_attempts`
+             WHERE `user_id` = :user_id
+               AND `created_at` >= DATE_SUB(NOW(), INTERVAL :hours HOUR)'
+        );
+        $stmt->bindValue(':user_id', $userId, PDO::PARAM_INT);
+        $stmt->bindValue(':hours', $hours, PDO::PARAM_INT);
+        $stmt->execute();
+        return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * Log a verification attempt (audit trail)
+     */
+    public function logVerificationAttempt(
+        int $tenantId,
+        int $userId,
+        int $verifiedBy,
+        string $birthdateSeen,
+        bool $birthdateMatch,
+        string $statusBefore,
+        string $statusAfter
+    ): int {
+        $stmt = $this->db->prepare(
+            'INSERT INTO `verification_attempts`
+             (`tenant_id`, `user_id`, `verified_by`, `birthdate_seen`, `birthdate_match`, `status_before`, `status_after`, `ip_address`)
+             VALUES
+             (:tenant_id, :user_id, :verified_by, :birthdate_seen, :birthdate_match, :status_before, :status_after, :ip_address)'
+        );
+        $stmt->execute([
+            ':tenant_id'      => $tenantId,
+            ':user_id'        => $userId,
+            ':verified_by'    => $verifiedBy,
+            ':birthdate_seen' => $birthdateSeen,
+            ':birthdate_match'=> (int) $birthdateMatch,
+            ':status_before'  => $statusBefore,
+            ':status_after'   => $statusAfter,
+            ':ip_address'     => getClientIP(),
+        ]);
+        return (int) $this->db->lastInsertId();
+    }
 }
