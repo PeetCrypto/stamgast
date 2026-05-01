@@ -21,7 +21,10 @@ $pointsCents = $wallet ? (int) $wallet['points_cents'] : 0;
 // Get account status for gated onboarding
 $userModel = new User($db);
 $accountStatus = $userModel->getAccountStatus($userId);
-$isUnverified = ($accountStatus !== 'active');
+$tenantModel = new Tenant($db);
+$tenant = $tenantModel->findById($tenantId);
+$verificationRequired = (bool) ($tenant['verification_required'] ?? true);
+$isUnverified = ($accountStatus !== 'active' && $verificationRequired);
 ?>
 
 <?php require VIEWS_PATH . 'shared/header.php'; ?>
@@ -61,6 +64,10 @@ $isUnverified = ($accountStatus !== 'active');
         <a href="<?= BASE_URL ?>/inbox" class="glass-card" style="padding: var(--space-lg); text-align: center; text-decoration: none; color: inherit;">
             <p style="font-size: 24px; margin-bottom: var(--space-xs);">&#128233;</p>
             <p class="text-sm">Inbox</p>
+        </a>
+        <a href="<?= BASE_URL ?>/profile" class="glass-card" style="padding: var(--space-lg); text-align: center; text-decoration: none; color: inherit;">
+            <p style="font-size: 24px; margin-bottom: var(--space-xs);">&#128100;</p>
+            <p class="text-sm">Profiel</p>
         </a>
     </div>
 

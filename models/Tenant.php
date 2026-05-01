@@ -20,7 +20,7 @@ class Tenant
         'name', 'slug', 'brand_color', 'secondary_color', 'logo_path',
         'whitelisted_ips',
         'is_active',
-        'feature_push', 'feature_marketing',
+        'feature_push', 'feature_marketing', 'verification_required',
         // NAW fields
         'contact_name', 'contact_email', 'phone', 'address',
         'postal_code', 'city', 'country',

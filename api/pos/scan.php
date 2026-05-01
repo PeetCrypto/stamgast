@@ -18,6 +18,7 @@ require_once __DIR__ . '/../../models/User.php';
 require_once __DIR__ . '/../../models/Wallet.php';
 require_once __DIR__ . '/../../models/Transaction.php';
 require_once __DIR__ . '/../../models/LoyaltyTier.php';
+require_once __DIR__ . '/../../models/Tenant.php';
 
 if ($method !== 'POST') {
     Response::error('Method not allowed', 'METHOD_NOT_ALLOWED', 405);
@@ -119,9 +120,14 @@ try {
     );
 
     // Return user info for POS display
+    // Include verification_required so frontend knows whether to show verify panel
+    $tenantModel = new Tenant($db);
+    $tenant = $tenantModel->findById($tenantId);
+
     Response::success([
-        'valid' => true,
-        'user'  => [
+        'valid'                => true,
+        'verification_required' => (bool) ($tenant['verification_required'] ?? true),
+        'user'                 => [
             'id'           => (int) $user['id'],
             'name'         => $user['first_name'] . ' ' . $user['last_name'],
             'photo_url'    => $user['photo_url'],

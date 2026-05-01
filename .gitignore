@@ -1,0 +1,17 @@
+# Environment files
+.env
+.env.production
+.env.local
+
+# IDE / Editor
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Project tooling
+.amazonq/
+.kilo/

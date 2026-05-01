@@ -48,6 +48,14 @@ if ($tenantId === null || $bartenderId === null) {
 
 try {
     $db = Database::getInstance()->getConnection();
+
+    // ── CHECK: Is verificatie wel vereist voor deze tenant? ──
+    $tenantModel = new Tenant($db);
+    $tenant = $tenantModel->findById($tenantId);
+    if (($tenant['verification_required'] ?? true) === false) {
+        Response::error('Verificatie is niet vereist voor deze locatie', 'VERIFICATION_NOT_REQUIRED', 400);
+    }
+
     $userModel = new User($db);
 
     // ── STAP 2: GAST OPHALEN + TENANT CHECK ──────────────────

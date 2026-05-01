@@ -132,14 +132,20 @@ class AuthService
         try {
             $this->db->beginTransaction();
 
+            // Bepaal of verificatie vereist is voor deze tenant
+            $tenantModel = new Tenant($this->db);
+            $tenant = $tenantModel->findById($tenantId);
+            $verificationRequired = (bool) ($tenant['verification_required'] ?? true);
+
             $userId = $this->userModel->create([
-                'tenant_id'     => $tenantId,
-                'email'         => trim($data['email']),
-                'password_hash' => $passwordHash,
-                'role'          => 'guest',
-                'first_name'    => trim($data['first_name']),
-                'last_name'     => trim($data['last_name']),
-                'birthdate'     => $birthdate ?: null,
+                'tenant_id'             => $tenantId,
+                'email'                 => trim($data['email']),
+                'password_hash'         => $passwordHash,
+                'role'                  => 'guest',
+                'first_name'            => trim($data['first_name']),
+                'last_name'             => trim($data['last_name']),
+                'birthdate'             => $birthdate ?: null,
+                'verification_required' => $verificationRequired,
             ]);
 
             // Create wallet for the new user
@@ -237,19 +243,32 @@ class AuthService
 
         $user = $this->userModel->getPublicProfile((int) $_SESSION['user_id']);
 
-        return [
+        $info = [
             'authenticated' => true,
             'user'          => $user ? [
-                'id'            => $user['id'],
-                'role'          => $user['role'],
-                'first_name'    => $user['first_name'],
-                'last_name'     => $user['last_name'],
-                'email'         => $user['email'],
-                'tenant_id'     => $user['tenant_id'],
-                'photo_url'     => $user['photo_url'],
-                'account_status' => $user['account_status'] ?? 'unverified',
+                'id'                  => $user['id'],
+                'role'                => $user['role'],
+                'first_name'          => $user['first_name'],
+                'last_name'           => $user['last_name'],
+                'email'               => $user['email'],
+                'tenant_id'           => $user['tenant_id'],
+                'photo_url'           => $user['photo_url'],
+                'account_status'      => $user['account_status'] ?? 'unverified',
             ] : null,
         ];
+
+        // Include verification_required when tenant is set
+        if ($user && $user['tenant_id'] !== null) {
+            $tenantModel = new Tenant($this->db);
+            $tenant = $tenantModel->findById((int) $user['tenant_id']);
+            if ($tenant) {
+                $info['user']['verification_required'] = (bool) ($tenant['verification_required'] ?? true);
+            }
+        }
+
+        return $info;
+
+        return $info;
     }
 
     /**

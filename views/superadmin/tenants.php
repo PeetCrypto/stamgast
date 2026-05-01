@@ -21,11 +21,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             Response::error('Naam en slug zijn verplicht', 'MISSING_FIELDS', 400);
         }
 
-        // Validate NAW fields if present
-        if (isset($input['contact_email']) && !empty($input['contact_email'])) {
-            if (!filter_var($input['contact_email'], FILTER_VALIDATE_EMAIL)) {
-                Response::error('Ongeldig contact e-mailadres', 'INVALID_EMAIL', 400);
-            }
+        // Validate NAW fields — contact_email is REQUIRED
+        if (empty($input['contact_email'])) {
+            Response::error('Contact e-mailadres is verplicht', 'MISSING_EMAIL', 400);
+        }
+        if (!filter_var($input['contact_email'], FILTER_VALIDATE_EMAIL)) {
+            Response::error('Ongeldig contact e-mailadres', 'INVALID_EMAIL', 400);
         }
 
         try {
@@ -74,12 +75,12 @@ $tenants = $tenantModel->getAllWithUserCount();
                 <input type="text" id="slug" class="form-input" placeholder="bijv. cafe-de-luifel" required>
             </div>
             <div class="form-group">
-                <label for="contact_name">Contactpersoon</label>
-                <input type="text" id="contact_name" class="form-input" placeholder="Bijv. Jan Jansen">
+                <label for="contact_name">Contactpersoon <span style="color:#f44336;">*</span></label>
+                <input type="text" id="contact_name" class="form-input" placeholder="Bijv. Jan Jansen" required>
             </div>
             <div class="form-group">
-                <label for="contact_email">Contact E-mail</label>
-                <input type="email" id="contact_email" class="form-input" placeholder="jan@jansen.nl">
+                <label for="contact_email">Contact E-mail <span style="color:#f44336;">*</span></label>
+                <input type="email" id="contact_email" class="form-input" placeholder="jan@jansen.nl" required>
             </div>
             <div class="form-group">
                 <label for="phone">Telefoon</label>
@@ -228,13 +229,31 @@ document.getElementById('create-tenant-form')?.addEventListener('submit', async 
     e.preventDefault();
     const name = document.getElementById('name').value.trim();
     const slug = document.getElementById('slug').value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-');
-    const contact_name = document.getElementById('contact_name')?.value.trim() || null;
-    const contact_email = document.getElementById('contact_email')?.value.trim() || null;
+    const contact_name = document.getElementById('contact_name')?.value.trim() || '';
+    const contact_email = document.getElementById('contact_email')?.value.trim() || '';
     const phone = document.getElementById('phone')?.value.trim() || null;
     const address = document.getElementById('address')?.value.trim() || null;
     const postal_code = document.getElementById('postal_code')?.value.trim() || null;
     const city = document.getElementById('city')?.value.trim() || null;
     const csrf = document.querySelector('input[name="csrf_token"]').value;
+
+    // Client-side validation: contact_email and contact_name are required
+    if (!contact_email) {
+        alert('Contact e-mailadres is verplicht. Zonder e-mail kan geen welcome mail worden verstuurd.');
+        document.getElementById('contact_email').focus();
+        return;
+    }
+    if (!contact_name) {
+        alert('Contactpersoon is verplicht.');
+        document.getElementById('contact_name').focus();
+        return;
+    }
+
+    // Disable submit button to prevent double-submit
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    const origBtnText = submitBtn.textContent;
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Aanmaken...';
 
     try {
         const res = await fetch(window.__BASE_URL + '/api/superadmin/tenants', {
@@ -252,15 +271,76 @@ document.getElementById('create-tenant-form')?.addEventListener('submit', async 
             })
         });
         const data = await res.json();
-        if (data.success) {
-            window.location.reload();
+        if (data.success && data.data) {
+            // Show credentials modal instead of instant reload
+            showCredentialsModal(data.data);
         } else {
             alert('Fout: ' + data.error);
         }
-} catch (err) {
+    } catch (err) {
         alert('Netwerkfout: ' + err.message);
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = origBtnText;
     }
 });
+
+/**
+ * Show a modal with the newly created admin credentials
+ */
+function showCredentialsModal(result) {
+    const tenant = result.tenant || {};
+    const adminEmail = result.admin_email || '—';
+    const adminPassword = result.admin_password || '—';
+
+    // Create overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'credentials-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
+
+    // Create modal card
+    const card = document.createElement('div');
+    card.style.cssText = 'background:#1e1e2e;border-radius:12px;padding:32px;max-width:480px;width:90%;color:#fff;box-shadow:0 20px 60px rgba(0,0,0,0.5);';
+
+    // Escape values to prevent XSS
+    const esc = (s) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    const contact_email_esc = esc(document.getElementById('contact_email').value.trim());
+    const tenant_name_esc = esc(tenant.name || '');
+    const email_esc = esc(adminEmail);
+    const password_esc = esc(adminPassword);
+
+    card.innerHTML = `
+        <h2 style="margin:0 0 8px 0;font-size:20px;">✅ Tenant aangemaakt!</h2>
+        <p style="margin:0 0 20px 0;opacity:0.7;font-size:14px;">Er is een welcome mail verstuurd naar <strong>${contact_email_esc}</strong> met de inloggegevens.</p>
+        <div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:16px;margin-bottom:20px;">
+            <p style="margin:0 0 8px 0;font-size:13px;opacity:0.6;">Tenant</p>
+            <p style="margin:0 0 16px 0;font-size:16px;font-weight:600;">${tenant_name_esc}</p>
+            <p style="margin:0 0 8px 0;font-size:13px;opacity:0.6;">Admin inloggegevens</p>
+            <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:14px;">
+                <span style="opacity:0.6;">E-mail:</span>
+                <code style="background:rgba(255,193,7,0.15);padding:2px 8px;border-radius:4px;color:#FFC107;word-break:break-all;">${email_esc}</code>
+                <span style="opacity:0.6;">Wachtwoord:</span>
+                <code style="background:rgba(255,193,7,0.15);padding:2px 8px;border-radius:4px;color:#FFC107;word-break:break-all;">${password_esc}</code>
+            </div>
+        </div>
+        <p style="margin:0 0 16px 0;font-size:13px;color:#f44336;">⚠️ Let op: Dit wachtwoord wordt maar één keer getoond. Deel het veilig met de tenant eigenaar.</p>
+        <button id="credentials-close-btn" class="btn btn-primary" style="width:100%;">Sluiten & naar overzicht</button>
+    `;
+
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+
+    document.getElementById('credentials-close-btn').addEventListener('click', () => {
+        window.location.reload();
+    });
+
+    // Also close on overlay click (outside card)
+    overlay.addEventListener('click', (ev) => {
+        if (ev.target === overlay) {
+            window.location.reload();
+        }
+    });
+}
 
 // Close the modal when clicking outside
 window.addEventListener('click', function(event) {

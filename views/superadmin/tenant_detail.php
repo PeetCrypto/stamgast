@@ -175,6 +175,14 @@ $connectSuccess = isset($_GET['connect']) && $_GET['connect'] === 'success';
                                 <span id="naw-feature_marketing-label"><?= ($tenant['feature_marketing'] ?? true) ? 'Actief' : 'Inactief' ?></span>
                             </label>
                         </div>
+                        <div class="form-group" style="margin-top: var(--space-md); padding-top: var(--space-md); border-top: 1px solid rgba(255,255,255,0.1);">
+                            <label class="text-sm text-secondary">ID-Verificatie verplicht</label>
+                            <label style="display:flex;align-items:center;gap:var(--space-sm);cursor:pointer;">
+                                <input type="checkbox" id="naw-verification_required" <?= ($tenant['verification_required'] ?? true) ? 'checked' : '' ?> style="width:18px;height:18px;">
+                                <span id="naw-verification_required-label"><?= ($tenant['verification_required'] ?? true) ? 'Verplicht' : 'Uitgeschakeld' ?></span>
+                            </label>
+                            <p class="text-sm text-secondary" style="margin-top:4px;">Wanneer uit: nieuwe gasten zijn direct actief na registratie. Bestaande unverified gasten blijven onveranderd.</p>
+                        </div>
                     </div>
 
                     <button type="submit" class="btn btn-primary" style="width:100%;margin-top:var(--space-sm);">Opslaan</button>
@@ -284,7 +292,6 @@ $connectSuccess = isset($_GET['connect']) && $_GET['connect'] === 'success';
                             <?= ($stats['user_counts']['guest'] ?? 0) ?> gasten
                         </span>
                     </h2>
-                    <button id="change-password-btn" class="btn btn-primary" style="display: none;">Wachtwoord Wijzigen</button>
                 </div>
 
                 <?php if (empty($users)): ?>
@@ -329,7 +336,7 @@ $connectSuccess = isset($_GET['connect']) && $_GET['connect'] === 'success';
                                     <?= $u['last_activity'] ? date('d-m-Y H:i', strtotime($u['last_activity'])) : '-' ?>
                                 </td>
                                 <td style="padding: var(--space-sm);">
-                                    <button class="btn btn-secondary btn-sm select-user-btn" data-user-id="<?= (int) $u['id'] ?>" data-user-email="<?= sanitize($u['email']) ?>" style="padding: 2px 8px; font-size: 12px;">Bewerk</button>
+                                    <button class="btn btn-secondary btn-sm select-user-btn" data-user-id="<?= (int) $u['id'] ?>" data-user-email="<?= sanitize($u['email']) ?>" data-user-role="<?= $u['role'] ?? 'guest' ?>" data-user-name="<?= sanitize(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? '')) ?>" style="padding: 2px 8px; font-size: 12px;">Bewerk</button>
                                 </td>
                             </tr>
                             <?php endforeach; ?>
@@ -337,27 +344,46 @@ $connectSuccess = isset($_GET['connect']) && $_GET['connect'] === 'success';
                     </table>
                 <?php endif; ?>
                 
-                <!-- Password Change Form (Hidden by default) -->
-                <div id="user-password-change-form" class="glass-card" style="padding: var(--space-lg); margin-top: var(--space-md); display: none;">
-                    <h3 style="margin-bottom: var(--space-md);">Wachtwoord Wijzigen</h3>
-                    <form id="user-password-form">
-                        <input type="hidden" id="selected-user-id" name="user_id" value="">
+                <!-- User Edit Form (Hidden by default) -->
+                <div id="user-edit-panel" class="glass-card" style="padding: var(--space-lg); margin-top: var(--space-md); display: none;">
+                    <h3 style="margin-bottom: var(--space-md);" id="user-edit-title">Gebruiker Bewerken</h3>
+                    <input type="hidden" id="edit-user-id" value="">
+                    <input type="hidden" id="edit-user-role" value="">
+
+                    <!-- E-mail wijziging (alleen voor admin-gebruikers) -->
+                    <div id="email-edit-section">
                         <div class="form-group">
-                            <label class="text-sm text-secondary">Gebruiker</label>
-                            <input type="text" id="selected-user-email" class="form-input" readonly>
+                            <label class="text-sm text-secondary">E-mailadres</label>
+                            <input type="email" id="edit-user-email" class="form-input" required>
                         </div>
+                        <button type="button" id="save-email-btn" class="btn btn-primary" style="width:100%;margin-bottom:var(--space-sm);">E-mail Wijzigen</button>
+                        <p id="email-status" class="text-sm" style="margin-bottom:var(--space-md);text-align:center;"></p>
+                    </div>
+
+                    <div id="email-edit-notice" style="display:none; background:rgba(255,152,0,0.1); border:1px solid rgba(255,152,0,0.3); border-radius:8px; padding:var(--space-sm); margin-bottom:var(--space-md); font-size:13px; color:#FF9800;">
+                        E-mail van bartenders en gasten wordt beheerd door de admin van deze locatie.
+                    </div>
+
+                    <hr style="border-color: rgba(255,255,255,0.1); margin: var(--space-md) 0;">
+
+                    <!-- Wachtwoord wijziging (alleen voor admin-gebruikers) -->
+                    <div id="password-edit-section">
+                        <h4 style="margin-bottom: var(--space-sm); font-size: 14px;">Wachtwoord Wijzigen</h4>
                         <div class="form-group">
                             <label class="text-sm text-secondary">Nieuw Wachtwoord</label>
-                            <input type="password" id="user-new-password" class="form-input" placeholder="Nieuw wachtwoord" required>
+                            <input type="password" id="edit-new-password" class="form-input" placeholder="Minimaal 8 tekens">
                         </div>
                         <div class="form-group">
-                            <label class="text-sm text-secondary">Bevestig Nieuw Wachtwoord</label>
-                            <input type="password" id="user-confirm-password" class="form-input" placeholder="Bevestig nieuw wachtwoord" required>
+                            <label class="text-sm text-secondary">Bevestig Wachtwoord</label>
+                            <input type="password" id="edit-confirm-password" class="form-input" placeholder="Bevestig nieuw wachtwoord">
                         </div>
-                        <button type="submit" class="btn btn-primary" style="width:100%;margin-top:var(--space-sm);">Wachtwoord Wijzigen</button>
-                        <button type="button" id="cancel-password-change" class="btn btn-secondary" style="width:100%;margin-top:var(--space-sm);">Annuleren</button>
-                        <p id="user-password-status" class="text-sm" style="margin-top:var(--space-sm);text-align:center;"></p>
-                    </form>
+                        <button type="button" id="save-password-btn" class="btn btn-primary" style="width:100%;">Wachtwoord Wijzigen</button>
+                        <p id="password-status" class="text-sm" style="margin-top:var(--space-sm);text-align:center;"></p>
+                    </div>
+
+                    <hr style="border-color: rgba(255,255,255,0.1); margin: var(--space-md) 0;">
+
+                    <button type="button" id="cancel-edit-user" class="btn btn-secondary" style="width:100%;">Sluiten</button>
                 </div>
             </div>
         </div>
@@ -368,76 +394,135 @@ $connectSuccess = isset($_GET['connect']) && $_GET['connect'] === 'success';
 const CSRF = '<?= generateCSRFToken() ?>';
 const TENANT_ID = <?= $tenantId ?>;
 
-// User selection and password change functionality
+// ============================================
+// USER EDIT PANEL
+// ============================================
+const roleLabels = { admin: 'Admin', bartender: 'Bartender', guest: 'Gast', superadmin: 'Superadmin' };
+
 document.querySelectorAll('.select-user-btn').forEach(btn => {
     btn.addEventListener('click', function() {
         const userId = this.dataset.userId;
         const userEmail = this.dataset.userEmail;
-        
-        // Show the password change form
-        document.getElementById('user-password-change-form').style.display = 'block';
-        document.getElementById('selected-user-id').value = userId;
-        document.getElementById('selected-user-email').value = userEmail;
-        
-        // Scroll to the form
-        document.getElementById('user-password-change-form').scrollIntoView({ behavior: 'smooth' });
+        const userRole = this.dataset.userRole || 'guest';
+        const userName = this.dataset.userName || userEmail;
+
+        // Show the edit panel
+        const panel = document.getElementById('user-edit-panel');
+        panel.style.display = 'block';
+        document.getElementById('edit-user-id').value = userId;
+        document.getElementById('edit-user-role').value = userRole;
+        document.getElementById('edit-user-email').value = userEmail;
+        document.getElementById('edit-new-password').value = '';
+        document.getElementById('edit-confirm-password').value = '';
+        document.getElementById('email-status').textContent = '';
+        document.getElementById('password-status').textContent = '';
+
+        // Show/hide sections based on role — superadmin only edits admin users
+        const isAdmin = userRole === 'admin';
+        document.getElementById('email-edit-section').style.display = isAdmin ? 'block' : 'none';
+        document.getElementById('email-edit-notice').style.display = isAdmin ? 'none' : 'block';
+        document.getElementById('password-edit-section').style.display = isAdmin ? 'block' : 'none';
+
+        // Update title
+        document.getElementById('user-edit-title').textContent =
+            'Bewerk: ' + userName + ' (' + (roleLabels[userRole] || userRole) + ')';
+
+        panel.scrollIntoView({ behavior: 'smooth' });
     });
 });
 
-// Cancel password change
-document.getElementById('cancel-password-change')?.addEventListener('click', function() {
-    document.getElementById('user-password-change-form').style.display = 'none';
-    document.getElementById('selected-user-id').value = '';
-    document.getElementById('selected-user-email').value = '';
-    document.getElementById('user-new-password').value = '';
-    document.getElementById('user-confirm-password').value = '';
-    document.getElementById('user-password-status').textContent = '';
+// Cancel / close edit panel
+document.getElementById('cancel-edit-user')?.addEventListener('click', function() {
+    document.getElementById('user-edit-panel').style.display = 'none';
 });
 
-// Password change form handler
-document.getElementById('user-password-form')?.addEventListener('submit', async function(e) {
-    e.preventDefault();
-    const statusEl = document.getElementById('user-password-status');
-    const userId = document.getElementById('selected-user-id').value;
-    const userEmail = document.getElementById('selected-user-email').value;
-    const newPassword = document.getElementById('user-new-password').value;
-    const confirmPassword = document.getElementById('user-confirm-password').value;
-    
-    statusEl.textContent = 'Wachtwoord wijzigen...';
+// Save email
+document.getElementById('save-email-btn')?.addEventListener('click', async function() {
+    const statusEl = document.getElementById('email-status');
+    const userId = document.getElementById('edit-user-id').value;
+    const newEmail = document.getElementById('edit-user-email').value.trim();
+
+    if (!newEmail) {
+        statusEl.textContent = '✗ E-mailadres is verplicht';
+        statusEl.style.color = '#f44336';
+        return;
+    }
+
+    statusEl.textContent = 'E-mail wijzigen...';
     statusEl.style.color = 'var(--text-secondary)';
-    
-    // Validate password match
-    if (newPassword !== confirmPassword) {
-        statusEl.textContent = 'Wachtwoorden komen niet overeen';
-        statusEl.style.color = '#f44336';
-        return;
-    }
-    
-    // Validate password strength (at least 8 characters)
-    if (newPassword.length < 8) {
-        statusEl.textContent = 'Wachtwoord moet minimaal 8 tekens bevatten';
-        statusEl.style.color = '#f44336';
-        return;
-    }
-    
+
     try {
         const res = await fetch((window.__BASE_URL || '') + '/api/superadmin/tenants', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
-            body: JSON.stringify({ 
-                action: 'change_password', 
-                tenant_id: parseInt(TENANT_ID), 
+            body: JSON.stringify({
+                action: 'change_email',
+                tenant_id: parseInt(TENANT_ID),
                 user_id: parseInt(userId),
-                new_password: newPassword 
+                new_email: newEmail
+            })
+        });
+        const result = await res.json();
+        if (result.success) {
+            statusEl.textContent = '✓ E-mail gewijzigd';
+            statusEl.style.color = '#4CAF50';
+            // Update email in the table row
+            const row = document.querySelector('tr[data-user-id="' + userId + '"]');
+            if (row) {
+                const emailCell = row.querySelectorAll('td')[1];
+                if (emailCell) emailCell.textContent = newEmail;
+                const editBtn = row.querySelector('.select-user-btn');
+                if (editBtn) editBtn.dataset.userEmail = newEmail;
+            }
+        } else {
+            statusEl.textContent = '✗ ' + (result.error || 'Fout bij wijzigen e-mail');
+            statusEl.style.color = '#f44336';
+        }
+    } catch (err) {
+        statusEl.textContent = '✗ Netwerkfout';
+        statusEl.style.color = '#f44336';
+    }
+    setTimeout(() => { statusEl.textContent = ''; }, 4000);
+});
+
+// Save password
+document.getElementById('save-password-btn')?.addEventListener('click', async function() {
+    const statusEl = document.getElementById('password-status');
+    const userId = document.getElementById('edit-user-id').value;
+    const newPassword = document.getElementById('edit-new-password').value;
+    const confirmPassword = document.getElementById('edit-confirm-password').value;
+
+    if (newPassword !== confirmPassword) {
+        statusEl.textContent = '✗ Wachtwoorden komen niet overeen';
+        statusEl.style.color = '#f44336';
+        return;
+    }
+    if (newPassword.length < 8) {
+        statusEl.textContent = '✗ Minimaal 8 tekens vereist';
+        statusEl.style.color = '#f44336';
+        return;
+    }
+
+    statusEl.textContent = 'Wachtwoord wijzigen...';
+    statusEl.style.color = 'var(--text-secondary)';
+
+    try {
+        const res = await fetch((window.__BASE_URL || '') + '/api/superadmin/tenants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+            body: JSON.stringify({
+                action: 'change_password',
+                tenant_id: parseInt(TENANT_ID),
+                user_id: parseInt(userId),
+                new_password: newPassword
             })
         });
         const result = await res.json();
         if (result.success) {
             statusEl.textContent = '✓ Wachtwoord gewijzigd';
             statusEl.style.color = '#4CAF50';
-            // Clear form fields
-            document.getElementById('user-new-password').value = '';
-            document.getElementById('user-confirm-password').value = '';
+            document.getElementById('edit-new-password').value = '';
+            document.getElementById('edit-confirm-password').value = '';
         } else {
             statusEl.textContent = '✗ ' + (result.error || 'Fout bij wijzigen wachtwoord');
             statusEl.style.color = '#f44336';
@@ -446,7 +531,7 @@ document.getElementById('user-password-form')?.addEventListener('submit', async 
         statusEl.textContent = '✗ Netwerkfout';
         statusEl.style.color = '#f44336';
     }
-    setTimeout(() => { statusEl.textContent = ''; }, 3000);
+    setTimeout(() => { statusEl.textContent = ''; }, 4000);
 });
 
 // NAW form save
@@ -470,6 +555,8 @@ document.getElementById('naw-form')?.addEventListener('submit', async (e) => {
     if (pushEl) data.feature_push = pushEl.checked ? 1 : 0;
     if (mktEl) data.feature_marketing = mktEl.checked ? 1 : 0;
     if (activeEl) data.is_active = activeEl.checked ? 1 : 0;
+    const verifEl = document.getElementById('naw-verification_required');
+    if (verifEl) data.verification_required = verifEl.checked ? 1 : 0;
 
     try {
         const res = await fetch((window.__BASE_URL || '') + '/api/superadmin/tenants', {
@@ -498,6 +585,9 @@ document.getElementById('naw-feature_push')?.addEventListener('change', function
 });
 document.getElementById('naw-feature_marketing')?.addEventListener('change', function() {
     document.getElementById('naw-feature_marketing-label').textContent = this.checked ? 'Actief' : 'Inactief';
+});
+document.getElementById('naw-verification_required')?.addEventListener('change', function() {
+    document.getElementById('naw-verification_required-label').textContent = this.checked ? 'Verplicht' : 'Uitgeschakeld';
 });
 // Tenant status toggle label update
 document.getElementById('naw-is_active')?.addEventListener('change', function() {

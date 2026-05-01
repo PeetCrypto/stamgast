@@ -8,17 +8,19 @@ declare(strict_types=1);
 
 function setCORSHeaders(): void
 {
-    // In development, allow all origins. In production, restrict to your domain.
     if (defined('APP_DEBUG') && APP_DEBUG === true) {
+        // LOKAAL: Allow all origins
         header('Access-Control-Allow-Origin: *');
     } else {
-        // Replace with your actual domain in production
-        $allowedOrigins = [
-            'https://stamgast.app',
-            'https://www.stamgast.app',
-        ];
+        // PRODUCTIE: Alleen het eigenlijke domein
+        // Auto-detect vanuit de huidige request (werkt op elke server)
         $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-        if (in_array($origin, $allowedOrigins, true)) {
+        $host = $_SERVER['HTTP_HOST'] ?? '';
+
+        $allowedHosts = [$host];
+        $originHost = parse_url($origin, PHP_URL_HOST);
+
+        if (in_array($originHost, $allowedHosts, true)) {
             header('Access-Control-Allow-Origin: ' . $origin);
         }
     }
@@ -26,9 +28,8 @@ function setCORSHeaders(): void
     header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
     header('Access-Control-Allow-Headers: Content-Type, X-CSRF-Token, Authorization');
     header('Access-Control-Allow-Credentials: true');
-    header('Access-Control-Max-Age: 86400'); // 24 hours cache
+    header('Access-Control-Max-Age: 86400');
 
-    // Handle preflight OPTIONS request
     if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
         http_response_code(204);
         exit;

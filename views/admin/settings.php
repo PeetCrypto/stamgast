@@ -149,6 +149,9 @@ if (!$tenant) {
                 <span class="badge" style="padding: 8px 16px; border-radius: 20px; background: <?= ($tenant['feature_marketing'] ?? true) ? 'rgba(76,175,80,0.2); color: #4CAF50; border: 1px solid rgba(76,175,80,0.3)' : 'rgba(244,67,54,0.2); color: #f44336; border: 1px solid rgba(244,67,54,0.3)' ?>;">
                     <?= ($tenant['feature_marketing'] ?? true) ? '✓' : '✗' ?> Marketing Studio
                 </span>
+                <span class="badge" style="padding: 8px 16px; border-radius: 20px; background: <?= ($tenant['verification_required'] ?? true) ? 'rgba(76,175,80,0.2); color: #4CAF50; border: 1px solid rgba(76,175,80,0.3)' : 'rgba(158,158,158,0.2); color: #9e9e9e; border: 1px solid rgba(158,158,158,0.3)' ?>;">
+                    <?= ($tenant['verification_required'] ?? true) ? '✓' : '✗' ?> ID-Verificatie
+                </span>
             </div>
         </div>
 

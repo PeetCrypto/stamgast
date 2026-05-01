@@ -7,6 +7,7 @@ declare(strict_types=1);
  */
 
 // --- Load Configuration ---
+require_once __DIR__ . '/config/load_env.php';
 require_once __DIR__ . '/config/app.php';
 require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/config/cors.php';
@@ -416,15 +417,6 @@ function handleApiRoute(string $route, string $method): void
 // ==========================================================================
 function handleViewRoute(string $route, string $method): void
 {
-    // Allow direct file access for setup.php and test scripts
-    if ($route === 'setup.php' || $route === 'test_phase1_phase2.php' || $route === 'db.php') {
-        $filePath = __DIR__ . '/' . $route;
-        if (file_exists($filePath)) {
-            require $filePath;
-            exit;
-        }
-    }
-    
     // Redirect root based on session
     if ($route === '' || $route === '/') {
         if (isLoggedIn()) {
@@ -453,6 +445,7 @@ function handleViewRoute(string $route, string $method): void
         'wallet'    => 'guest/wallet.php',
         'qr'        => 'guest/qr.php',
         'inbox'     => 'guest/inbox.php',
+        'profile'   => 'guest/profile/index.php',
 
         // Bartender
         'bartender' => 'bartender/dashboard.php',

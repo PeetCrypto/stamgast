@@ -76,7 +76,8 @@ if ($method === 'GET') {
     // Fetch page with wallet info
     $stmt = $db->prepare(
         "SELECT u.`id`, u.`email`, u.`role`, u.`first_name`, u.`last_name`,
-                u.`birthdate`, u.`photo_url`, u.`photo_status`, u.`last_activity`, u.`created_at`,
+                u.`birthdate`, u.`photo_url`, u.`photo_status`, u.`account_status`,
+                u.`last_activity`, u.`created_at`,
                 w.`balance_cents`, w.`points_cents`
          FROM `users` u
          LEFT JOIN `wallets` w ON w.`user_id` = u.`id`
@@ -101,6 +102,12 @@ if ($method === 'GET') {
             $tierName = $tier['name'];
         }
 
+        // Admin and Bartender are staff — they are always considered active,
+        // only guests go through the gated onboarding (KYC-light) verification flow.
+        $accountStatus = ($row['role'] !== 'guest')
+            ? 'active'
+            : ($row['account_status'] ?? 'unverified');
+
         return [
             'id'             => (int) $row['id'],
             'email'          => $row['email'],
@@ -110,6 +117,7 @@ if ($method === 'GET') {
             'birthdate'      => $row['birthdate'],
             'photo_url'      => $row['photo_url'],
             'photo_status'   => $row['photo_status'],
+            'account_status' => $accountStatus,
             'is_blocked'     => $row['photo_status'] === 'blocked',
             'balance_cents'  => (int) ($row['balance_cents'] ?? 0),
             'points_cents'   => (int) ($row['points_cents'] ?? 0),
@@ -242,6 +250,11 @@ if ($method === 'GET') {
         // Cannot edit superadmins
         if ($user['role'] === 'superadmin') {
             Response::error('Superadmins kunnen niet bewerkt worden', 'FORBIDDEN', 403);
+        }
+
+        // Admin can only edit bartender and guest users (not other admins)
+        if ($user['role'] === 'admin') {
+            Response::error('Admin-gebruikers worden beheerd door de superadmin. Je kunt alleen bartenders en gasten bewerken.', 'FORBIDDEN', 403);
         }
 
         // Validate role

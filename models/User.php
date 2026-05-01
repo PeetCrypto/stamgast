@@ -93,23 +93,36 @@ class User
      */
     public function create(array $data): int
     {
+        // Staff (admin, bartender) are always active — only guests need verification
+        $role = $data['role'] ?? 'guest';
+        $verificationRequired = $data['verification_required'] ?? true;
+
+        if ($role !== 'guest') {
+            $accountStatus = 'active'; // Staff is altijd active
+        } elseif (!$verificationRequired) {
+            $accountStatus = 'active'; // Toggle uit → gast meteen active
+        } else {
+            $accountStatus = 'unverified'; // Toggle aan → gast moet geverifieerd worden
+        }
+
         $stmt = $this->db->prepare(
             'INSERT INTO `users`
-             (`tenant_id`, `email`, `password_hash`, `role`, `first_name`, `last_name`, `birthdate`, `photo_url`, `photo_status`)
+             (`tenant_id`, `email`, `password_hash`, `role`, `first_name`, `last_name`, `birthdate`, `photo_url`, `photo_status`, `account_status`)
              VALUES
-             (:tenant_id, :email, :password_hash, :role, :first_name, :last_name, :birthdate, :photo_url, :photo_status)'
+             (:tenant_id, :email, :password_hash, :role, :first_name, :last_name, :birthdate, :photo_url, :photo_status, :account_status)'
         );
 
         $stmt->execute([
             ':tenant_id'     => $data['tenant_id'] ?? null,
             ':email'         => $data['email'],
             ':password_hash' => $data['password_hash'],
-            ':role'          => $data['role'] ?? 'guest',
+            ':role'          => $role,
             ':first_name'    => $data['first_name'],
             ':last_name'     => $data['last_name'],
             ':birthdate'     => $data['birthdate'] ?? null,
             ':photo_url'     => $data['photo_url'] ?? null,
             ':photo_status'  => $data['photo_status'] ?? 'unvalidated',
+            ':account_status' => $accountStatus,
         ]);
 
         return (int) $this->db->lastInsertId();
@@ -117,10 +130,20 @@ class User
 
     /**
      * Update a user's role
+     * Also updates account_status: staff (admin, bartender) are always active,
+     * guests reverted from staff keep their current status.
      */
     public function updateRole(int $userId, string $role): bool
     {
-        $stmt = $this->db->prepare('UPDATE `users` SET `role` = :role WHERE `id` = :id');
+        // When promoting to staff, auto-activate the account
+        if ($role !== 'guest') {
+            $stmt = $this->db->prepare(
+                'UPDATE `users` SET `role` = :role, `account_status` = \'active\' WHERE `id` = :id'
+            );
+        } else {
+            $stmt = $this->db->prepare('UPDATE `users` SET `role` = :role WHERE `id` = :id');
+        }
+
         return $stmt->execute([
             ':role' => $role,
             ':id'   => $userId,
@@ -229,6 +252,18 @@ class User
             ':tenant_id' => $tenantId,
         ]);
         return (int) $stmt->fetchColumn() > 0;
+    }
+
+    /**
+     * Update a user's email address
+     */
+    public function updateEmail(int $userId, string $newEmail): bool
+    {
+        $stmt = $this->db->prepare('UPDATE `users` SET `email` = :email WHERE `id` = :id');
+        return $stmt->execute([
+            ':email' => $newEmail,
+            ':id'    => $userId,
+        ]);
     }
 
     /**

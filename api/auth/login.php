@@ -106,12 +106,19 @@ $dashboardMap = [
 ];
 $redirect = BASE_URL . ($dashboardMap[$user['role']] ?? '/dashboard');
 
+// Staff (admin, bartender, superadmin) are always active —
+// only guests go through the gated onboarding verification flow.
+$accountStatus = ($user['role'] !== 'guest')
+    ? 'active'
+    : ($user['account_status'] ?? 'unverified');
+
 Response::success([
     'user' => [
-        'id'         => (int) $user['id'],
-        'role'       => $user['role'],
-        'first_name' => $user['first_name'],
-        'tenant_id'  => $user['tenant_id'] !== null ? (int) $user['tenant_id'] : null,
+        'id'             => (int) $user['id'],
+        'role'           => $user['role'],
+        'first_name'     => $user['first_name'],
+        'tenant_id'      => $user['tenant_id'] !== null ? (int) $user['tenant_id'] : null,
+        'account_status' => $accountStatus,
     ],
     'redirect' => $redirect,
 ]);

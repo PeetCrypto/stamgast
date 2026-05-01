@@ -58,6 +58,9 @@ switch ($method) {
             case 'change_password':
                 handleChangePassword($userModel, $input, $db);
                 break;
+            case 'change_email':
+                handleChangeEmail($userModel, $input, $db);
+                break;
             default:
                 Response::error('Invalid action. Use: create, update, delete, update_role, change_password', 'INVALID_ACTION', 400);
         }
@@ -123,11 +126,12 @@ function handleCreate(Tenant $model, User $userModel, array $input, PDO $db): vo
     if (isset($input['secondary_color'])) {
         $v->hexColor('secondary_color', $input['secondary_color']);
     }
-    // Validate NAW fields if present
-    if (isset($input['contact_email']) && !empty($input['contact_email'])) {
-        if (!isValidEmail($input['contact_email'])) {
-            Response::error('Ongeldig contact e-mailadres', 'INVALID_EMAIL', 400);
-        }
+    // Validate NAW fields — contact_email is REQUIRED for tenant creation
+    if (empty($input['contact_email'])) {
+        Response::error('Contact e-mailadres is verplicht', 'MISSING_EMAIL', 400);
+    }
+    if (!isValidEmail($input['contact_email'])) {
+        Response::error('Ongeldig contact e-mailadres', 'INVALID_EMAIL', 400);
     }
     $v->validate();
 
@@ -141,7 +145,8 @@ function handleCreate(Tenant $model, User $userModel, array $input, PDO $db): vo
     $tenantId = $model->create($input);
 
     // Auto-create admin user for the new tenant
-    $adminEmail = $input['contact_email'] ?? ($input['slug'] . '@stamgast.nl');
+    // contact_email is guaranteed to be present (validated above)
+    $adminEmail = $input['contact_email'];
     $adminPassword = substr(bin2hex(random_bytes(12)), 0, 16); // 16-char random password
     $adminFirstName = $input['contact_name'] ?? 'Admin';
     $nameParts = explode(' ', trim($adminFirstName), 2);
@@ -165,45 +170,58 @@ function handleCreate(Tenant $model, User $userModel, array $input, PDO $db): vo
     );
     $stmt->execute([':uid' => $adminUserId, ':tid' => $tenantId]);
 
-    // Send welcome email using the email template system
-    $contactEmail = $input['contact_email'] ?? null;
-    if ($contactEmail && isValidEmail($contactEmail)) {
-        // Build the welcome email with credentials using the tenant_welcome template
-        $subject = 'STAMGAST - Jouw inloggegevens voor ' . $input['name'];
-        $body = "<h2>Welkom bij STAMGAST!</h2>"
-              . "<p>Er is een account aangemaakt voor <strong>" . htmlspecialchars($input['name']) . "</strong>.</p>"
-              . "<p><strong>Inloggegevens:</strong></p>"
-              . "<ul>"
-              . "<li>E-mail: <code>" . htmlspecialchars($adminEmail) . "</code></li>"
-              . "<li>Wachtwoord: <code>" . htmlspecialchars($adminPassword) . "</code></li>"
-              . "</ul>"
-              . "<p>Log in op jouw STAMGAST omgeving om te beginnen.</p>"
-              . "<p><em>Verander je wachtwoord na het eerste inloggen!</em></p>";
+    // --- Send welcome email with login credentials ---
+    $welcomeSubject = 'REGULR.vip - Jouw inloggegevens voor ' . $input['name'];
+    $welcomeHtml = "<h2>Welkom bij REGULR.vip!</h2>"
+        . "<p>Er is een account aangemaakt voor <strong>" . htmlspecialchars($input['name']) . "</strong>.</p>"
+        . "<p><strong>Jouw inloggegevens:</strong></p>"
+        . "<ul>"
+        . "<li>E-mail: <code>" . htmlspecialchars($adminEmail) . "</code></li>"
+        . "<li>Wachtwoord: <code>" . htmlspecialchars($adminPassword) . "</code></li>"
+        . "</ul>"
+        . "<p>Log in op jouw REGULR.vip omgeving om te beginnen.</p>"
+        . "<p><em>Verander je wachtwoord na het eerste inloggen!</em></p>";
+    $welcomeText = "Welkom bij REGULR.vip!\n\n"
+        . "Er is een account aangemaakt voor " . $input['name'] . ".\n\n"
+        . "Inloggegevens:\n"
+        . "- E-mail: " . $adminEmail . "\n"
+        . "- Wachtwoord: " . $adminPassword . "\n\n"
+        . "Verander je wachtwoord na het eerste inloggen!";
 
-        // Queue via email_queue table (for batch processing)
-        try {
-            $stmt = $db->prepare(
-                'INSERT INTO `email_queue` (`tenant_id`, `user_id`, `subject`, `body_html`, `status`)
-                 VALUES (:tid, :uid, :subject, :body, \'pending\')'
-            );
-            $stmt->execute([
-                ':tid'     => $tenantId,
-                ':uid'     => $adminUserId,
-                ':subject' => $subject,
-                ':body'    => $body,
-            ]);
-        } catch (\Throwable $e) {
-            error_log('email_queue insert failed: ' . $e->getMessage());
+    // 1) Send directly via EmailService (primary — does NOT depend on DB template)
+    try {
+        require_once __DIR__ . '/../../services/Email/EmailService.php';
+        $emailService = new EmailService($db);
+        $directResult = $emailService->sendEmail(
+            $adminEmail,
+            $welcomeSubject,
+            $welcomeHtml,
+            $welcomeText,
+            'tenant_welcome',
+            $tenantId,
+            $adminUserId
+        );
+        if (!$directResult) {
+            error_log('Tenant welcome direct email failed for: ' . $adminEmail);
         }
+    } catch (\Throwable $e) {
+        error_log('Tenant welcome direct email exception: ' . $e->getMessage());
+    }
 
-        // Also send directly via the email template system
-        $emailResult = sendEmailTemplate($db, $contactEmail, 'tenant_welcome', [
-            'tenant_name'         => $input['name'],
-            'password_reset_link' => 'https://app.stamgast.nl/set-password?tenant=' . $input['slug'],
+    // 2) Also queue via email_queue table (fallback for batch processing)
+    try {
+        $stmt = $db->prepare(
+            'INSERT INTO `email_queue` (`tenant_id`, `user_id`, `subject`, `body_html`, `status`)
+             VALUES (:tid, :uid, :subject, :body, \'pending\')'
+        );
+        $stmt->execute([
+            ':tid'     => $tenantId,
+            ':uid'     => $adminUserId,
+            ':subject' => $welcomeSubject,
+            ':body'    => $welcomeHtml,
         ]);
-        if (!$emailResult['success']) {
-            error_log('Tenant welcome email failed: ' . ($emailResult['message'] ?? 'unknown'));
-        }
+    } catch (\Throwable $e) {
+        error_log('email_queue insert failed: ' . $e->getMessage());
     }
 
     // Audit log
@@ -430,4 +448,77 @@ function handleChangePassword(User $userModel, array $input, PDO $db): void
     );
 
     Response::success(['user_id' => $userId, 'message' => 'Wachtwoord succesvol gewijzigd']);
+}
+
+function handleChangeEmail(User $userModel, array $input, PDO $db): void
+{
+    $userId = (int) ($input['user_id'] ?? 0);
+    $tenantId = (int) ($input['tenant_id'] ?? 0);
+    $newEmail = trim($input['new_email'] ?? '');
+
+    // Validate required fields
+    if ($userId <= 0) {
+        Response::error('user_id is verplicht', 'MISSING_FIELD', 400);
+    }
+    if ($tenantId <= 0) {
+        Response::error('tenant_id is verplicht', 'MISSING_FIELD', 400);
+    }
+    if (empty($newEmail)) {
+        Response::error('Nieuw e-mailadres is verplicht', 'MISSING_FIELD', 400);
+    }
+    if (!isValidEmail($newEmail)) {
+        Response::error('Ongeldig e-mailadres', 'INVALID_EMAIL', 400);
+    }
+
+    // Find user
+    $user = $userModel->findById($userId);
+    if (!$user) {
+        Response::error('Gebruiker niet gevonden', 'USER_NOT_FOUND', 404);
+    }
+
+    // Check if user belongs to the specified tenant
+    if ((int) $user['tenant_id'] !== $tenantId) {
+        Response::error('Gebruiker behoort niet tot deze tenant', 'USER_NOT_IN_TENANT', 403);
+    }
+
+    // Cannot edit superadmins
+    if ($user['role'] === 'superadmin') {
+        Response::error('Kan superadmin e-mail niet wijzigen', 'FORBIDDEN', 403);
+    }
+
+    // Superadmin can ONLY change email of admin users
+    // Bartenders/gasten worden beheerd door de admin van de tenant
+    if ($user['role'] !== 'admin') {
+        Response::error(
+            'Superadmin kan alleen e-mail van admin-gebruikers wijzigen. Bartenders en gasten worden beheerd door de admin.',
+            'FORBIDDEN',
+            403
+        );
+    }
+
+    // No change needed
+    if ($newEmail === $user['email']) {
+        Response::success(['user_id' => $userId, 'message' => 'E-mailadres is al ingesteld']);
+    }
+
+    // Check email uniqueness within tenant
+    if ($userModel->emailExists($newEmail, $tenantId)) {
+        Response::error('Dit e-mailadres is al in gebruik binnen deze tenant', 'EMAIL_EXISTS', 409);
+    }
+
+    // Update email
+    $userModel->updateEmail($userId, $newEmail);
+
+    // Audit log
+    $audit = new Audit($db);
+    $audit->log(
+        $tenantId,
+        currentUserId(),
+        'user.email_changed',
+        'user',
+        $userId,
+        ['old_email' => $user['email'], 'new_email' => $newEmail]
+    );
+
+    Response::success(['user_id' => $userId, 'message' => 'E-mailadres succesvol gewijzigd']);
 }

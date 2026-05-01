@@ -307,7 +307,7 @@ $firstName = $_SESSION['first_name'] ?? 'Bartender';
                 if (status === 'suspended') {
                     alert('Dit account is geblokkeerd door de beheerder');
                     startScanner();
-                } else if (status === 'unverified') {
+                } else if (status === 'unverified' && result.verification_required !== false) {
                     showVerify();
                 } else {
                     showPayment();

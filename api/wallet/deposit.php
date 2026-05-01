@@ -16,6 +16,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/../../services/WalletService.php';
+require_once __DIR__ . '/../../models/User.php';
 
 if ($method !== 'POST') {
     Response::error('Method not allowed', 'METHOD_NOT_ALLOWED', 405);
@@ -35,8 +36,20 @@ if ($userId === null || $tenantId === null) {
     Response::unauthorized();
 }
 
+// Gated onboarding: only active accounts can deposit
+// Staff (admin, bartender) are always active — only guests need verification
+$db = Database::getInstance()->getConnection();
+$userModel = new User($db);
+$user = $userModel->findById($userId);
+if ($user && $user['role'] === 'guest' && ($user['account_status'] ?? 'unverified') !== 'active') {
+    Response::error(
+        'Je account moet eerst geactiveerd worden door de barman voordat je kunt opwaarderen',
+        'ACCOUNT_NOT_ACTIVE',
+        403
+    );
+}
+
 try {
-    $db = Database::getInstance()->getConnection();
     $walletService = new WalletService($db);
 
     $result = $walletService->createDeposit($userId, $tenantId, $amountCents);

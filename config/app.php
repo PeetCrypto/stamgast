@@ -7,19 +7,25 @@ declare(strict_types=1);
  */
 
 // --- ENVIRONMENT ---
-define('APP_ENV', 'development'); // 'development' | 'production'
+// Lokaal: geen .env → 'development' → APP_DEBUG=true
+// Productie: .env met APP_ENV=production → APP_DEBUG=false
+define('APP_ENV', getenv('APP_ENV') ?: 'development');
 define('APP_DEBUG', APP_ENV === 'development');
 
 // --- DATABASE ---
-define('DB_HOST', 'localhost');
-define('DB_PORT', 3306);
-define('DB_NAME', 'stamgast_db');
-define('DB_USER', 'root');
-define('DB_PASS', '');
+// Lokaal: geen .env → root / stamgast_db / leeg wachtwoord (Laragon defaults)
+// Productie: .env met Hostinger credentials
+define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
+define('DB_PORT', (int)(getenv('DB_PORT') ?: 3306));
+define('DB_NAME', getenv('DB_NAME') ?: 'stamgast_db');
+define('DB_USER', getenv('DB_USER') ?: 'root');
+define('DB_PASS', getenv('DB_PASS') ?: '');
 define('DB_CHARSET', 'utf8mb4');
 
 // --- SECURITY ---
-define('APP_PEPPER', 'change-this-to-a-random-string-in-production-32chars-min');
+// Lokaal: huidige pepper (bestaande accounts blijven werken)
+// Productie: .env met eigen sterke pepper
+define('APP_PEPPER', getenv('APP_PEPPER') ?: 'change-this-to-a-random-string-in-production-32chars-min');
 define('SESSION_TIMEOUT', 1800); // 30 minutes in seconds
 define('CSRF_TOKEN_LENGTH', 32);
 
@@ -30,15 +36,15 @@ define('QR_NONCE_LENGTH', 8); // bytes for random_bytes()
 // --- MOLLIE CONNECT (Platform-level) ---
 // ⚠️ SECURITY: Platform API key ONLY in server environment, NEVER in database
 // Tenant Mollie keys are DEPRECATED — all payments go through Mollie Connect
-define('MOLLIE_MODE_DEFAULT', 'mock'); // 'mock' | 'test' | 'live'
-define('MOLLIE_CONNECT_API_KEY', '');  // Platform Mollie API key (set via .env in production)
-define('MOLLIE_CONNECT_CLIENT_ID', ''); // Mollie Connect OAuth client ID
-define('MOLLIE_CONNECT_CLIENT_SECRET', ''); // Mollie Connect OAuth client secret
+define('MOLLIE_MODE_DEFAULT', getenv('MOLLIE_MODE_DEFAULT') ?: 'mock');
+define('MOLLIE_CONNECT_API_KEY', getenv('MOLLIE_CONNECT_API_KEY') ?: '');
+define('MOLLIE_CONNECT_CLIENT_ID', getenv('MOLLIE_CONNECT_CLIENT_ID') ?: '');
+define('MOLLIE_CONNECT_CLIENT_SECRET', getenv('MOLLIE_CONNECT_CLIENT_SECRET') ?: '');
 
 // --- PLATFORM FEE ---
-define('PLATFORM_FEE_DEFAULT_PERCENTAGE', 1.00); // Default 1%
-define('PLATFORM_FEE_DEFAULT_MIN_CENTS', 25);    // Default €0,25 minimum
-define('PLATFORM_FEE_BTW_PERCENTAGE', 21.00);    // 21% BTW over platform fee (Nederland)
+define('PLATFORM_FEE_DEFAULT_PERCENTAGE', (float)(getenv('PLATFORM_FEE_DEFAULT_PERCENTAGE') ?: 1.00));
+define('PLATFORM_FEE_DEFAULT_MIN_CENTS', (int)(getenv('PLATFORM_FEE_DEFAULT_MIN_CENTS') ?: 25));
+define('PLATFORM_FEE_BTW_PERCENTAGE', (float)(getenv('PLATFORM_FEE_BTW_PERCENTAGE') ?: 21.00));
 
 // --- WALLET LIMITS ---
 define('DEPOSIT_MIN_CENTS', 500);    // 5 euro minimum

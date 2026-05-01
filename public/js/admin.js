@@ -154,7 +154,7 @@
                 <td>${user.email}</td>
                 <td><span class="badge badge-${user.role}">${roleLabel(user.role)}</span></td>
                 <td>${user.tier_name || '-'}</td>
-                <td style="text-align: center;">${statusBadge(user.account_status)}</td>
+                <td style="text-align: center;">${user.role !== 'guest' ? '-' : statusBadge(user.account_status)}</td>
                 <td style="text-align: center;">${window.STAMGAST.formatCurrency(user.balance_cents)}</td>
                 <td style="text-align: center;">${formatDate(user.last_activity)}</td>
                 <td>

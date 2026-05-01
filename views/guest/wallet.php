@@ -21,7 +21,10 @@ $tenant = $_SESSION['tenant'] ?? null;
 $db = Database::getInstance()->getConnection();
 $userModel = new User($db);
 $accountStatus = $userModel->getAccountStatus((int) $user['user_id']);
-$isUnverified = ($accountStatus !== 'active');
+$tenantModel = new Tenant($db);
+$tenantData = $tenantModel->findById((int) ($user['tenant_id'] ?? 0));
+$verificationRequired = (bool) ($tenantData['verification_required'] ?? true);
+$isUnverified = ($accountStatus !== 'active' && $verificationRequired);
 
 require __DIR__ . '/../shared/header.php';
 ?>
