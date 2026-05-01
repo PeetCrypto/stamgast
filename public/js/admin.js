@@ -1,5 +1,5 @@
 /**
- * STAMGAST - Admin Dashboard Charts & Functionaliteit
+ * REGULR.vip - Admin Dashboard Charts & Functionaliteit
  * Admin: analytics, gebruikers, tiers, instellingen
  */
 (function() {
@@ -15,7 +15,7 @@
     // ============================================
     async function loadDashboardStats() {
         try {
-            const response = await window.STAMGAST.api('/admin/dashboard');
+            const response = await window.REGULR.api('/admin/dashboard');
             
             if (response.success) {
                 renderStatsCards(response.data);
@@ -42,7 +42,7 @@
                 if (valueEl) {
                     valueEl.textContent = card.id.includes('users') || card.id.includes('tiers') 
                         ? card.value 
-                        : window.STAMGAST.formatCurrency(card.value);
+                        : window.REGULR.formatCurrency(card.value);
                 }
             }
         });
@@ -86,7 +86,7 @@
             <div class="top-user-item">
                 <span class="rank">#${index + 1}</span>
                 <span class="name">${user.first_name} ${user.last_name}</span>
-                <span class="spent">${window.STAMGAST.formatCurrency(user.total_spent)}</span>
+                <span class="spent">${window.REGULR.formatCurrency(user.total_spent)}</span>
             </div>
         `).join('');
     }
@@ -116,7 +116,7 @@
             if (role) params.append('role', role);
             if (tier) params.append('tier', tier);
             
-            const response = await window.STAMGAST.api(`/admin/users?${params.toString()}`);
+            const response = await window.REGULR.api(`/admin/users?${params.toString()}`);
             
             if (response.success) {
                 usersData = response.data.users;
@@ -155,7 +155,7 @@
                 <td><span class="badge badge-${user.role}">${roleLabel(user.role)}</span></td>
                 <td>${user.tier_name || '-'}</td>
                 <td style="text-align: center;">${user.role !== 'guest' ? '-' : statusBadge(user.account_status)}</td>
-                <td style="text-align: center;">${window.STAMGAST.formatCurrency(user.balance_cents)}</td>
+                <td style="text-align: center;">${window.REGULR.formatCurrency(user.balance_cents)}</td>
                 <td style="text-align: center;">${formatDate(user.last_activity)}</td>
                 <td>
                     <button class="btn btn-sm btn-edit" data-id="${user.id}">Bewerk</button>
@@ -217,7 +217,7 @@
 
         // Validate required fields
         if (!data.first_name || !data.last_name || !data.email) {
-            window.STAMGAST.showError('Vul alle verplichte velden in');
+            window.REGULR.showError('Vul alle verplichte velden in');
             return;
         }
 
@@ -225,7 +225,7 @@
             // CREATE mode
             data.password = document.getElementById('user-password').value;
             if (!data.password || data.password.length < 8) {
-                window.STAMGAST.showError('Wachtwoord is verplicht en moet minimaal 8 tekens lang zijn');
+                window.REGULR.showError('Wachtwoord is verplicht en moet minimaal 8 tekens lang zijn');
                 return;
             }
             data.action = 'create';
@@ -236,20 +236,20 @@
         }
 
         try {
-            const response = await window.STAMGAST.api('/admin/users', {
+            const response = await window.REGULR.api('/admin/users', {
                 method: 'POST',
                 body: data
             });
 
             if (response.success) {
-                window.STAMGAST.showSuccess(isNewUser ? 'Gebruiker aangemaakt' : 'Gebruiker opgeslagen');
+                window.REGULR.showSuccess(isNewUser ? 'Gebruiker aangemaakt' : 'Gebruiker opgeslagen');
                 closeModal();
                 loadUsers(currentPage);
             } else {
                 throw new Error(response.error);
             }
         } catch (error) {
-            window.STAMGAST.showError(error.message);
+            window.REGULR.showError(error.message);
         }
     }
 
@@ -262,20 +262,20 @@
         }
 
         try {
-            const response = await window.STAMGAST.api('/admin/users', {
+            const response = await window.REGULR.api('/admin/users', {
                 method: 'POST',
                 body: { action: 'block', user_id: userId }
             });
 
             if (response.success) {
-                window.STAMGAST.showSuccess('Gebruiker geblokkeerd');
+                window.REGULR.showSuccess('Gebruiker geblokkeerd');
                 closeModal();
                 loadUsers(currentPage);
             } else {
                 throw new Error(response.error);
             }
         } catch (error) {
-            window.STAMGAST.showError(error.message);
+            window.REGULR.showError(error.message);
         }
     }
 
@@ -288,20 +288,20 @@
         }
 
         try {
-            const response = await window.STAMGAST.api('/admin/users', {
+            const response = await window.REGULR.api('/admin/users', {
                 method: 'POST',
                 body: { action: 'unblock', user_id: userId }
             });
 
             if (response.success) {
-                window.STAMGAST.showSuccess('Gebruiker gedeblokkeerd');
+                window.REGULR.showSuccess('Gebruiker gedeblokkeerd');
                 closeModal();
                 loadUsers(currentPage);
             } else {
                 throw new Error(response.error);
             }
         } catch (error) {
-            window.STAMGAST.showError(error.message);
+            window.REGULR.showError(error.message);
         }
     }
 
@@ -310,12 +310,12 @@
         const newPassword = document.getElementById('reset-password-input').value;
 
         if (!userId || userId <= 0) {
-            window.STAMGAST.showError('Geen gebruiker geselecteerd');
+            window.REGULR.showError('Geen gebruiker geselecteerd');
             return;
         }
 
         if (!newPassword || newPassword.length < 8) {
-            window.STAMGAST.showError('Wachtwoord moet minimaal 8 tekens lang zijn');
+            window.REGULR.showError('Wachtwoord moet minimaal 8 tekens lang zijn');
             return;
         }
 
@@ -324,19 +324,19 @@
         }
 
         try {
-            const response = await window.STAMGAST.api('/admin/users', {
+            const response = await window.REGULR.api('/admin/users', {
                 method: 'POST',
                 body: { action: 'reset_password', user_id: userId, new_password: newPassword }
             });
 
             if (response.success) {
-                window.STAMGAST.showSuccess('Wachtwoord gewijzigd');
+                window.REGULR.showSuccess('Wachtwoord gewijzigd');
                 document.getElementById('reset-password-input').value = '';
             } else {
                 throw new Error(response.error);
             }
         } catch (error) {
-            window.STAMGAST.showError(error.message);
+            window.REGULR.showError(error.message);
         }
     }
 
@@ -352,7 +352,7 @@
 async function loadTiers() {
     const grid = document.getElementById('packages-grid');
     try {
-        const response = await window.STAMGAST.api('/admin/tiers');
+        const response = await window.REGULR.api('/admin/tiers');
         
         if (response.success) {
             tiersData = response.data.tiers;
@@ -363,7 +363,7 @@ async function loadTiers() {
                 grid.innerHTML = `
                     <div class="empty-packages" style="grid-column: 1 / -1;">
                         <p style="color: var(--error, #f44336);">Fout bij laden: ${response.error || 'Onbekende fout'}</p>
-                        <button class="btn btn-secondary" onclick="window.STAMGAST.admin.loadTiers()" style="margin-top: var(--space-md);">Opnieuw proberen</button>
+                        <button class="btn btn-secondary" onclick="window.REGULR.admin.loadTiers()" style="margin-top: var(--space-md);">Opnieuw proberen</button>
                     </div>`;
             }
         }
@@ -375,7 +375,7 @@ async function loadTiers() {
                 <div class="empty-packages" style="grid-column: 1 / -1;">
                     <p style="color: var(--error, #f44336);">Kan pakketten niet laden</p>
                     <p style="font-size:0.8rem; opacity:0.6;">${error.message || 'Netwerkfout'}</p>
-                    <button class="btn btn-secondary" onclick="window.STAMGAST.admin.loadTiers()" style="margin-top: var(--space-md);">Opnieuw proberen</button>
+                    <button class="btn btn-secondary" onclick="window.REGULR.admin.loadTiers()" style="margin-top: var(--space-md);">Opnieuw proberen</button>
                 </div>`;
         }
     }
@@ -480,11 +480,11 @@ async function saveTier() {
 
     // Client-side validation
     if (!topupEur || topupEur < 100) {
-        window.STAMGAST.showError('Opwaardeerbedrag moet minimaal €100 zijn');
+        window.REGULR.showError('Opwaardeerbedrag moet minimaal €100 zijn');
         return;
     }
     if (topupEur > 500) {
-        window.STAMGAST.showError('Opwaardeerbedrag mag maximaal €500 zijn');
+        window.REGULR.showError('Opwaardeerbedrag mag maximaal €500 zijn');
         return;
     }
 
@@ -501,34 +501,34 @@ async function saveTier() {
     };
 
     try {
-        const response = await window.STAMGAST.api('/admin/tiers', {
+        const response = await window.REGULR.api('/admin/tiers', {
             method: 'POST',
             body: data
         });
 
         if (response.success) {
-            window.STAMGAST.showSuccess('Pakket opgeslagen');
+            window.REGULR.showSuccess('Pakket opgeslagen');
             closeModal();
             loadTiers();
         }
     } catch (error) {
-        window.STAMGAST.showError(error.message);
+        window.REGULR.showError(error.message);
     }
 }
 
 async function toggleTier(tierId, active) {
     try {
-        const response = await window.STAMGAST.api('/admin/tiers', {
+        const response = await window.REGULR.api('/admin/tiers', {
             method: 'POST',
             body: { action: 'toggle', tier_id: tierId, is_active: active }
         });
 
         if (response.success) {
-            window.STAMGAST.showSuccess(response.data.message);
+            window.REGULR.showSuccess(response.data.message);
             loadTiers();
         }
     } catch (error) {
-        window.STAMGAST.showError(error.message);
+        window.REGULR.showError(error.message);
     }
 }
 
@@ -538,17 +538,17 @@ async function deleteTier(tierId) {
     }
 
     try {
-        const response = await window.STAMGAST.api('/admin/tiers', {
+        const response = await window.REGULR.api('/admin/tiers', {
             method: 'POST',
             body: { action: 'delete', tier_id: tierId }
         });
 
         if (response.success) {
-            window.STAMGAST.showSuccess('Pakket verwijderd');
+            window.REGULR.showSuccess('Pakket verwijderd');
             loadTiers();
         }
     } catch (error) {
-        window.STAMGAST.showError(error.message);
+        window.REGULR.showError(error.message);
     }
 }
 
@@ -557,7 +557,7 @@ async function deleteTier(tierId) {
     // ============================================
     async function loadSettings() {
         try {
-            const response = await window.STAMGAST.api('/admin/settings');
+            const response = await window.REGULR.api('/admin/settings');
             
             if (response.success) {
                 populateSettings(response.data);
@@ -596,11 +596,11 @@ async function deleteTier(tierId) {
             const maxSize = 2 * 1024 * 1024; // 2MB
 
             if (!allowedTypes.includes(file.type)) {
-                window.STAMGAST.showError('Alleen PNG, JPG, WebP en SVG bestanden toegestaan');
+                window.REGULR.showError('Alleen PNG, JPG, WebP en SVG bestanden toegestaan');
                 return;
             }
             if (file.size > maxSize) {
-                window.STAMGAST.showError(
+                window.REGULR.showError(
                     'Bestand te groot (max 2MB, jouw bestand is ' +
                     (file.size / 1024 / 1024).toFixed(1) + 'MB)'
                 );
@@ -645,13 +645,13 @@ async function deleteTier(tierId) {
                 if (logoRemove) logoRemove.checked = false;
 
             } catch (error) {
-                window.STAMGAST.showError('Logo upload mislukt: ' + error.message);
+                window.REGULR.showError('Logo upload mislukt: ' + error.message);
                 return;
             }
         } else if (logoRemove && logoRemove.checked) {
             // Handle logo removal
             try {
-                await window.STAMGAST.api('/admin/settings', {
+                await window.REGULR.api('/admin/settings', {
                     method: 'POST',
                     body: { logo_path: '' }
                 });
@@ -671,7 +671,7 @@ async function deleteTier(tierId) {
                 if (removeField) removeField.style.display = 'none';
 
             } catch (error) {
-                window.STAMGAST.showError('Logo verwijderen mislukt: ' + error.message);
+                window.REGULR.showError('Logo verwijderen mislukt: ' + error.message);
                 return;
             }
         }
@@ -693,18 +693,18 @@ async function deleteTier(tierId) {
         // Admin cannot toggle these modules — they are read-only in the settings view.
 
         try {
-            const response = await window.STAMGAST.api('/admin/settings', {
+            const response = await window.REGULR.api('/admin/settings', {
                 method: 'POST',
                 body: data
             });
 
             if (response.success) {
-                window.STAMGAST.showSuccess('Instellingen opgeslagen');
+                window.REGULR.showSuccess('Instellingen opgeslagen');
                 // Reload to apply new colors + header state
                 window.location.reload();
             }
         } catch (error) {
-            window.STAMGAST.showError(error.message);
+            window.REGULR.showError(error.message);
         }
     }
 
@@ -746,7 +746,7 @@ async function deleteTier(tierId) {
             if (img) {
                 const span = document.createElement('span');
                 span.style.cssText = 'font-weight:600;color:var(--text-primary);';
-                span.textContent = document.title ? document.title.split(' - ')[0] : 'STAMGAST';
+                span.textContent = document.title ? document.title.split(' - ')[0] : 'REGULR.vip';
                 centerLink.replaceChild(span, img);
             }
         }
@@ -813,7 +813,7 @@ async function deleteTier(tierId) {
         };
 
         try {
-            const response = await window.STAMGAST.api('/marketing/segment', {
+            const response = await window.REGULR.api('/marketing/segment', {
                 method: 'POST',
                 body: { criteria }
             });
@@ -825,7 +825,7 @@ async function deleteTier(tierId) {
                 throw new Error(response.error || 'Segmentatie mislukt');
             }
         } catch (error) {
-            window.STAMGAST.showError('Segmentatie fout: ' + error.message);
+            window.REGULR.showError('Segmentatie fout: ' + error.message);
         }
     }
 
@@ -886,7 +886,7 @@ async function deleteTier(tierId) {
         const userIds = Array.from(checkedBoxes).map(cb => parseInt(cb.dataset.userId));
 
         if (userIds.length === 0) {
-            window.STAMGAST.showError('Selecteer minimaal 1 gast');
+            window.REGULR.showError('Selecteer minimaal 1 gast');
             return;
         }
 
@@ -894,7 +894,7 @@ async function deleteTier(tierId) {
         const bodyHtml = document.getElementById('compose-body')?.value?.trim();
 
         if (!subject || !bodyHtml) {
-            window.STAMGAST.showError('Vul onderwerp en bericht in');
+            window.REGULR.showError('Vul onderwerp en bericht in');
             return;
         }
 
@@ -905,19 +905,19 @@ async function deleteTier(tierId) {
         }
 
         try {
-            const response = await window.STAMGAST.api('/marketing/compose', {
+            const response = await window.REGULR.api('/marketing/compose', {
                 method: 'POST',
                 body: { subject, body_html: bodyHtml, user_ids: userIds }
             });
 
             if (response.success) {
-                window.STAMGAST.showSuccess('E-mails toegevoegd aan de wachtrij (' + userIds.length + ' berichten)');
+                window.REGULR.showSuccess('E-mails toegevoegd aan de wachtrij (' + userIds.length + ' berichten)');
                 loadQueueStatus();
             } else {
                 throw new Error(response.error || 'Verzenden mislukt');
             }
         } catch (error) {
-            window.STAMGAST.showError('Verzendfout: ' + error.message);
+            window.REGULR.showError('Verzendfout: ' + error.message);
         } finally {
             if (sendBtn) {
                 sendBtn.disabled = false;
@@ -928,7 +928,7 @@ async function deleteTier(tierId) {
 
     async function loadQueueStatus() {
         try {
-            const response = await window.STAMGAST.api('/marketing/queue');
+            const response = await window.REGULR.api('/marketing/queue');
 
             if (response.success) {
                 const data = response.data;
@@ -1067,7 +1067,7 @@ async function deleteTier(tierId) {
         if (!query || query.length < 2) return;
 
         try {
-            const response = await window.STAMGAST.api('/admin/users?search=' + encodeURIComponent(query) + '&limit=10');
+            const response = await window.REGULR.api('/admin/users?search=' + encodeURIComponent(query) + '&limit=10');
             if (response.success) {
                 renderPushUserResults(response.data.users);
             }
@@ -1129,7 +1129,7 @@ async function deleteTier(tierId) {
         const body = document.getElementById('push-body')?.value?.trim();
 
         if (!title || !body) {
-            window.STAMGAST.showError('Vul titel en bericht in');
+            window.REGULR.showError('Vul titel en bericht in');
             return;
         }
 
@@ -1139,24 +1139,24 @@ async function deleteTier(tierId) {
         try {
             let response;
             if (pushMode === 'broadcast') {
-                response = await window.STAMGAST.api('/push/broadcast', {
+                response = await window.REGULR.api('/push/broadcast', {
                     method: 'POST',
                     body: { title, body }
                 });
             } else {
                 if (!selectedUserId) {
-                    window.STAMGAST.showError('Selecteer eerst een gast');
+                    window.REGULR.showError('Selecteer eerst een gast');
                     if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = '👤 Verstuur naar geselecteerde gast'; }
                     return;
                 }
-                response = await window.STAMGAST.api('/push/send_notification', {
+                response = await window.REGULR.api('/push/send_notification', {
                     method: 'POST',
                     body: { user_id: selectedUserId, title, body }
                 });
             }
 
             if (response.success) {
-                window.STAMGAST.showSuccess('Notificatie verzonden! (' + (response.data.sent || 0) + ' afgeleverd)');
+                window.REGULR.showSuccess('Notificatie verzonden! (' + (response.data.sent || 0) + ' afgeleverd)');
                 document.getElementById('push-title').value = '';
                 document.getElementById('push-body').value = '';
                 updatePushPreview();
@@ -1166,7 +1166,7 @@ async function deleteTier(tierId) {
                 throw new Error(response.error || 'Verzenden mislukt');
             }
         } catch (error) {
-            window.STAMGAST.showError('Fout: ' + error.message);
+            window.REGULR.showError('Fout: ' + error.message);
         } finally {
             if (sendBtn) {
                 sendBtn.disabled = false;
@@ -1182,7 +1182,7 @@ async function deleteTier(tierId) {
         container.innerHTML = '<p style="color:var(--text-secondary);font-size:14px;text-align:center;padding:var(--space-md);">Geschiedenis ophalen...</p>';
 
         try {
-            const response = await window.STAMGAST.api('/admin/dashboard');
+            const response = await window.REGULR.api('/admin/dashboard');
             if (response.success) {
                 // Update stats counters
                 if (response.data.push_stats) {
@@ -1349,8 +1349,8 @@ async function deleteTier(tierId) {
     }
 
     // Export
-    window.STAMGAST = window.STAMGAST || {};
-    window.STAMGAST.admin = {
+    window.REGULR = window.REGULR || {};
+    window.REGULR.admin = {
         init: initAdmin,
         loadDashboard: loadDashboardStats,
         loadUsers,

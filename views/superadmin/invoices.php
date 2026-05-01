@@ -2,7 +2,7 @@
 declare(strict_types=1);
 /**
  * Superadmin - Invoice Management
- * STAMGAST Loyalty Platform
+ * REGULR.vip Loyalty Platform
  *
  * List invoices, generate new ones, change status, view details.
  */

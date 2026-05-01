@@ -1,5 +1,5 @@
 -- ==========================================================================
--- STAMGAST - Package Tiers Migration
+-- REGULR.vip - Package Tiers Migration
 -- Adds topup_amount_cents, is_active, sort_order to loyalty_tiers
 -- ==========================================================================
 

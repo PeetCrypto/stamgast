@@ -1,5 +1,5 @@
 /**
- * STAMGAST - App Initializer & Router
+ * REGULR.vip - App Initializer & Router
  * Midnight Lounge PWA Framework
  */
 (function() {
@@ -32,7 +32,7 @@
     // ============================================
     function log(...args) {
         if (APP_CONFIG.DEBUG) {
-            console.log('[STAMGAST]', ...args);
+            console.log('[REGULR.vip]', ...args);
         }
     }
 
@@ -239,19 +239,19 @@
             await checkSession();
         }
         
-        // Route-specific initialization (use STAMGAST namespace, not global functions)
+        // Route-specific initialization (use REGULR.vip namespace, not global functions)
         switch (route) {
             case 'wallet':
-                if (window.STAMGAST?.wallet?.init) window.STAMGAST.wallet.init();
+                if (window.REGULR?.wallet?.init) window.REGULR.wallet.init();
                 else if (typeof initWallet === 'function') initWallet();
                 break;
             case 'qr':
-                if (window.STAMGAST?.qr?.init) window.STAMGAST.qr.init();
+                if (window.REGULR?.qr?.init) window.REGULR.qr.init();
                 else if (typeof initQR === 'function') initQR();
                 break;
             case 'scanner':
             case 'payment':
-                if (window.STAMGAST?.pos?.init) window.STAMGAST.pos.init();
+                if (window.REGULR?.pos?.init) window.REGULR.pos.init();
                 else if (typeof initPOS === 'function') initPOS();
                 break;
             case 'admin':
@@ -259,12 +259,12 @@
             case 'adminTiers':
             case 'adminSettings':
             case 'adminMarketing':
-                if (window.STAMGAST?.admin?.init) window.STAMGAST.admin.init();
+                if (window.REGULR?.admin?.init) window.REGULR.admin.init();
                 else if (typeof initAdmin === 'function') initAdmin();
                 break;
             case 'superadmin':
             case 'superadminTenants':
-                if (window.STAMGAST?.superadmin?.init) window.STAMGAST.superadmin.init();
+                if (window.REGULR?.superadmin?.init) window.REGULR.superadmin.init();
                 else if (typeof initSuperAdmin === 'function') initSuperAdmin();
                 break;
         }
@@ -357,7 +357,7 @@
         
         // Update page title with tenant name
         if (tenant.name) {
-            document.title = `${tenant.name} - Stamgast`;
+            document.title = `${tenant.name} - REGULR.vip`;
         }
     }
 
@@ -365,7 +365,7 @@
     // INITIALIZATION
     // ============================================
     async function init() {
-        log('Initializing STAMGAST App...');
+        log('Initializing REGULR.vip App...');
         
         // Setup navigation
         setupNavigation();
@@ -394,13 +394,13 @@
         // Periodic session check
         setInterval(checkSession, APP_CONFIG.SESSION_CHECK_INTERVAL);
         
-        log('STAMGAST App initialized');
+        log('REGULR.vip App initialized');
     }
 
     // ============================================
     // EXPORTS
     // ============================================
-    window.STAMGAST = {
+    window.REGULR = {
         // State
         state: AppState,
         

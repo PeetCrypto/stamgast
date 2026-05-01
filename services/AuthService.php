@@ -181,7 +181,7 @@ class AuthService
 
         // Superadmins operate at platform level — no tenant branding
         if ($user['role'] === 'superadmin') {
-            $_SESSION['tenant_name']      = defined('APP_NAME') ? APP_NAME : 'STAMGAST';
+            $_SESSION['tenant_name']      = defined('APP_NAME') ? APP_NAME : 'REGULR.vip';
             $_SESSION['brand_color']      = '#FFC107';
             $_SESSION['secondary_color']  = '#FF9800';
             $_SESSION['tenant_logo']      = '';

@@ -1,6 +1,6 @@
 <?php
 /**
- * STAMGAST - Admin Push Notificaties
+ * REGULR.vip - Admin Push Notificaties
  * Admin: broadcast en individuele push notificaties versturen
  */
 declare(strict_types=1);

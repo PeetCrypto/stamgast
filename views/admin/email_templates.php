@@ -4,7 +4,7 @@
  * 
  * UI component for managing admin invite and marketing email templates
  * 
- * @package STAMGAST
+ * @package REGULR.vip
  * @subpackage Views\Admin
  */
 ?>

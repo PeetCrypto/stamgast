@@ -299,9 +299,9 @@ class MarketingService
         $headers = [
             'MIME-Version: 1.0',
             'Content-Type: text/html; charset=UTF-8',
-            'From: noreply@stamgast.nl',
-            'Reply-To: noreply@stamgast.nl',
-            'X-Mailer: STAMGAST-PHP',
+            'From: noreply@REGULR.vip.nl',
+            'Reply-To: noreply@REGULR.vip.nl',
+            'X-Mailer: REGULR.vip-PHP',
         ];
 
         return mail($to, $subject, $bodyHtml, implode("\r\n", $headers));

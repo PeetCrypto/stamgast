@@ -2,7 +2,7 @@
 declare(strict_types=1);
 /**
  * Guest Profile Page
- * STAMGAST Loyalty Platform
+ * REGULR.vip Loyalty Platform
  */
 
 require_once __DIR__ . '/../../../models/User.php';

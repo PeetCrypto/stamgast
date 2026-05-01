@@ -79,7 +79,7 @@ if (isset($_POST['email_settings_action'])) {
         'smtp_user'       => trim($_POST['smtp_user'] ?? ''),
         'smtp_pass'       => trim($_POST['smtp_pass'] ?? ''),
         'from_email'      => trim($_POST['from_email'] ?? 'no-reply@regulr.vip'),
-        'from_name'       => trim($_POST['from_name'] ?? 'STAMGAST'),
+        'from_name'       => trim($_POST['from_name'] ?? 'REGULR.vip'),
         'is_active'       => 1,
     ];
 
@@ -377,7 +377,7 @@ $hasApiKey     = !empty($settings['mollie_connect_api_key']);
                     <div class="form-group">
                         <label>Afzender Naam</label>
                         <input type="text" name="from_name" class="form-input"
-                               value="<?= sanitize($config['from_name'] ?? 'STAMGAST') ?>">
+                               value="<?= sanitize($config['from_name'] ?? 'REGULR.vip') ?>">
                     </div>
                 </div>
 

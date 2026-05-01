@@ -591,7 +591,7 @@ public function createDeposit(int $userId, int $tenantId, int $amountCents): arr
 
     $payment = $mollie->createPayment(
         $amountCents,
-        'Opwaarderen STAMGAST wallet',
+        'Opwaarderen REGULR.vip wallet',
         $redirectUrl,
         $webhookUrl,
         (string) $userId,

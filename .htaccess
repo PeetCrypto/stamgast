@@ -1,12 +1,21 @@
 # ==========================================================================
-# STAMGAST - Apache Configuration
+# REGULR.vip - Apache Configuration
 # Security headers, rewrite rules, and access restrictions
 # ==========================================================================
 
 # --- ENABLE REWRITE ENGINE ---
 RewriteEngine On
 
-# --- SET BASE PATH (adjust if in subdirectory) ---
+# --- FORCE HTTPS (safe for .test/.local dev domains) ---
+RewriteCond %{HTTPS} off
+RewriteCond %{HTTP_HOST} !^localhost [NC]
+RewriteCond %{HTTP_HOST} !\.local$ [NC]
+RewriteCond %{HTTP_HOST} !\.test$ [NC]
+RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# --- SET BASE PATH (adjust if in subdirectory on Hostinger) ---
+# Lokaal:  RewriteBase /
+# Productie (subdirectory): RewriteBase /app/
 RewriteBase /
 
 # --- SECURITY HEADERS ---

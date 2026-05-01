@@ -1,6 +1,6 @@
 <?php
 /**
- * STAMGAST - Admin Marketing Studio
+ * REGULR.vip - Admin Marketing Studio
  * Admin: segmentatie, email composer, queue status
  */
 declare(strict_types=1);

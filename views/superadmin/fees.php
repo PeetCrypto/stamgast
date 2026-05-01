@@ -2,7 +2,7 @@
 declare(strict_types=1);
 /**
  * Superadmin - Platform Fee Dashboard
- * STAMGAST Loyalty Platform
+ * REGULR.vip Loyalty Platform
  *
  * Shows platform-wide fee totals, per-tenant fee breakdown,
  * and date range filtering.

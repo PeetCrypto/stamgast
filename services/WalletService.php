@@ -178,7 +178,7 @@ class WalletService
 
         $payment = $mollie->createPayment(
             $amountCents,
-            'Opwaarderen STAMGAST wallet',
+            'Opwaarderen REGULR.vip wallet',
             $redirectUrl,
             $webhookUrl,
             (string) $userId,

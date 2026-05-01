@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 /**
  * General Helper Functions
- * Utility functions used throughout the STAMGAST platform
+ * Utility functions used throughout the REGULR.vip platform
  */
 
 /**

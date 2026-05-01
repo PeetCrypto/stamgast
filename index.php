@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * STAMGAST - Entry Point / Router
+ * REGULR.vip - Entry Point / Router
  * Routes all requests to the correct API endpoint or View template
  */
 
@@ -132,6 +132,40 @@ if (str_starts_with($apiRouteCheck, 'api/')) {
             ] : null,
         ]);
     }
+    exit;
+}
+
+// --- Join Route: /j/{slug} — QR code guest registration (no auth required) ---
+$joinRoute = $route;
+if (str_starts_with($joinRoute, 'stamgast/')) {
+    $joinRoute = substr($joinRoute, 9);
+}
+if (str_starts_with($joinRoute, 'j/')) {
+    $slug = substr($joinRoute, 2);
+
+    // Security: only lowercase alphanumeric + hyphens
+    if ($slug === '' || !preg_match('/^[a-z0-9][a-z0-9-]{0,98}[a-z0-9]$/', $slug)) {
+        http_response_code(404);
+        echo '<h1>404 — Ongeldige link</h1>';
+        exit;
+    }
+
+    require_once __DIR__ . '/models/Tenant.php';
+    $db = Database::getInstance()->getConnection();
+    $tenant = (new Tenant($db))->findBySlug($slug);
+
+    if (!$tenant || !(bool) $tenant['is_active']) {
+        http_response_code(404);
+        echo '<h1>404 — Locatie niet gevonden</h1><p>Deze link bestaat niet of is niet meer actief.</p>';
+        exit;
+    }
+
+    // Already logged in at this tenant → go to dashboard
+    if (isLoggedIn() && currentTenantId() === (int) $tenant['id']) {
+        redirect('/dashboard');
+    }
+
+    require VIEWS_PATH . 'guest/join.php';
     exit;
 }
 
@@ -401,6 +435,13 @@ function handleApiRoute(string $route, string $method): void
             switch ($action) {
                 case 'generate_pwa_icon':
                     require __DIR__ . '/api/assets/generate_pwa_icon.php';
+                    break;
+                case 'generate_join_qr':
+                    require_once __DIR__ . '/middleware/auth_check.php';
+                    authCheck();
+                    require_once __DIR__ . '/middleware/role_check.php';
+                    requireAdmin();
+                    require __DIR__ . '/api/assets/generate_join_qr.php';
                     break;
                 default:
                     Response::notFound('Asset endpoint not found');

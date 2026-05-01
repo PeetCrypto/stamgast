@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 /**
- * STAMGAST - Gast Wallet & Opwaarderen
+ * REGULR.vip - Gast Wallet & Opwaarderen
  * Gast: Wallet bekijken en opwaarderen via Mollie
  */
 

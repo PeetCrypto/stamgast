@@ -2,7 +2,7 @@
 declare(strict_types=1);
 /**
  * Admin Dashboard - Volledig Nieuw
- * STAMGAST Loyalty Platform
+ * REGULR.vip Loyalty Platform
  * 
  * Secties:
  * 1. Live Monitor (Vandaag & Nu)

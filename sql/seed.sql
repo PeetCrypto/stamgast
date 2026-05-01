@@ -1,5 +1,5 @@
-﻿-- ==========================================================================
--- STAMGAST LOYALTY PLATFORM - SEED DATA
+-- ==========================================================================
+-- REGULR.vip LOYALTY PLATFORM - SEED DATA
 -- Test data for development (1 tenant, admins, guests, tiers)
 --
 -- PHASE 1 (MOCK): Tenant starts in mock mode with connect_status='active'
@@ -13,11 +13,11 @@
 SET NAMES utf8mb4;
 
 -- -------------------------------------------------------------------------
--- 1. TENANT: "Cafe De Stamgast" (demo establishment)
+-- 1. TENANT: "Cafe De REGULR.vip" (demo establishment)
 --    mollie_status='mock' + mollie_connect_status='active' = mock payments
 -- -------------------------------------------------------------------------
 INSERT INTO `tenants` (`uuid`, `name`, `slug`, `brand_color`, `secondary_color`, `secret_key`, `mollie_status`, `mollie_connect_status`, `mollie_connect_id`, `platform_fee_percentage`, `platform_fee_min_cents`, `whitelisted_ips`, `feature_push`, `feature_marketing`) VALUES
-('550e8400-e29b-41d4-a716-446655440000', 'Cafe De Stamgast', 'cafe-de-stamgast', '#FFC107', '#FF9800', 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2', 'mock', 'active', 'org_mock_test', 1.00, 25, '127.0.0.1\n::1\n192.168.1.0/24', 1, 1);
+('550e8400-e29b-41d4-a716-446655440000', 'Cafe De REGULR.vip', 'cafe-de-regulr', '#FFC107', '#FF9800', 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2', 'mock', 'active', 'org_mock_test', 1.00, 25, '127.0.0.1\n::1\n192.168.1.0/24', 1, 1);
 
 -- -------------------------------------------------------------------------
 -- 2. USERS

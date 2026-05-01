@@ -4,7 +4,7 @@
  * 
  * Configuration for email system
  * 
- * @package STAMGAST
+ * @package REGULR.vip
  * @subpackage Config
  */
 

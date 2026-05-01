@@ -1,5 +1,5 @@
 -- ==========================================================================
--- STAMGAST EMAIL SYSTEM MIGRATION
+-- REGULR.vip EMAIL SYSTEM MIGRATION
 -- MySQL 8.0+ | UTF-8MB4
 -- Run via: migrate_email.php (NOT directly in phpMyAdmin due to HTML content)
 -- ==========================================================================
@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS `email_config` (
     `smtp_user`         TEXT            NOT NULL COMMENT 'AES-256-CBC encrypted',
     `smtp_pass`         TEXT            NOT NULL COMMENT 'AES-256-CBC encrypted',
     `from_email`        VARCHAR(255)    NOT NULL DEFAULT 'no-reply@regulr.vip',
-    `from_name`         VARCHAR(255)    NOT NULL DEFAULT 'STAMGAST',
+    `from_name`         VARCHAR(255)    NOT NULL DEFAULT 'REGULR.vip',
     `is_active`         BOOLEAN         NOT NULL DEFAULT 1,
     `created_at`        TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at`        TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

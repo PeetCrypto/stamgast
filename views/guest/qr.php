@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 /**
- * STAMGAST - Gast QR Code
+ * REGULR.vip - Gast QR Code
  * Gast: Dynamische QR code voor betalingen
  */
 

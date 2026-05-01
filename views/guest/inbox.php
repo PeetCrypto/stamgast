@@ -2,7 +2,7 @@
 declare(strict_types=1);
 /**
  * Guest Inbox
- * STAMGAST Loyalty Platform — Notification feed with delete & mark-read
+ * REGULR.vip Loyalty Platform — Notification feed with delete & mark-read
  */
 
 $db = Database::getInstance()->getConnection();

@@ -1,4 +1,4 @@
-# STAMGAST LOYALTY PLATFORM - DATABASE FIX
+# REGULR.vip LOYALTY PLATFORM - DATABASE FIX
 
 ## Problem
 The admin dashboard was showing a 500 Internal Server Error with the message:

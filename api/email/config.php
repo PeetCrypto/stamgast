@@ -67,7 +67,7 @@ switch ($method) {
         $input['smtp_encryption'] = $input['smtp_encryption'] ?? 'tls';
         $input['smtp_pass'] = $input['smtp_pass'] ?? '';
         $input['from_email'] = $input['from_email'] ?? 'no-reply@regulr.vip';
-        $input['from_name'] = $input['from_name'] ?? 'STAMGAST';
+        $input['from_name'] = $input['from_name'] ?? 'REGULR.vip';
         $input['is_active'] = $input['is_active'] ?? 1;
 
         if ($emailConfig->saveConfig($input)) {

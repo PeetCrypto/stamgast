@@ -2,7 +2,7 @@
 declare(strict_types=1);
 /**
  * Login Page - Midnight Lounge Design
- * STAMGAST Loyalty Platform
+ * REGULR.vip Loyalty Platform
  */
 
 // Redirect if already logged in
@@ -194,8 +194,7 @@ $csrfToken  = generateCSRFToken();
         <!-- Footer Links -->
         <div class="auth-footer">
             <p class="text-secondary text-sm">
-                Nog geen account?
-                <a href="<?= BASE_URL ?>/register">Registreer nu</a>
+                Scan de QR code bij de bar om je aan te melden
             </p>
         </div>
 

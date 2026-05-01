@@ -27,13 +27,26 @@ $firstName  = trim($input['first_name'] ?? '');
 $lastName   = trim($input['last_name'] ?? '');
 $birthdate  = trim($input['birthdate'] ?? '');
 $tenantId   = isset($input['tenant_id']) ? (int) $input['tenant_id'] : null;
+$tenantSlug = trim($input['tenant_slug'] ?? '');
 
 // Validate required fields
 if (empty($email) || empty($password) || empty($firstName) || empty($lastName)) {
     Response::error('Alle verplichte velden moeten ingevuld zijn', 'MISSING_FIELDS', 400);
 }
 
-// Determine tenant_id
+// Resolve tenant_id — strategy: slug > explicit id > session
+if (!empty($tenantSlug)) {
+    $tenantModel = new Tenant(Database::getInstance()->getConnection());
+    $tenantBySlug = $tenantModel->findBySlug($tenantSlug);
+    if ($tenantBySlug === null) {
+        Response::error('Ongeldige locatie', 'INVALID_TENANT', 400);
+    }
+    if (!(bool) $tenantBySlug['is_active']) {
+        Response::error('Deze locatie is niet actief', 'TENANT_INACTIVE', 403);
+    }
+    $tenantId = (int) $tenantBySlug['id'];
+}
+
 if ($tenantId === null) {
     $tenantId = currentTenantId();
 }
@@ -93,7 +106,7 @@ $audit->log(
 try {
     $tenantModel = new Tenant($db);
     $tenant      = $tenantModel->findById($tenantId);
-    $tenantName  = $tenant ? $tenant['name'] : 'STAMGAST';
+    $tenantName  = $tenant ? $tenant['name'] : 'REGULR.vip';
 
     $verificationCode = strtoupper(substr(bin2hex(random_bytes(4)), 0, 8));
 

@@ -1,5 +1,5 @@
 /**
- * STAMGAST Service Worker
+ * REGULR.vip Service Worker
  * Midnight Lounge PWA — Cache Strategy
  *
  * - Cache-first for shell assets (CSS, JS, fonts)
@@ -7,7 +7,7 @@
  * - Push event placeholder (Phase 5)
  */
 
-const CACHE_VERSION = 'stamgast-shell-v2';
+const CACHE_VERSION = 'regulr-shell-v3';
 
 // Derive base path from service worker registration scope
 // Works for both domain root (stamgast.test) and subdirectory (localhost/stamgast)
@@ -223,7 +223,7 @@ self.addEventListener('push', (event) => {
 
     try {
         const data = event.data.json();
-        const title = data.title || 'STAMGAST';
+        const title = data.title || 'REGULR.vip';
         const options = {
             body: data.body || '',
             icon: '/icons/favicon.png',

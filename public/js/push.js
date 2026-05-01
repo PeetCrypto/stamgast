@@ -1,5 +1,5 @@
 /**
- * STAMGAST - Push Notification Handler
+ * REGULR.vip - Push Notification Handler
  * Web Push API met VAPID keys
  *
  * Functionaliteit:
@@ -100,8 +100,8 @@
      */
     async function subscribe() {
         if (!isPushSupported()) {
-            if (window.STAMGAST?.showError) {
-                window.STAMGAST.showError('Push notificaties worden niet ondersteund door deze browser');
+            if (window.REGULR?.showError) {
+                window.REGULR.showError('Push notificaties worden niet ondersteund door deze browser');
             }
             return false;
         }
@@ -109,8 +109,8 @@
         try {
             const permission = await requestPermission();
             if (permission !== 'granted') {
-                if (window.STAMGAST?.showError) {
-                    window.STAMGAST.showError('Push notificaties zijn uitgeschakeld. Controleer je browser instellingen.');
+                if (window.REGULR?.showError) {
+                    window.REGULR.showError('Push notificaties zijn uitgeschakeld. Controleer je browser instellingen.');
                 }
                 return false;
             }
@@ -125,8 +125,8 @@
                 // Check if VAPID key is available
                 if (!PUSH_CONFIG.VAPID_PUBLIC_KEY) {
                     console.warn('[Push] No VAPID public key configured');
-                    if (window.STAMGAST?.showError) {
-                        window.STAMGAST.showError('Push notificaties zijn nog niet geconfigureerd door de beheerder.');
+                    if (window.REGULR?.showError) {
+                        window.REGULR.showError('Push notificaties zijn nog niet geconfigureerd door de beheerder.');
                     }
                     return false;
                 }
@@ -144,16 +144,16 @@
             if (success) {
                 isSubscribed = true;
                 updatePushUI(true);
-                if (window.STAMGAST?.showSuccess) {
-                    window.STAMGAST.showSuccess('Push notificaties ingeschakeld!');
+                if (window.REGULR?.showSuccess) {
+                    window.REGULR.showSuccess('Push notificaties ingeschakeld!');
                 }
             }
 
             return success;
         } catch (error) {
             console.error('[Push] Subscribe error:', error);
-            if (window.STAMGAST?.showError) {
-                window.STAMGAST.showError('Kon push notificaties niet inschakelen: ' + error.message);
+            if (window.REGULR?.showError) {
+                window.REGULR.showError('Kon push notificaties niet inschakelen: ' + error.message);
             }
             return false;
         }
@@ -175,8 +175,8 @@
             isSubscribed = false;
             updatePushUI(false);
 
-            if (window.STAMGAST?.showSuccess) {
-                window.STAMGAST.showSuccess('Push notificaties uitgeschakeld');
+            if (window.REGULR?.showSuccess) {
+                window.REGULR.showSuccess('Push notificaties uitgeschakeld');
             }
             return true;
         } catch (error) {
@@ -217,8 +217,8 @@
                     : '',
             };
 
-            if (window.STAMGAST?.api) {
-                const response = await window.STAMGAST.api('/push/subscribe', {
+            if (window.REGULR?.api) {
+                const response = await window.REGULR.api('/push/subscribe', {
                     method: 'POST',
                     body: data,
                 });
@@ -251,8 +251,8 @@
      */
     async function removeSubscriptionFromServer(subscription) {
         try {
-            if (window.STAMGAST?.api) {
-                await window.STAMGAST.api('/push/subscribe', {
+            if (window.REGULR?.api) {
+                await window.REGULR.api('/push/subscribe', {
                     method: 'DELETE',
                     body: { endpoint: subscription.endpoint },
                 });
@@ -400,8 +400,8 @@
         navigator.serviceWorker.addEventListener('message', (event) => {
             if (event.data && event.data.type === 'PUSH_NOTIFICATION') {
                 const { title, body } = event.data;
-                if (window.STAMGAST?.showSuccess) {
-                    window.STAMGAST.showSuccess(body || title, 8000);
+                if (window.REGULR?.showSuccess) {
+                    window.REGULR.showSuccess(body || title, 8000);
                 }
             }
         });
@@ -410,8 +410,8 @@
     // ============================================
     // EXPORTS
     // ============================================
-    window.STAMGAST = window.STAMGAST || {};
-    window.STAMGAST.push = {
+    window.REGULR = window.REGULR || {};
+    window.REGULR.push = {
         init: initPush,
         subscribe: subscribe,
         unsubscribe: unsubscribe,

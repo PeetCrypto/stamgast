@@ -2,7 +2,7 @@
 declare(strict_types=1);
 /**
  * Superadmin - Tenant Detail View
- * STAMGAST Loyalty Platform
+ * REGULR.vip Loyalty Platform
  * Shows: NAW info (editable), stats, users with role management
  */
 

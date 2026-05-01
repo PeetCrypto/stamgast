@@ -1,6 +1,6 @@
 <?php
 /**
- * STAMGAST - Admin Gebruikersbeheer
+ * REGULR.vip - Admin Gebruikersbeheer
  * Admin: gebruikers bekijken, aanmaken, rollen wijzigen, blokkeren, wachtwoord resetten
  */
 $firstName = $_SESSION['first_name'] ?? 'Admin';

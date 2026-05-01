@@ -46,7 +46,7 @@ $baseUrl = "{$scheme}://{$host}";
 
 // Build manifest
 $manifest = [
-    'name'             => $tenantName . ' - STAMGAST',
+    'name'             => $tenantName . ' - REGULR.vip',
     'short_name'       => $tenantName,
     'description'      => $tenantName . ' Loyaliteitsplatform',
     'start_url'        => '/',

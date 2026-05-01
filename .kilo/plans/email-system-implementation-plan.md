@@ -1,4 +1,4 @@
-# STAMGAST Email System Implementation Plan
+# REGULR.vip Email System Implementation Plan
 
 ## Overview
 This document outlines the implementation plan for the email system in the REGULR.vip Loyalty Platform, including the email template system, provider integration, and administrative interfaces.

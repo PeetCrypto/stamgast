@@ -1,6 +1,6 @@
 <?php
 /**
- * STAMGAST - Admin Instellingen
+ * REGULR.vip - Admin Instellingen
  * Admin: tenant instellingen beheren
  */
 declare(strict_types=1);
@@ -82,6 +82,40 @@ if (!$tenant) {
             </div>
         </div>
 
+        <!-- QR Code voor Gasten -->
+        <?php
+        // Build full join URL for QR code
+        $scheme  = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $host    = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        $slug    = $tenant['slug'] ?? 'unknown';
+        $joinUrl = "{$scheme}://{$host}" . BASE_URL . "/j/{$slug}";
+        $qrImgUrl = BASE_URL . "/api/assets/generate_join_qr?size=300";
+        ?>
+        <div id="qr-section" style="margin-bottom: var(--space-xl);">
+            <h2 style="margin-bottom: var(--space-md); color: var(--accent-primary);">QR Code voor Gasten</h2>
+            <p class="text-sm" style="color: var(--text-secondary); margin-bottom: var(--space-md);">
+                Print deze QR code en plaats op tafels, bierviltjes of aan de wand. Gasten die scannen komen direct op jouw registratiepagina.
+            </p>
+            <div class="form-group">
+                <label>Registratie URL</label>
+                <input type="text" class="form-input" value="<?= sanitize($joinUrl) ?>" readonly onclick="this.select();" style="opacity: 0.7; cursor: text;">
+                <small class="help-text">Klik om te selecteren. Deze URL staat in de QR code.</small>
+            </div>
+            <div style="text-align: center; margin-top: var(--space-lg);">
+                <!-- QR Code (printbaar gebied) -->
+                <div id="qr-print-area" style="padding: 24px; background: #ffffff; border-radius: 12px; display: inline-block; max-width: 400px;">
+                    <img src="<?= $qrImgUrl ?>" alt="QR Code - <?= sanitize($joinUrl) ?>" style="width: 300px; height: 300px; display: block; margin: 0 auto;">
+                    <p style="color: #000; font-family: Inter, sans-serif; font-size: 14px; margin-top: 12px; font-weight: 600;"><?= sanitize($tenant['name'] ?? 'REGULR.vip') ?></p>
+                    <p style="color: #666; font-family: Inter, sans-serif; font-size: 12px; margin-top: 4px;">Scan om je aan te melden</p>
+                </div>
+                <br>
+                <div style="margin-top: var(--space-md); display: flex; gap: var(--space-sm); justify-content: center; flex-wrap: wrap;">
+                    <a href="<?= $qrImgUrl ?>" class="btn btn-primary" download="qr-<?= sanitize($slug) ?>.png">Download QR Code (PNG)</a>
+                    <button type="button" onclick="printQR()" class="btn btn-secondary">Print QR Code</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Betalingen -->
         <div style="margin-bottom: var(--space-xl);">
             <h2 style="margin-bottom: var(--space-md); color: var(--accent-primary);">Betalingen</h2>
@@ -123,20 +157,16 @@ if (!$tenant) {
                     <input type="number" id="verification-soft-limit" class="form-input" value="<?= (int) ($tenant['verification_soft_limit'] ?? 15) ?>" min="3">
                 </div>
                 <div class="form-group">
-                    <label for="verification-hard-limit">Maximale limiet per barman/uur</label>
-                    <input type="number" id="verification-hard-limit" class="form-input" value="<?= (int) ($tenant['verification_hard_limit'] ?? 30) ?>" min="5">
-                </div>
-                <div class="form-group">
-                    <label for="verification-cooldown-sec">Cooldown na mismatch (sec)</label>
-                    <input type="number" id="verification-cooldown-sec" class="form-input" value="<?= (int) ($tenant['verification_cooldown_sec'] ?? 180) ?>" min="0" max="600">
-                </div>
-                <div class="form-group">
                     <label for="verification-max-attempts">Max pogingen per gast/24u</label>
                     <input type="number" id="verification-max-attempts" class="form-input" value="<?= (int) ($tenant['verification_max_attempts'] ?? 2) ?>" min="1" max="10">
                 </div>
             </div>
+            
+            <div class="form-group">
+                <label for="verification-cooldown-sec">Cooldown na mismatch (sec)</label>
+                <input type="number" id="verification-cooldown-sec" class="form-input" value="<?= (int) ($tenant['verification_cooldown_sec'] ?? 180) ?>" min="0" max="600">
+            </div>
         </div>
-
         <!-- Features (READ-ONLY — bepaald door platform beheerder) -->
         <div style="margin-bottom: var(--space-xl);">
             <h2 style="margin-bottom: var(--space-md); color: var(--accent-primary);">Modules
@@ -168,6 +198,19 @@ if (!$tenant) {
 
 <!-- Alerts -->
 <div class="alerts-container"></div>
+
+<!-- Print function for QR code -->
+<script>
+function printQR() {
+    var printArea = document.getElementById('qr-print-area');
+    if (printArea) {
+        var printWindow = window.open('', '_blank', 'width=800,height=900');
+        printWindow.document.write('<html><head><title>QR Code</title></head><body style="margin: 40px; text-align: center;">' + printArea.innerHTML + '</body></html>');
+        printWindow.document.close();
+        printWindow.print();
+    }
+}
+</script>
 
 <script src="<?= BASE_URL ?>/public/js/app.js"></script>
 <script src="<?= BASE_URL ?>/public/js/admin.js"></script>

@@ -4,7 +4,7 @@
  * 
  * Helper functions for sending emails throughout the application
  * 
- * @package STAMGAST
+ * @package REGULR.vip
  * @subpackage Services
  */
 

@@ -1,5 +1,5 @@
 /**
- * STAMGAST - QR Generatie & Weergave
+ * REGULR.vip - QR Generatie & Weergave
  * Gast: Dynamische QR code voor betalingen
  */
 (function() {
@@ -17,7 +17,7 @@
     // ============================================
     async function generateQR() {
         try {
-            const response = await window.STAMGAST.api('/qr/generate');
+            const response = await window.REGULR.api('/qr/generate');
             
             if (response.success) {
                 qrData = response.data;
@@ -29,7 +29,7 @@
             throw new Error(response.error || 'Failed to generate QR');
         } catch (error) {
             console.error('QR generation error:', error);
-            window.STAMGAST.showError('Kon QR code niet genereren');
+            window.REGULR.showError('Kon QR code niet genereren');
             return null;
         }
     }
@@ -196,7 +196,7 @@
                 
             } catch (error) {
                 console.error('Scanner error:', error);
-                window.STAMGAST.showError('Kon camera niet starten');
+                window.REGULR.showError('Kon camera niet starten');
             }
         });
     }
@@ -242,7 +242,7 @@
     // ============================================
     async function validateQR(qrPayload) {
         try {
-            const response = await window.STAMGAST.api('/pos/scan', {
+            const response = await window.REGULR.api('/pos/scan', {
                 method: 'POST',
                 body: {
                     qr_payload: qrPayload
@@ -289,7 +289,7 @@
                     ${userData.tier ? `<span class="tier-badge">${userData.tier.name}</span>` : ''}
                 </div>
                 <div class="wallet-preview">
-                    <span>Saldo: ${window.STAMGAST.formatCurrency(userData.wallet?.balance_cents || 0)}</span>
+                    <span>Saldo: ${window.REGULR.formatCurrency(userData.wallet?.balance_cents || 0)}</span>
                 </div>
             </div>
         `;
@@ -322,9 +322,9 @@
         console.log('QR initialized');
     }
 
-    // Export to global STAMGAST namespace
-    window.STAMGAST = window.STAMGAST || {};
-    window.STAMGAST.qr = {
+    // Export to global REGULR.vip namespace
+    window.REGULR = window.REGULR || {};
+    window.REGULR.qr = {
         init: initQR,
         generate: generateQR,
         validate: validateQR,
@@ -336,7 +336,7 @@
     window.initQR = initQR;
 
     // NOTE: No auto-init here. Initialization is exclusively handled by
-    // app.js via the route handler (window.STAMGAST.qr.init()).
+    // app.js via the route handler (window.REGULR.qr.init()).
     // This prevents the double-init race condition where qr.js auto-init
     // and app.js handleRoute() both fire generateQR() simultaneously.
 

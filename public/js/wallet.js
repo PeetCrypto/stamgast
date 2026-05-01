@@ -1,5 +1,5 @@
 /**
- * STAMGAST - Wallet Functionaliteit
+ * REGULR.vip - Wallet Functionaliteit
  * Gast: Wallet bekijken & opwaarderen via dynamische pakketten
  */
 (function() {
@@ -14,7 +14,7 @@
     // ============================================
     async function loadWalletData() {
         try {
-            const response = await window.STAMGAST.api('/wallet/balance');
+            const response = await window.REGULR.api('/wallet/balance');
             
             if (response.success) {
                 walletData = response.data;
@@ -25,7 +25,7 @@
             throw new Error(response.error || 'Failed to load wallet');
         } catch (error) {
             console.error('Wallet load error:', error);
-            window.STAMGAST.showError('Kon wallet niet laden');
+            window.REGULR.showError('Kon wallet niet laden');
             return null;
         }
     }
@@ -38,12 +38,12 @@
         const tierEl = document.getElementById('wallet-tier');
 
         if (balanceEl) {
-            balanceEl.textContent = window.STAMGAST.formatCurrency(walletData.balance_cents);
+            balanceEl.textContent = window.REGULR.formatCurrency(walletData.balance_cents);
             animateValue(balanceEl, walletData.balance_cents);
         }
 
         if (pointsEl) {
-            pointsEl.textContent = window.STAMGAST.formatPoints(walletData.points_cents);
+            pointsEl.textContent = window.REGULR.formatPoints(walletData.points_cents);
         }
 
         if (tierEl && walletData.tier) {
@@ -76,7 +76,7 @@
         depositProcessing = true;
         
         try {
-            const response = await window.STAMGAST.api('/wallet/deposit', {
+            const response = await window.REGULR.api('/wallet/deposit', {
                 method: 'POST',
                 body: {
                     amount_cents: amountCents
@@ -85,7 +85,7 @@
 
             if (response.success && response.data.status === 'mock') {
                 // Mock mode - deposit was processed instantly server-side
-                window.STAMGAST.showSuccess('€' + (amountCents / 100).toFixed(2) + ' toegevoegd!');
+                window.REGULR.showSuccess('€' + (amountCents / 100).toFixed(2) + ' toegevoegd!');
                 await loadWalletData();
             } else if (response.success && response.data.checkout_url) {
                 // Test/Live mode - redirect to Mollie checkout
@@ -95,7 +95,7 @@
             }
         } catch (error) {
             console.error('Deposit error:', error);
-            window.STAMGAST.showError('Kon niet opwaarderen. Probeer het later opnieuw.');
+            window.REGULR.showError('Kon niet opwaarderen. Probeer het later opnieuw.');
         } finally {
             depositProcessing = false;
         }
@@ -109,7 +109,7 @@
         if (!container) return;
 
         try {
-            const response = await window.STAMGAST.api('/wallet/packages');
+            const response = await window.REGULR.api('/wallet/packages');
 
             if (response.success) {
                 packagesData = response.data.packages || [];
@@ -186,7 +186,7 @@
         limit = limit || 20;
 
         try {
-            const response = await window.STAMGAST.api('/wallet/history?page=' + page + '&limit=' + limit);
+            const response = await window.REGULR.api('/wallet/history?page=' + page + '&limit=' + limit);
             
             if (response.success) {
                 return response.data;
@@ -195,7 +195,7 @@
             throw new Error(response.error || 'Failed to load history');
         } catch (error) {
             console.error('History load error:', error);
-            window.STAMGAST.showError('Kon geschiedenis niet laden');
+            window.REGULR.showError('Kon geschiedenis niet laden');
             return null;
         }
     }
@@ -228,7 +228,7 @@
                     '<div class="transaction-date">' + date + '</div>' +
                 '</div>' +
                 '<div class="transaction-amount ' + (isPositive ? 'positive' : 'negative') + '">' +
-                    (isPositive ? '+' : '') + window.STAMGAST.formatCurrency(amount) +
+                    (isPositive ? '+' : '') + window.REGULR.formatCurrency(amount) +
                 '</div>' +
             '</div>';
         }).join('');
@@ -252,7 +252,7 @@
 
         // Gated onboarding: skip deposit flow for unverified accounts
         // The PHP view already renders a verification banner instead of packages
-        if (window.STAMGAST.state.accountStatus === 'unverified') {
+        if (window.REGULR.state.accountStatus === 'unverified') {
             console.log('Wallet: account not verified, skipping deposit flow');
             return;
         }
@@ -273,8 +273,8 @@
     }
 
     // Export to global
-    window.STAMGAST = window.STAMGAST || {};
-    window.STAMGAST.wallet = {
+    window.REGULR = window.REGULR || {};
+    window.REGULR.wallet = {
         init: initWallet,
         load: loadWalletData,
         deposit: initDeposit,

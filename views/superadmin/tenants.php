@@ -2,7 +2,7 @@
 declare(strict_types=1);
 /**
  * Superadmin - Tenant Management
- * STAMGAST Loyalty Platform
+ * REGULR.vip Loyalty Platform
  */
 
 require_once __DIR__ . '/../../models/Tenant.php';

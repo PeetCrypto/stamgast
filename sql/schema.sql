@@ -1,5 +1,5 @@
 -- ==========================================================================
--- STAMGAST LOYALTY PLATFORM - COMPLETE DATABASE SCHEMA
+-- REGULR.vip LOYALTY PLATFORM - COMPLETE DATABASE SCHEMA
 -- MySQL 8.0+ | UTF-8MB4 | Multi-Tenant Isolated
 -- ==========================================================================
 

@@ -1,6 +1,6 @@
 <?php
 /**
- * STAMGAST - Admin Pakketten Configuratie
+ * REGULR.vip - Admin Pakketten Configuratie
  * Admin: loyalty pakketten beheren (Brons, Silver, Goud, Platina, custom)
  */
 $firstName = $_SESSION['first_name'] ?? 'Admin';

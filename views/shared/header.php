@@ -21,10 +21,11 @@ $tenantLogo = $_SESSION['tenant_logo'] ?? ''; // Tenant uploaded logo URL
     <meta name="theme-color" content="#0f0f0f">
     <meta name="description" content="<?= sanitize($tenantName) ?> - Loyalty platform">
     <meta name="csrf-token" content="<?= $csrfToken ?>">
-    <title><?= sanitize($tenantName) ?> - STAMGAST</title>
+    <title><?= sanitize($tenantName) ?> - REGULR.vip</title>
 
     <!-- Favicon -->
     <link rel="icon" type="image/png" sizes="32x32" href="<?= BASE_URL ?>/icons/favicon.png">
+    <link rel="icon" type="image/x-icon" href="<?= BASE_URL ?>/favicon.ico">
     <link rel="apple-touch-icon" href="<?= BASE_URL ?>/icons/favicon.png">
 
     <!-- PWA Manifest -->

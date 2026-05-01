@@ -1,5 +1,5 @@
 /**
- * STAMGAST - Bartender POS Interface
+ * REGULR.vip - Bartender POS Interface
  * Scanner & Betaling Verwerking
  *
  * Used by the standalone /scan and /payment views (now redirect to /bartender).
@@ -110,8 +110,8 @@
     // ============================================
     // EXPORTS
     // ============================================
-    window.STAMGAST = window.STAMGAST || {};
-    window.STAMGAST.pos = {
+    window.REGULR = window.REGULR || {};
+    window.REGULR.pos = {
         validateQR: validateQR,
         processPayment: processPayment,
         calculateDiscounts: calculateDiscounts,

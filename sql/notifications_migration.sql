@@ -1,5 +1,5 @@
 -- ==========================================================================
--- STAMGAST - Notifications Table Migration
+-- REGULR.vip - Notifications Table Migration
 -- Adds a dedicated notifications table for guest inbox with soft-delete
 -- ==========================================================================
 
