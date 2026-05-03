@@ -226,6 +226,9 @@ $sessionTenantName = $_SESSION['tenant_name'] ?? APP_NAME;
 
         <!-- Footer Links -->
         <div class="auth-footer">
+            <p class="text-secondary text-sm" style="margin-bottom: 0.5rem;">
+                <a href="<?= BASE_URL ?>/j/<?= sanitize($tenantSlug) ?>/forgot-password">Wachtwoord vergeten?</a>
+            </p>
             <p class="text-secondary text-sm">
                 Nog geen account? <a href="<?= BASE_URL ?>/j/<?= sanitize($tenantSlug) ?>/register">Registeren</a>
             </p>

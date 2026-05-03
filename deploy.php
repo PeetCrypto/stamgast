@@ -312,6 +312,7 @@ $migrations = [
     'gated_onboarding_migration.sql'    => 'Account status + verificatie',
     'notifications_migration.sql'       => 'Notifications',
     'verification_toggle_migration.sql' => 'Verification toggle',
+    'password_reset_migration.sql'       => 'Password reset tokens',
     'add_created_at_column.sql'         => 'Transactions created_at',
 ];
 
@@ -402,7 +403,7 @@ $requiredTables = [
     'users', 'tenants', 'wallets', 'transactions', 'loyalty_tiers',
     'audit_log', 'platform_fees', 'platform_invoices', 'platform_fee_log',
     'email_config', 'email_templates', 'email_log',
-    'notifications', 'verification_attempts',
+    'notifications', 'verification_attempts', 'password_resets',
 ];
 
 try {

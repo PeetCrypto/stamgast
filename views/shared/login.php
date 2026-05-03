@@ -199,7 +199,7 @@ $csrfToken  = generateCSRFToken();
         <!-- Footer Links -->
         <div class="auth-footer">
             <p class="text-secondary text-sm">
-                Scan de QR code bij de bar om je aan te melden
+                <a href="<?= BASE_URL ?>/forgot-password">Wachtwoord vergeten?</a>
             </p>
         </div>
 

@@ -149,13 +149,21 @@ if (str_starts_with($joinRoute, 'stamgast/')) {
 if (str_starts_with($joinRoute, 'j/')) {
     $slugPart = substr($joinRoute, 2);
 
-    // Determine if this is /j/{slug}/register or just /j/{slug}
+    // Determine if this is /j/{slug}/register, /j/{slug}/forgot-password, /j/{slug}/reset-password, or just /j/{slug}
     $isRegister = false;
+    $isForgotPassword = false;
+    $isResetPassword = false;
     $slug = $slugPart;
 
     if (str_ends_with($slugPart, '/register')) {
         $isRegister = true;
-        $slug = substr($slugPart, 0, -9); // strip '/register'
+        $slug = substr($slugPart, 0, -9);
+    } elseif (str_ends_with($slugPart, '/forgot-password')) {
+        $isForgotPassword = true;
+        $slug = substr($slugPart, 0, -16);
+    } elseif (str_ends_with($slugPart, '/reset-password')) {
+        $isResetPassword = true;
+        $slug = substr($slugPart, 0, -15);
     }
 
     // Security: only lowercase alphanumeric + hyphens
@@ -180,10 +188,15 @@ if (str_starts_with($joinRoute, 'j/')) {
         redirect('/dashboard');
     }
 
-    // /j/{slug}/register → registration page (join.php)
-    // /j/{slug}           → login page (guest/login.php)
+    // /j/{slug}/register        → registration page (join.php)
+    // /j/{slug}/forgot-password  → forgot password page
+    // /j/{slug}/reset-password   → reset password page
+    // /j/{slug}                  → login page (guest/login.php)
     if ($isRegister) {
         require VIEWS_PATH . 'guest/join.php';
+    } elseif ($isForgotPassword || $isResetPassword) {
+        $viewFile = $isForgotPassword ? 'shared/forgot-password.php' : 'shared/reset-password.php';
+        require VIEWS_PATH . $viewFile;
     } else {
         require VIEWS_PATH . 'guest/login.php';
     }
@@ -226,6 +239,12 @@ function handleApiRoute(string $route, string $method): void
                     break;
                 case 'session':
                     require __DIR__ . '/api/auth/session.php';
+                    break;
+                case 'forgot-password':
+                    require __DIR__ . '/api/auth/forgot-password.php';
+                    break;
+                case 'reset-password':
+                    require __DIR__ . '/api/auth/reset-password.php';
                     break;
                 default:
                     Response::notFound('Auth endpoint not found');
@@ -502,8 +521,10 @@ function handleViewRoute(string $route, string $method): void
     // --- Map routes to view files ---
     $viewMap = [
         // Shared (no auth required)
-        'login'    => 'shared/login.php',
-        'register' => 'shared/register.php',
+        'login'           => 'shared/login.php',
+        'register'        => 'shared/register.php',
+        'forgot-password' => 'shared/forgot-password.php',
+        'reset-password'  => 'shared/reset-password.php',
 
         // Guest
         'dashboard' => 'guest/dashboard.php',
