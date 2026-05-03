@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 /**
- * Join Landing Page — QR Code Guest Registration
+ * Guest Login Page — Tenant-branded (via /j/{slug})
  * Self-contained: tenant context from $tenant (DB via slug), NOT from $_SESSION
  *
  * Expected variables (set by index.php route handler):
@@ -26,7 +26,7 @@ $sessionTenantName = $_SESSION['tenant_name'] ?? APP_NAME;
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#0f0f0f">
     <meta name="csrf-token" content="<?= $csrfToken ?>">
-    <title>Word lid — <?= sanitize($tenantName) ?></title>
+    <title>Inloggen — <?= sanitize($tenantName) ?></title>
 
     <!-- PWA Manifest (tenant-branded) -->
     <link rel="manifest" href="<?= BASE_URL ?>/manifest.json.php">
@@ -109,45 +109,6 @@ $sessionTenantName = $_SESSION['tenant_name'] ?? APP_NAME;
             font-size: 12px;
         }
 
-        .age-warning {
-            font-size: 12px;
-            color: var(--text-muted);
-            margin-top: 0.5rem;
-        }
-
-        .form-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: var(--space-md);
-        }
-
-        .form-hint {
-            display: block;
-            margin-top: 0.25rem;
-        }
-
-        .text-success {
-            color: var(--success);
-        }
-
-        .password-strength {
-            height: 4px;
-            background: var(--glass-border);
-            border-radius: 2px;
-            margin-top: 0.5rem;
-            overflow: hidden;
-        }
-
-        .password-strength__bar {
-            height: 100%;
-            width: 0%;
-            transition: width 0.3s ease, background-color 0.3s ease;
-        }
-
-        .password-strength__bar.weak   { width: 33%; background: var(--error); }
-        .password-strength__bar.medium { width: 66%; background: var(--warning); }
-        .password-strength__bar.strong { width: 100%; background: var(--success); }
-
         .form-group {
             margin-bottom: 1.25rem;
         }
@@ -192,17 +153,17 @@ $sessionTenantName = $_SESSION['tenant_name'] ?? APP_NAME;
             </div>
             <h1 style="font-size: 20px; margin-top: var(--space-md);">Je bent al lid bij <?= sanitize($sessionTenantName) ?></h1>
             <p class="text-secondary text-sm">
-                Om je aan te melden bij <strong><?= sanitize($tenantName) ?></strong> moet je eerst uitloggen bij je huidige locatie.
+                Om in te loggen bij <strong><?= sanitize($tenantName) ?></strong> moet je eerst uitloggen bij je huidige locatie.
             </p>
             <a href="<?= BASE_URL ?>/logout" class="btn btn-primary" style="margin-top: var(--space-md);">Uitloggen</a>
         </div>
 
         <?php else: ?>
         <!-- ============================================================ -->
-        <!-- NORMAL: Registration form (anonymous user)                   -->
+        <!-- NORMAL: Login form (anonymous user)                          -->
         <!-- ============================================================ -->
 
-        <!-- Logo / Brand -->
+        <!-- Logo / Brand — centered -->
         <div class="auth-header">
             <div class="auth-logo">
                 <?php if (!empty($tenantLogo)): ?>
@@ -220,8 +181,8 @@ $sessionTenantName = $_SESSION['tenant_name'] ?? APP_NAME;
                     </svg>
                 <?php endif; ?>
             </div>
-            <h1>Word lid</h1>
-            <p class="text-secondary text-sm">Maak een account bij <?= sanitize($tenantName) ?></p>
+            <h1>Welkom terug</h1>
+            <p class="text-secondary text-sm">Log in bij <?= sanitize($tenantName) ?></p>
         </div>
 
         <!-- Error/Success Alerts -->
@@ -237,61 +198,26 @@ $sessionTenantName = $_SESSION['tenant_name'] ?? APP_NAME;
             </div>
         <?php endif; ?>
 
-        <!-- Registration Form -->
-        <form id="register-form" class="auth-form" novalidate>
+        <!-- Login Form -->
+        <form id="login-form" class="auth-form" novalidate>
             <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
             <input type="hidden" id="tenant_slug" value="<?= sanitize($tenantSlug) ?>">
-
-            <!-- Name Fields -->
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="first_name">Voornaam</label>
-                    <input type="text" id="first_name" name="first_name" class="form-input"
-                           placeholder="Jan" required minlength="2" maxlength="100"
-                           autocomplete="given-name" autofocus>
-                </div>
-                <div class="form-group">
-                    <label for="last_name">Achternaam</label>
-                    <input type="text" id="last_name" name="last_name" class="form-input"
-                           placeholder="Jansen" required minlength="2" maxlength="100"
-                           autocomplete="family-name">
-                </div>
-            </div>
 
             <div class="form-group">
                 <label for="email">E-mailadres</label>
                 <input type="email" id="email" name="email" class="form-input"
-                       placeholder="jouw@email.nl" required autocomplete="email">
-            </div>
-
-            <div class="form-group">
-                <label for="birthdate">Geboortedatum</label>
-                <input type="date" id="birthdate" name="birthdate" class="form-input"
-                       required autocomplete="bday">
-                <p class="age-warning">Je moet minimaal 18 jaar oud zijn om alcohol te bestellen.</p>
+                       placeholder="jouw@email.nl" required autocomplete="email" autofocus>
             </div>
 
             <div class="form-group">
                 <label for="password">Wachtwoord</label>
                 <input type="password" id="password" name="password" class="form-input"
-                       placeholder="Minimaal 8 tekens" required minlength="8"
-                       autocomplete="new-password">
-                <div class="password-strength">
-                    <div class="password-strength__bar" id="password-strength-bar"></div>
-                </div>
-                <small class="form-hint" id="password-hint">Gebruik minimaal 8 tekens</small>
-            </div>
-
-            <div class="form-group">
-                <label for="password_confirm">Bevestig wachtwoord</label>
-                <input type="password" id="password_confirm" name="password_confirm"
-                       class="form-input" placeholder="Herhaal je wachtwoord"
-                       required autocomplete="new-password">
+                       placeholder="••••••••" required autocomplete="current-password">
             </div>
 
             <button type="submit" class="btn btn-primary btn-lg">
-                <span id="register-text">Account aanmaken</span>
-                <svg id="register-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" style="display:none;">
+                <span id="login-text">Inloggen</span>
+                <svg id="login-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" style="display:none;">
                     <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="2" opacity="0.25"/>
                     <path d="M10 2C5.58 2 2 5.58 2 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                 </svg>
@@ -301,7 +227,7 @@ $sessionTenantName = $_SESSION['tenant_name'] ?? APP_NAME;
         <!-- Footer Links -->
         <div class="auth-footer">
             <p class="text-secondary text-sm">
-                Al een account? <a href="<?= BASE_URL ?>/j/<?= sanitize($tenantSlug) ?>">Inloggen</a>
+                Nog geen account? <a href="<?= BASE_URL ?>/j/<?= sanitize($tenantSlug) ?>/register">Registeren</a>
             </p>
         </div>
 
@@ -320,133 +246,58 @@ $sessionTenantName = $_SESSION['tenant_name'] ?? APP_NAME;
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-    const form = document.getElementById('register-form');
+    const form = document.getElementById('login-form');
     if (!form) return; // Cross-tenant view has no form
 
     const btn = form.querySelector('button[type="submit"]');
-    const registerText = document.getElementById('register-text');
-    const registerIcon = document.getElementById('register-icon');
+    const loginText = document.getElementById('login-text');
+    const loginIcon = document.getElementById('login-icon');
     const csrfToken = document.querySelector('input[name="csrf_token"]').value;
     const tenantSlug = document.getElementById('tenant_slug').value;
 
-    // --- Password strength ---
-    const passwordInput = document.getElementById('password');
-    const strengthBar = document.getElementById('password-strength-bar');
-    const passwordHint = document.getElementById('password-hint');
-
-    passwordInput.addEventListener('input', () => {
-        const password = passwordInput.value;
-        const strength = calculatePasswordStrength(password);
-
-        strengthBar.className = 'password-strength__bar';
-        if (password.length > 0) {
-            strengthBar.classList.add(strength);
-            updateHint(strength);
-        } else {
-            strengthBar.style.width = '0%';
-            passwordHint.textContent = 'Gebruik minimaal 8 tekens';
-        }
-    });
-
-    function calculatePasswordStrength(p) {
-        let s = 0;
-        if (p.length >= 8)  s++;
-        if (p.length >= 12) s++;
-        if (/[a-z]/.test(p) && /[A-Z]/.test(p)) s++;
-        if (/[0-9]/.test(p)) s++;
-        if (/[^a-zA-Z0-9]/.test(p)) s++;
-        if (s <= 1) return 'weak';
-        if (s <= 3) return 'medium';
-        return 'strong';
-    }
-
-    function updateHint(strength) {
-        const hints = {
-            weak:   'Zwak wachtwoord - voeg meer tekens, hoofdletters en cijfers toe',
-            medium: 'Gemiddelde sterkte - kan sterker',
-            strong: 'Sterk wachtwoord!'
-        };
-        passwordHint.textContent = hints[strength];
-        passwordHint.className = 'form-hint ' + (strength === 'strong' ? 'text-success' : '');
-    }
-
-    // --- Form submission ---
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
 
-        const firstName  = document.getElementById('first_name').value.trim();
-        const lastName   = document.getElementById('last_name').value.trim();
-        const email      = document.getElementById('email').value.trim();
-        const birthdate  = document.getElementById('birthdate').value;
-        const password   = document.getElementById('password').value;
-        const confirm    = document.getElementById('password_confirm').value;
+        const email = document.getElementById('email').value.trim();
+        const password = document.getElementById('password').value;
 
-        // Client-side validation
-        if (!firstName || !lastName || !email || !birthdate || !password || !confirm) {
+        if (!email || !password) {
             showError('Vul alle velden in.');
             return;
         }
 
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(email)) {
-            showError('Ongeldig e-mailadres.');
-            return;
-        }
-
-        const birthDate = new Date(birthdate);
-        const today = new Date();
-        let age = today.getFullYear() - birthDate.getFullYear();
-        const monthDiff = today.getMonth() - birthDate.getMonth();
-        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-            age--;
-        }
-        if (age < 15) {
-            showError('Je moet minimaal 18 jaar oud zijn om alcohol te bestellen.');
-            return;
-        }
-
-        if (password.length < 8) {
-            showError('Wachtwoord moet minimaal 8 tekens lang zijn.');
-            return;
-        }
-
-        if (password !== confirm) {
-            showError('Wachtwoorden komen niet overeen.');
-            return;
-        }
-
-        // Loading state
         btn.disabled = true;
-        registerText.textContent = 'Bezig...';
-        registerIcon.style.display = 'block';
+        loginText.textContent = 'Bezig...';
+        loginIcon.style.display = 'block';
 
         try {
-            const response = await fetch((window.__BASE_URL || '') + '/api/auth/register', {
+            const response = await fetch((window.__BASE_URL || '') + '/api/auth/login', {
                 method: 'POST',
+                credentials: 'same-origin',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRF-Token': csrfToken
                 },
                 body: JSON.stringify({
-                    first_name: firstName,
-                    last_name: lastName,
                     email: email,
-                    birthdate: birthdate,
                     password: password,
-                    tenant_slug: tenantSlug   // ← KEY: tenant context via slug
+                    tenant_slug: tenantSlug
                 })
             });
 
-            const data = await response.json();
+            let data;
+            try {
+                data = await response.json();
+            } catch (parseErr) {
+                showError('Server fout. Probeer opnieuw.');
+                resetButton();
+                return;
+            }
 
             if (response.ok && data.success) {
-                // Flag PWA install prompt for dashboard
-                try { localStorage.setItem('show_pwa_prompt', '1'); } catch (_) {}
-
-                // Redirect to dashboard
                 window.location.href = data.data.redirect || ((window.__BASE_URL || '') + '/dashboard');
             } else {
-                showError(data.error || 'Registratie mislukt.');
+                showError(data.error || 'Inloggen mislukt.');
                 resetButton();
             }
         } catch (err) {
@@ -469,19 +320,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function resetButton() {
         btn.disabled = false;
-        registerText.textContent = 'Account aanmaken';
-        registerIcon.style.display = 'none';
+        loginText.textContent = 'Inloggen';
+        loginIcon.style.display = 'none';
     }
-
-    // Birthdate: max = today - 18y, default = 25y ago
-    const birthdateInput = document.getElementById('birthdate');
-    const maxDate = new Date();
-    maxDate.setFullYear(maxDate.getFullYear() - 15);
-    birthdateInput.max = maxDate.toISOString().split('T')[0];
-
-    const defaultDate = new Date();
-    defaultDate.setFullYear(defaultDate.getFullYear() - 25);
-    birthdateInput.value = defaultDate.toISOString().split('T')[0];
 });
 </script>
 

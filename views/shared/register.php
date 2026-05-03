@@ -30,6 +30,11 @@ $csrfToken  = generateCSRFToken();
     <meta name="csrf-token" content="<?= $csrfToken ?>">
     <title>Registreren - <?= sanitize($tenantName) ?></title>
 
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" sizes="32x32" href="<?= BASE_URL ?>/icons/favicon.png">
+    <link rel="icon" type="image/x-icon" href="<?= BASE_URL ?>/favicon.ico">
+    <link rel="apple-touch-icon" href="<?= BASE_URL ?>/icons/favicon.png">
+
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -264,7 +269,7 @@ $csrfToken  = generateCSRFToken();
                     required
                     autocomplete="bday"
                 >
-                <p class="age-warning">Je moet minimaal 18 jaar oud zijn om een account te maken.</p>
+                <p class="age-warning">Je moet minimaal 18 jaar oud zijn om alcohol te bestellen.</p>
             </div>
 
             <div class="form-group">
@@ -411,8 +416,8 @@ document.addEventListener('DOMContentLoaded', () => {
             age--;
         }
 
-        if (age < 18) {
-            showError('Je moet minimaal 18 jaar oud zijn om een account te maken.');
+        if (age < 15) {
+            showError('Je moet minimaal 18 jaar oud zijn om alcohol te bestellen.');
             return;
         }
 
@@ -489,7 +494,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Set max date for birthdate picker to today minus 18 years
     const birthdateInput = document.getElementById('birthdate');
     const maxDate = new Date();
-    maxDate.setFullYear(maxDate.getFullYear() - 18);
+    maxDate.setFullYear(maxDate.getFullYear() - 15);
     birthdateInput.max = maxDate.toISOString().split('T')[0];
 
     // Set default date to 25 years ago for convenience

@@ -30,6 +30,11 @@ $csrfToken  = generateCSRFToken();
     <meta name="csrf-token" content="<?= $csrfToken ?>">
     <title>Inloggen - <?= sanitize($tenantName) ?></title>
 
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" sizes="32x32" href="<?= BASE_URL ?>/icons/favicon.png">
+    <link rel="icon" type="image/x-icon" href="<?= BASE_URL ?>/favicon.ico">
+    <link rel="apple-touch-icon" href="<?= BASE_URL ?>/icons/favicon.png">
+
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

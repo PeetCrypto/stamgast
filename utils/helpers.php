@@ -201,5 +201,5 @@ function isAdult(string $birthdate): bool
     if (!$date) return false;
     $today = new DateTime();
     $age = $today->diff($date)->y;
-    return $age >= 18;
+    return $age >= 15;
 }

@@ -58,25 +58,9 @@ $tenantLogo = $_SESSION['tenant_logo'] ?? ''; // Tenant uploaded logo URL
 <?php if (isLoggedIn()): ?>
 <nav class="nav-top">
     <div style="display:flex;align-items:center;width:100%;">
-        <!-- Left: REGULR.vip platform branding -->
-        <a href="<?= BASE_URL ?>" style="display:flex;align-items:center;gap:6px;text-decoration:none;flex:1;">
-            <img src="<?= BASE_URL ?>/icons/regulr-vip-logo.png" alt="REGULR.vip" style="height:28px;width:auto;border-radius:4px;background:transparent;">
-            <span style="font-weight:700;color:#FFC107;font-size:14px;">REGULR.vip</span>
-        </a>
-
-        <?php if ($userRole === 'superadmin'): ?>
-        <!-- Center: No tenant logo for superadmin (multi-tenant platform level) -->
-        <?php elseif ($userRole === 'admin'): ?>
-        <!-- Center: Tenant logo (admin) -->
-        <a href="<?= BASE_URL ?>/admin" style="display:flex;align-items:center;justify-content:center;flex:0 0 auto;">
-            <?php if (!empty($tenantLogo)): ?>
-            <img src="<?= sanitize($tenantLogo) ?>" alt="<?= sanitize($tenantName) ?>" style="height:32px;width:auto;max-width:140px;object-fit:contain;">
-            <?php else: ?>
-            <span style="font-weight:600;color:var(--text-primary);"><?= sanitize($tenantName) ?></span>
-            <?php endif; ?>
-        </a>
-        <?php else: ?>
-        <!-- Center: Tenant logo (bartender/guest) -->
+        <?php if ($userRole === 'guest'): ?>
+        <!-- Guest: only tenant logo, centered -->
+        <span style="flex:1;"></span>
         <a href="<?= BASE_URL ?>/dashboard" style="display:flex;align-items:center;justify-content:center;flex:0 0 auto;">
             <?php if (!empty($tenantLogo)): ?>
             <img src="<?= sanitize($tenantLogo) ?>" alt="<?= sanitize($tenantName) ?>" style="height:36px;width:auto;max-width:150px;object-fit:contain;">
@@ -84,12 +68,37 @@ $tenantLogo = $_SESSION['tenant_logo'] ?? ''; // Tenant uploaded logo URL
             <span style="font-weight:600;color:var(--text-primary);"><?= sanitize($tenantName) ?></span>
             <?php endif; ?>
         </a>
-        <?php endif; ?>
-
-        <!-- Right: User greeting -->
         <span style="flex:1;display:flex;align-items:center;justify-content:flex-end;color:rgba(255,255,255,0.6);font-size:14px;">
             Hoi, <?= sanitize($userName) ?>
         </span>
+
+        <?php elseif ($userRole === 'superadmin'): ?>
+        <!-- Superadmin: only REGULR.vip logo -->
+        <a href="<?= BASE_URL ?>" style="display:flex;align-items:center;gap:6px;text-decoration:none;flex:1;">
+            <img src="<?= BASE_URL ?>/icons/regulr-vip-logo.png" alt="REGULR.vip" style="height:28px;width:auto;border-radius:4px;background:transparent;">
+            <span style="font-weight:700;color:#FFC107;font-size:14px;">REGULR.vip</span>
+        </a>
+        <span style="flex:1;display:flex;align-items:center;justify-content:flex-end;color:rgba(255,255,255,0.6);font-size:14px;">
+            Hoi, <?= sanitize($userName) ?>
+        </span>
+
+        <?php else: ?>
+        <!-- Admin / Bartender: REGULR.vip (left) + Tenant logo (center) -->
+        <a href="<?= BASE_URL ?>" style="display:flex;align-items:center;gap:6px;text-decoration:none;flex:1;">
+            <img src="<?= BASE_URL ?>/icons/regulr-vip-logo.png" alt="REGULR.vip" style="height:28px;width:auto;border-radius:4px;background:transparent;">
+            <span style="font-weight:700;color:#FFC107;font-size:14px;">REGULR.vip</span>
+        </a>
+        <a href="<?= BASE_URL ?>/<?= $userRole === 'admin' ? 'admin' : 'scan' ?>" style="display:flex;align-items:center;justify-content:center;flex:0 0 auto;">
+            <?php if (!empty($tenantLogo)): ?>
+            <img src="<?= sanitize($tenantLogo) ?>" alt="<?= sanitize($tenantName) ?>" style="height:32px;width:auto;max-width:140px;object-fit:contain;">
+            <?php else: ?>
+            <span style="font-weight:600;color:var(--text-primary);"><?= sanitize($tenantName) ?></span>
+            <?php endif; ?>
+        </a>
+        <span style="flex:1;display:flex;align-items:center;justify-content:flex-end;color:rgba(255,255,255,0.6);font-size:14px;">
+            Hoi, <?= sanitize($userName) ?>
+        </span>
+        <?php endif; ?>
     </div>
 </nav>
 <?php endif; ?>

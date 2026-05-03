@@ -6,34 +6,19 @@
 SET NAMES utf8mb4;
 
 -- -------------------------------------------------------------------------
--- 1. ALTER TENANTS: Add platform fee & Mollie Connect columns (if not exist)
+-- 1. ALTER TENANTS: Add platform fee & Mollie Connect columns
+--    Each ALTER TABLE is separate so "Duplicate column" errors are caught
+--    individually by the deploy script.
 -- -------------------------------------------------------------------------
 
--- Helper function to add column if not exists
-DROP PROCEDURE IF EXISTS add_column_if_not_exists;
-DELIMITER //
-CREATE PROCEDURE add_column_if_not_exists(IN tbl VARCHAR(64), IN col VARCHAR(64), IN coldef VARCHAR(255))
-BEGIN
-    IF NOT EXISTS(SELECT * FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = tbl AND COLUMN_NAME = col) THEN
-        SET @sql = CONCAT('ALTER TABLE ', tbl, ' ADD COLUMN ', col, ' ', coldef);
-        PREPARE stmt FROM @sql;
-        EXECUTE stmt;
-        DEALLOCATE PREPARE stmt;
-    END IF;
-END//
-DELIMITER ;
-
--- Add each column if it does not exist
-CALL add_column_if_not_exists('tenants', 'platform_fee_percentage', 'DECIMAL(5,2) NOT NULL DEFAULT 1.00 COMMENT ''Platform fee % (excl. BTW), set by superadmin only''');
-CALL add_column_if_not_exists('tenants', 'platform_fee_min_cents', 'INT NOT NULL DEFAULT 25 COMMENT ''Minimum platform fee per transactie in cents (default €0,25), per-tenant configurable''');
-CALL add_column_if_not_exists('tenants', 'mollie_connect_id', 'VARCHAR(255) NULL COMMENT ''Mollie Connect organization/resource ID (na onboarding)''');
-CALL add_column_if_not_exists('tenants', 'mollie_connect_status', "ENUM('none','pending','active','suspended','revoked') NOT NULL DEFAULT 'none' COMMENT ''Mollie Connect status. NONE = niet aangemeld. ACTIVE = payments toegestaan.''");
-CALL add_column_if_not_exists('tenants', 'invoice_period', "ENUM('week','month') NOT NULL DEFAULT 'month' COMMENT ''Verzamelfactuur frequentie''");
-CALL add_column_if_not_exists('tenants', 'btw_number', 'VARCHAR(50) NULL COMMENT ''BTW nummer tenant (voor verzamelfactuur)''');
-CALL add_column_if_not_exists('tenants', 'invoice_email', 'VARCHAR(255) NULL COMMENT ''Factuur e-mailadres (kan afwijken van contact_email)''');
-CALL add_column_if_not_exists('tenants', 'platform_fee_note', 'TEXT NULL COMMENT ''Interne notitie superadmin over deze tenant (niet zichtbaar voor tenant)''');
-
-DROP PROCEDURE add_column_if_not_exists;
+ALTER TABLE `tenants` ADD COLUMN `platform_fee_percentage` DECIMAL(5,2) NOT NULL DEFAULT 1.00 COMMENT 'Platform fee % (excl. BTW), set by superadmin only';
+ALTER TABLE `tenants` ADD COLUMN `platform_fee_min_cents` INT NOT NULL DEFAULT 25 COMMENT 'Minimum platform fee per transactie in cents (default 0.25), per-tenant configurable';
+ALTER TABLE `tenants` ADD COLUMN `mollie_connect_id` VARCHAR(255) NULL COMMENT 'Mollie Connect organization/resource ID (na onboarding)';
+ALTER TABLE `tenants` ADD COLUMN `mollie_connect_status` ENUM('none','pending','active','suspended','revoked') NOT NULL DEFAULT 'none' COMMENT 'Mollie Connect status. NONE = niet aangemeld. ACTIVE = payments toegestaan.';
+ALTER TABLE `tenants` ADD COLUMN `invoice_period` ENUM('week','month') NOT NULL DEFAULT 'month' COMMENT 'Verzamelfactuur frequentie';
+ALTER TABLE `tenants` ADD COLUMN `btw_number` VARCHAR(50) NULL COMMENT 'BTW nummer tenant (voor verzamelfactuur)';
+ALTER TABLE `tenants` ADD COLUMN `invoice_email` VARCHAR(255) NULL COMMENT 'Factuur e-mailadres (kan afwijken van contact_email)';
+ALTER TABLE `tenants` ADD COLUMN `platform_fee_note` TEXT NULL COMMENT 'Interne notitie superadmin over deze tenant (niet zichtbaar voor tenant)';
 
 -- -------------------------------------------------------------------------
 -- 2. PLATFORM_INVOICES (Verzamelfacturen) — MUST be created BEFORE platform_fees

@@ -12,9 +12,12 @@ $tenantId = (int) ($_GET['tenant_id'] ?? 0);
 $size     = (int) ($_GET['size'] ?? 192);
 
 if ($tenantId <= 0) {
-    http_response_code(400);
-    header('Content-Type: application/json; charset=utf-8');
-    echo json_encode(['success' => false, 'error' => 'tenant_id is verplicht']);
+    // No tenant context (e.g. superadmin session) — generate default REGULR icon
+    generateBrandedIcon([
+        'name'            => 'REGULR',
+        'brand_color'     => '#FFC107',
+        'secondary_color' => '#FF9800',
+    ], $size);
     exit;
 }
 

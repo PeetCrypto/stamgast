@@ -77,6 +77,10 @@ if (str_starts_with($staticRoute, 'stamgast/')) {
 }
 if (str_starts_with($staticRoute, 'css/') || str_starts_with($staticRoute, 'js/') || str_starts_with($staticRoute, 'icons/') || str_starts_with($staticRoute, 'uploads/') || $staticRoute === 'favicon.ico') {
     $filePath = PUBLIC_PATH . $staticRoute;
+    // Fallback: serve PNG favicon if ICO file is missing (e.g. not deployed to production)
+    if ($staticRoute === 'favicon.ico' && !file_exists($filePath)) {
+        $filePath = PUBLIC_PATH . 'icons/favicon.png';
+    }
     if (file_exists($filePath)) {
         $ext = pathinfo($filePath, PATHINFO_EXTENSION);
         $mimeTypes = [
@@ -117,13 +121,15 @@ if (str_starts_with($apiRouteCheck, 'api/')) {
         handleApiRoute($apiRoute, $method);
     } catch (\Throwable $e) {
         ob_end_clean();
+        // Always show error details for superadmin users (helps debugging on production)
+        $showDebug = APP_DEBUG || (isset($_SESSION['role']) && $_SESSION['role'] === 'superadmin');
         http_response_code(500);
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode([
             'success' => false,
-            'error'   => APP_DEBUG ? $e->getMessage() : 'Internal server error',
+            'error'   => $showDebug ? $e->getMessage() : 'Internal server error',
             'code'    => 'INTERNAL_ERROR',
-            'debug'   => APP_DEBUG ? [
+            'debug'   => $showDebug ? [
                 'file' => basename($e->getFile()),
                 'line' => $e->getLine(),
                 'trace' => array_slice(array_map(function ($f) {
@@ -135,13 +141,22 @@ if (str_starts_with($apiRouteCheck, 'api/')) {
     exit;
 }
 
-// --- Join Route: /j/{slug} — QR code guest registration (no auth required) ---
+// --- Join Route: /j/{slug} and /j/{slug}/register — Guest auth (no prior auth required) ---
 $joinRoute = $route;
 if (str_starts_with($joinRoute, 'stamgast/')) {
     $joinRoute = substr($joinRoute, 9);
 }
 if (str_starts_with($joinRoute, 'j/')) {
-    $slug = substr($joinRoute, 2);
+    $slugPart = substr($joinRoute, 2);
+
+    // Determine if this is /j/{slug}/register or just /j/{slug}
+    $isRegister = false;
+    $slug = $slugPart;
+
+    if (str_ends_with($slugPart, '/register')) {
+        $isRegister = true;
+        $slug = substr($slugPart, 0, -9); // strip '/register'
+    }
 
     // Security: only lowercase alphanumeric + hyphens
     if ($slug === '' || !preg_match('/^[a-z0-9][a-z0-9-]{0,98}[a-z0-9]$/', $slug)) {
@@ -165,7 +180,13 @@ if (str_starts_with($joinRoute, 'j/')) {
         redirect('/dashboard');
     }
 
-    require VIEWS_PATH . 'guest/join.php';
+    // /j/{slug}/register → registration page (join.php)
+    // /j/{slug}           → login page (guest/login.php)
+    if ($isRegister) {
+        require VIEWS_PATH . 'guest/join.php';
+    } else {
+        require VIEWS_PATH . 'guest/login.php';
+    }
     exit;
 }
 
@@ -353,6 +374,9 @@ function handleApiRoute(string $route, string $method): void
                 case 'settings':
                     require __DIR__ . '/api/superadmin/settings.php';
                     break;
+                case 'admins':
+                    require __DIR__ . '/api/superadmin/admins.php';
+                    break;
                 default:
                     Response::notFound('Super-admin endpoint not found');
             }
@@ -508,6 +532,7 @@ function handleViewRoute(string $route, string $method): void
     'superadmin/fees'             => 'superadmin/fees.php',
     'superadmin/invoices'         => 'superadmin/invoices.php',
     'superadmin/settings'         => 'superadmin/settings.php',
+    'superadmin/migrate'          => 'superadmin/migrate.php',
     ];
 
     // Handle API routes first
@@ -563,7 +588,7 @@ function handleViewRoute(string $route, string $method): void
 
     // Enforce role-based access
     $roleViews = [
-        'superadmin' => ['superadmin/dashboard.php', 'superadmin/tenants.php', 'superadmin/tenant_detail.php', 'superadmin/fees.php', 'superadmin/invoices.php', 'superadmin/settings.php'],
+        'superadmin' => ['superadmin/dashboard.php', 'superadmin/tenants.php', 'superadmin/tenant_detail.php', 'superadmin/fees.php', 'superadmin/invoices.php', 'superadmin/settings.php', 'superadmin/migrate.php'],
         'admin'      => ['admin/dashboard.php', 'admin/users.php', 'admin/tiers.php', 'admin/settings.php', 'admin/marketing.php', 'admin/push.php'],
         'bartender'  => ['bartender/scanner.php', 'bartender/payment.php'],
     ];

@@ -24,6 +24,17 @@ $email    = trim($input['email'] ?? '');
 $password = $input['password'] ?? '';
 $tenantId = isset($input['tenant_id']) ? (int) $input['tenant_id'] : null;
 
+// Resolve tenant_slug to tenant_id (guest login via /j/{slug})
+$tenantSlug = trim($input['tenant_slug'] ?? '');
+if (!empty($tenantSlug) && $tenantId === null) {
+    require_once __DIR__ . '/../../models/Tenant.php';
+    $db = Database::getInstance()->getConnection();
+    $tenantBySlug = (new Tenant($db))->findBySlug($tenantSlug);
+    if ($tenantBySlug && (bool) $tenantBySlug['is_active']) {
+        $tenantId = (int) $tenantBySlug['id'];
+    }
+}
+
 // Validate required fields
 if (empty($email) || empty($password)) {
     Response::error('E-mail en wachtwoord zijn verplicht', 'MISSING_FIELDS', 400);

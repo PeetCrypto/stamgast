@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS `notifications` (
     `color`           VARCHAR(100)    NOT NULL DEFAULT 'var(--text-secondary)',
     `points_earned`   INT             NOT NULL DEFAULT 0,
     `is_read`         TINYINT(1)      NOT NULL DEFAULT 0,
-    `deleted_at`      TIMESTAMP       NULL COMMENT 'Soft-delete: NULL = active, set to timestamp when deleted',
+    `deleted_at`      TIMESTAMP       NULL COMMENT 'Soft delete: NULL is active, timestamp when deleted',
     `created_at`      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     INDEX `idx_notif_tenant` (`tenant_id`),

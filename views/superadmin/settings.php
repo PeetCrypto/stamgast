@@ -151,6 +151,11 @@ unset($_SESSION['flash'], $_SESSION['flash_type']);
 // Fetch ALL global templates (all languages)
 $templates = $emailTemplate->getTemplatesByTenant(null);
 
+// Superadmins ophalen voor beheer-tab
+$superadmins = $db->query(
+    "SELECT id, email, first_name, last_name, created_at FROM users WHERE role = 'superadmin' ORDER BY created_at ASC"
+)->fetchAll();
+
 // Determine active tab
 $activeTab = $_GET['tab'] ?? 'platform';
 if (isset($_POST['platform_settings_action'])) $activeTab = 'platform';
@@ -198,6 +203,14 @@ $hasApiKey     = !empty($settings['mollie_connect_api_key']);
                        cursor: pointer;
                        border-radius: var(--radius-sm) var(--radius-sm) 0 0;"
                 onclick="switchTab('templates')">Email Templates</button>
+        <button class="tab-button" data-tab="admins"
+                style="padding: var(--space-sm) var(--space-md);
+                       background: <?= $activeTab === 'admins' ? 'var(--accent-primary)' : 'transparent' ?>;
+                       border: none;
+                       color: <?= $activeTab === 'admins' ? '#fff' : 'var(--text-secondary)' ?>;
+                       cursor: pointer;
+                       border-radius: var(--radius-sm) var(--radius-sm) 0 0;"
+                onclick="switchTab('admins')">Superadmins</button>
     </div>
 
     <!-- Tab Content -->
@@ -473,6 +486,72 @@ $hasApiKey     = !empty($settings['mollie_connect_api_key']);
             </div>
         </div>
 
+        <!-- ==================== SUPERADMINS TAB ==================== -->
+        <div id="admins-tab" class="tab-pane" style="display: <?= $activeTab === 'admins' ? 'block' : 'none' ?>;">
+
+            <div class="glass-card" style="padding: var(--space-md); margin-bottom: var(--space-lg); border-left: 4px solid var(--accent-primary);">
+                <p class="text-sm text-secondary">
+                    <strong>Superadmins</strong> hebben volledige toegang tot het platform. Beheer hier alle superadmin accounts.
+                    Het aanmaken en verwijderen van superadmins wordt gelogd in het audit trail.
+                </p>
+            </div>
+
+            <!-- Superadmins Table -->
+            <div class="glass-card" style="padding: var(--space-lg); margin-bottom: var(--space-lg);">
+                <h2 style="margin-bottom: var(--space-md); color: var(--accent-primary);">Alle Superadmins</h2>
+
+                <?php if (empty($superadmins)): ?>
+                <p class="text-secondary">Geen superadmins gevonden.</p>
+                <?php else: ?>
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+                        <th style="text-align: left; padding: var(--space-sm); color: var(--text-secondary);">Naam</th>
+                        <th style="text-align: left; padding: var(--space-sm); color: var(--text-secondary);">E-mail</th>
+                        <th style="text-align: left; padding: var(--space-sm); color: var(--text-secondary);">Aangemaakt</th>
+                        <th style="text-align: right; padding: var(--space-sm); color: var(--text-secondary);">Acties</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($superadmins as $sa):
+                        $isSelf = ((int)$sa['id'] === (int)($_SESSION['user_id'] ?? 0));
+                        $isLast = count($superadmins) <= 1;
+                    ?>
+                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <td style="padding: var(--space-sm);">
+                            <?= sanitize($sa['first_name']) ?> <?= sanitize($sa['last_name']) ?>
+                            <?php if ($isSelf): ?>
+                            <span style="font-size: 11px; background: rgba(76,175,80,0.2); color: #4CAF50; padding: 2px 8px; border-radius: var(--radius-sm); margin-left: 6px;">jij</span>
+                            <?php endif; ?>
+                        </td>
+                        <td style="padding: var(--space-sm); font-family: monospace; font-size: 13px;"><?= sanitize($sa['email']) ?></td>
+                        <td style="padding: var(--space-sm); font-size: 13px; color: var(--text-secondary);"><?= $sa['created_at'] ?></td>
+                        <td style="padding: var(--space-sm); text-align: right; white-space: nowrap;">
+                            <button type="button" class="btn btn-secondary" style="width: auto; padding: 6px 12px; font-size: 13px;"
+                                onclick="openPasswordModal(<?= (int)$sa['id'] ?>, '<?= addslashes($sa['email']) ?>')">
+                                Wachtwoord
+                            </button>
+                            <?php if (!$isSelf && !$isLast): ?>
+                            <button type="button" class="btn btn-danger" style="width: auto; padding: 6px 12px; font-size: 13px;"
+                                onclick="deleteSuperadmin(<?= (int)$sa['id'] ?>, '<?= addslashes($sa['email']) ?>')">
+                                Verwijderen
+                            </button>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+                <?php endif; ?>
+
+                <div style="margin-top: var(--space-md);">
+                    <button type="button" class="btn btn-primary" style="width: auto;" onclick="openCreateModal()">
+                        + Nieuwe Superadmin
+                    </button>
+                </div>
+            </div>
+        </div>
+
     </div>
 </div>
 
@@ -623,6 +702,229 @@ function closeModal() {
 
 document.getElementById('template-modal').addEventListener('click', function(e) {
     if (e.target === this) closeModal();
+});
+</script>
+
+<!-- ==================== SUPERADMIN CREATE MODAL ==================== -->
+<div id="sa-create-modal" style="display: none; position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); overflow-y: auto;">
+    <div style="max-width: 500px; margin: 2rem auto; background: #1a1a2e; border-radius: var(--radius-lg); border: 1px solid rgba(255,255,255,0.1);">
+        <div style="padding: var(--space-lg); border-bottom: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center;">
+            <h2>Nieuwe Superadmin</h2>
+            <button type="button" onclick="closeSaCreateModal()" style="background: none; border: none; color: var(--text-secondary); font-size: 24px; cursor: pointer;">&times;</button>
+        </div>
+        <div style="padding: var(--space-lg);">
+            <div class="form-group">
+                <label>E-mailadres *</label>
+                <input type="email" id="sa-create-email" class="form-input" placeholder="naam@regulr.vip" required>
+            </div>
+            <div class="form-group">
+                <label>Wachtwoord * <span class="text-sm text-secondary">(min. 8 tekens)</span></label>
+                <input type="password" id="sa-create-password" class="form-input" placeholder="Sterk wachtwoord" required>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md);">
+                <div class="form-group">
+                    <label>Voornaam *</label>
+                    <input type="text" id="sa-create-firstname" class="form-input" placeholder="Voornaam" required>
+                </div>
+                <div class="form-group">
+                    <label>Achternaam *</label>
+                    <input type="text" id="sa-create-lastname" class="form-input" placeholder="Achternaam" required>
+                </div>
+            </div>
+            <div id="sa-create-error" style="display:none; margin-bottom: var(--space-md); padding: var(--space-sm); border-radius: var(--radius-sm); background: rgba(244,67,54,0.15); color: #f44336; font-size: 14px;"></div>
+            <div style="display: flex; gap: var(--space-md); justify-content: flex-end; margin-top: var(--space-lg);">
+                <button type="button" onclick="closeSaCreateModal()" class="btn btn-secondary" style="width: auto;">Annuleren</button>
+                <button type="button" onclick="createSuperadmin()" class="btn btn-primary" style="width: auto;" id="sa-create-btn">Aanmaken</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== SUPERADMIN PASSWORD MODAL ==================== -->
+<div id="sa-password-modal" style="display: none; position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); overflow-y: auto;">
+    <div style="max-width: 450px; margin: 2rem auto; background: #1a1a2e; border-radius: var(--radius-lg); border: 1px solid rgba(255,255,255,0.1);">
+        <div style="padding: var(--space-lg); border-bottom: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center;">
+            <h2>Wachtwoord Wijzigen</h2>
+            <button type="button" onclick="closeSaPasswordModal()" style="background: none; border: none; color: var(--text-secondary); font-size: 24px; cursor: pointer;">&times;</button>
+        </div>
+        <div style="padding: var(--space-lg);">
+            <p class="text-sm text-secondary" style="margin-bottom: var(--space-md);">
+                Wijzig wachtwoord voor: <strong id="sa-password-email" style="color: var(--text-primary);"></strong>
+            </p>
+            <input type="hidden" id="sa-password-userid">
+            <div class="form-group">
+                <label>Nieuw wachtwoord * <span class="text-sm text-secondary">(min. 8 tekens)</span></label>
+                <input type="password" id="sa-password-new" class="form-input" placeholder="Nieuw wachtwoord" required>
+            </div>
+            <div class="form-group">
+                <label>Bevestig wachtwoord *</label>
+                <input type="password" id="sa-password-confirm" class="form-input" placeholder="Herhaal wachtwoord" required>
+            </div>
+            <div id="sa-password-error" style="display:none; margin-bottom: var(--space-md); padding: var(--space-sm); border-radius: var(--radius-sm); background: rgba(244,67,54,0.15); color: #f44336; font-size: 14px;"></div>
+            <div style="display: flex; gap: var(--space-md); justify-content: flex-end; margin-top: var(--space-lg);">
+                <button type="button" onclick="closeSaPasswordModal()" class="btn btn-secondary" style="width: auto;">Annuleren</button>
+                <button type="button" onclick="savePassword()" class="btn btn-primary" style="width: auto;" id="sa-password-btn">Opslaan</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== SUPERADMIN JAVASCRIPT ==================== -->
+<script>
+// --- Create Modal ---
+function openCreateModal() {
+    document.getElementById('sa-create-email').value = '';
+    document.getElementById('sa-create-password').value = '';
+    document.getElementById('sa-create-firstname').value = '';
+    document.getElementById('sa-create-lastname').value = '';
+    document.getElementById('sa-create-error').style.display = 'none';
+    document.getElementById('sa-create-btn').disabled = false;
+    document.getElementById('sa-create-modal').style.display = 'block';
+}
+
+function closeSaCreateModal() {
+    document.getElementById('sa-create-modal').style.display = 'none';
+}
+
+function createSuperadmin() {
+    var email = document.getElementById('sa-create-email').value.trim();
+    var password = document.getElementById('sa-create-password').value;
+    var firstName = document.getElementById('sa-create-firstname').value.trim();
+    var lastName = document.getElementById('sa-create-lastname').value.trim();
+    var errEl = document.getElementById('sa-create-error');
+
+    if (!email || !password || !firstName || !lastName) {
+        errEl.textContent = 'Alle velden zijn verplicht.';
+        errEl.style.display = 'block';
+        return;
+    }
+
+    document.getElementById('sa-create-btn').disabled = true;
+    errEl.style.display = 'none';
+
+    fetch('<?= BASE_URL ?>/api/superadmin/admins', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            action: 'create',
+            email: email,
+            password: password,
+            first_name: firstName,
+            last_name: lastName
+        })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            location.reload();
+        } else {
+            errEl.textContent = data.error || 'Onbekende fout bij aanmaken.';
+            errEl.style.display = 'block';
+            document.getElementById('sa-create-btn').disabled = false;
+        }
+    })
+    .catch(function(err) {
+        errEl.textContent = 'Netwerkfout: ' + err.message;
+        errEl.style.display = 'block';
+        document.getElementById('sa-create-btn').disabled = false;
+    });
+}
+
+// --- Password Modal ---
+function openPasswordModal(userId, email) {
+    document.getElementById('sa-password-userid').value = userId;
+    document.getElementById('sa-password-email').textContent = email;
+    document.getElementById('sa-password-new').value = '';
+    document.getElementById('sa-password-confirm').value = '';
+    document.getElementById('sa-password-error').style.display = 'none';
+    document.getElementById('sa-password-btn').disabled = false;
+    document.getElementById('sa-password-modal').style.display = 'block';
+}
+
+function closeSaPasswordModal() {
+    document.getElementById('sa-password-modal').style.display = 'none';
+}
+
+function savePassword() {
+    var userId = parseInt(document.getElementById('sa-password-userid').value);
+    var newPass = document.getElementById('sa-password-new').value;
+    var confirmPass = document.getElementById('sa-password-confirm').value;
+    var errEl = document.getElementById('sa-password-error');
+
+    if (!newPass || newPass.length < 8) {
+        errEl.textContent = 'Wachtwoord moet minimaal 8 tekens bevatten.';
+        errEl.style.display = 'block';
+        return;
+    }
+    if (newPass !== confirmPass) {
+        errEl.textContent = 'Wachtwoorden komen niet overeen.';
+        errEl.style.display = 'block';
+        return;
+    }
+
+    document.getElementById('sa-password-btn').disabled = true;
+    errEl.style.display = 'none';
+
+    fetch('<?= BASE_URL ?>/api/superadmin/admins', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            action: 'change_password',
+            user_id: userId,
+            new_password: newPass
+        })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            closeSaPasswordModal();
+            alert('Wachtwoord succesvol gewijzigd.');
+        } else {
+            errEl.textContent = data.error || 'Onbekende fout.';
+            errEl.style.display = 'block';
+            document.getElementById('sa-password-btn').disabled = false;
+        }
+    })
+    .catch(function(err) {
+        errEl.textContent = 'Netwerkfout: ' + err.message;
+        errEl.style.display = 'block';
+        document.getElementById('sa-password-btn').disabled = false;
+    });
+}
+
+// --- Delete ---
+function deleteSuperadmin(userId, email) {
+    if (!confirm('Weet je zeker dat je superadmin "' + email + '" wilt verwijderen?\n\nDeze actie kan niet ongedaan worden gemaakt.')) {
+        return;
+    }
+
+    fetch('<?= BASE_URL ?>/api/superadmin/admins', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            action: 'delete',
+            user_id: userId
+        })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.error || 'Fout bij verwijderen.');
+        }
+    })
+    .catch(function(err) {
+        alert('Netwerkfout: ' + err.message);
+    });
+}
+
+// --- Close modals on backdrop click ---
+document.getElementById('sa-create-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeSaCreateModal();
+});
+document.getElementById('sa-password-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeSaPasswordModal();
 });
 </script>
 

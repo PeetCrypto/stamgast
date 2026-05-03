@@ -39,10 +39,15 @@ if ($tenantId) {
     }
 }
 
-// Determine base URL
-$scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-$host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-$baseUrl = "{$scheme}://{$host}";
+// Helper: build icon src URL
+// When no tenant context (superadmin, unauthenticated), use the static favicon
+// Otherwise use the dynamic branded icon endpoint
+$iconSrc = function (int $size) use ($tenantId): string {
+    if ($tenantId) {
+        return '/api/assets/generate_pwa_icon?tenant_id=' . $tenantId . '&size=' . $size;
+    }
+    return '/icons/favicon.png';
+};
 
 // Build manifest
 $manifest = [
@@ -57,54 +62,14 @@ $manifest = [
     'lang'             => 'nl',
     'scope'            => '/',
     'icons'            => [
-        [
-            'src'     => '/api/assets/generate_pwa_icon?tenant_id=' . ($tenantId ?? 0) . '&size=72',
-            'sizes'   => '72x72',
-            'type'    => 'image/png',
-            'purpose' => 'any',
-        ],
-        [
-            'src'     => '/api/assets/generate_pwa_icon?tenant_id=' . ($tenantId ?? 0) . '&size=96',
-            'sizes'   => '96x96',
-            'type'    => 'image/png',
-            'purpose' => 'any',
-        ],
-        [
-            'src'     => '/api/assets/generate_pwa_icon?tenant_id=' . ($tenantId ?? 0) . '&size=128',
-            'sizes'   => '128x128',
-            'type'    => 'image/png',
-            'purpose' => 'any',
-        ],
-        [
-            'src'     => '/api/assets/generate_pwa_icon?tenant_id=' . ($tenantId ?? 0) . '&size=144',
-            'sizes'   => '144x144',
-            'type'    => 'image/png',
-            'purpose' => 'any',
-        ],
-        [
-            'src'     => '/api/assets/generate_pwa_icon?tenant_id=' . ($tenantId ?? 0) . '&size=152',
-            'sizes'   => '152x152',
-            'type'    => 'image/png',
-            'purpose' => 'any',
-        ],
-        [
-            'src'     => '/api/assets/generate_pwa_icon?tenant_id=' . ($tenantId ?? 0) . '&size=192',
-            'sizes'   => '192x192',
-            'type'    => 'image/png',
-            'purpose' => 'any maskable',
-        ],
-        [
-            'src'     => '/api/assets/generate_pwa_icon?tenant_id=' . ($tenantId ?? 0) . '&size=384',
-            'sizes'   => '384x384',
-            'type'    => 'image/png',
-            'purpose' => 'any',
-        ],
-        [
-            'src'     => '/api/assets/generate_pwa_icon?tenant_id=' . ($tenantId ?? 0) . '&size=512',
-            'sizes'   => '512x512',
-            'type'    => 'image/png',
-            'purpose' => 'any maskable',
-        ],
+        ['src' => $iconSrc(72),  'sizes' => '72x72',    'type' => 'image/png', 'purpose' => 'any'],
+        ['src' => $iconSrc(96),  'sizes' => '96x96',    'type' => 'image/png', 'purpose' => 'any'],
+        ['src' => $iconSrc(128), 'sizes' => '128x128',  'type' => 'image/png', 'purpose' => 'any'],
+        ['src' => $iconSrc(144), 'sizes' => '144x144',  'type' => 'image/png', 'purpose' => 'any'],
+        ['src' => $iconSrc(152), 'sizes' => '152x152',  'type' => 'image/png', 'purpose' => 'any'],
+        ['src' => $iconSrc(192), 'sizes' => '192x192',  'type' => 'image/png', 'purpose' => 'any maskable'],
+        ['src' => $iconSrc(384), 'sizes' => '384x384',  'type' => 'image/png', 'purpose' => 'any'],
+        ['src' => $iconSrc(512), 'sizes' => '512x512',  'type' => 'image/png', 'purpose' => 'any maskable'],
     ],
     'categories' => ['food', 'lifestyle', 'shopping'],
     'shortcuts'  => [
@@ -114,7 +79,7 @@ $manifest = [
             'description' => 'Toon je QR code',
             'url'         => '/qr',
             'icons'       => [
-                ['src' => '/api/assets/generate_pwa_icon?tenant_id=' . ($tenantId ?? 0) . '&size=96', 'sizes' => '96x96'],
+                ['src' => $iconSrc(96), 'sizes' => '96x96'],
             ],
         ],
         [
@@ -123,7 +88,7 @@ $manifest = [
             'description' => 'Opwaarderen wallet',
             'url'         => '/wallet',
             'icons'       => [
-                ['src' => '/api/assets/generate_pwa_icon?tenant_id=' . ($tenantId ?? 0) . '&size=96', 'sizes' => '96x96'],
+                ['src' => $iconSrc(96), 'sizes' => '96x96'],
             ],
         ],
     ],

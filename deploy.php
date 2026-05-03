@@ -16,11 +16,8 @@ declare(strict_types=1);
 // INSTELLINGEN — PAS DEZE AAN VOORDAT JE HET SCRIPT DRAAIT
 // ═══════════════════════════════════════════════════════════════
 
-// Superadmin account dat wordt aangemaakt
-$SUPERADMIN_EMAIL = 'admin@regulr.vip';
-$SUPERADMIN_PASSWORD = 'Admin123!';       // ← VERANDER DIT!
-$SUPERADMIN_FIRST_NAME = 'Admin';
-$SUPERADMIN_LAST_NAME = 'REGULR.vip';
+// Superadmin account wordt uit .env gelezen (na $env load)
+// Zie STAP 2 voor de toewijzing
 
 // ═══════════════════════════════════════════════════════════════
 // HULPFUNCTIES
@@ -172,11 +169,21 @@ foreach ($requiredFiles as $file) {
     check("Bestand: {$file}", file_exists($rootDir . '/' . $file));
 }
 
-// .env check
+// .env check — als .env ontbreekt, kopieer van .env.production
 $envPath = $rootDir . '/.env';
 if (!file_exists($envPath)) {
-    check('.env bestand', false, 'Ontbreekt! Kopieer .env.production naar .env en vul in.');
-    abort('.env bestand niet gevonden. Zie deployment plan §5.3.');
+    $productionEnv = $rootDir . '/.env.production';
+    if (file_exists($productionEnv)) {
+        step('.env ontbreekt — kopiëren van .env.production...');
+        $copied = copy($productionEnv, $envPath);
+        check('.env aangemaakt vanuit .env.production', $copied);
+        if (!$copied) {
+            abort('Kon .env.production niet kopiëren naar .env. Check bestandsrechten.');
+        }
+    } else {
+        check('.env bestand', false, 'Zowel .env als .env.production ontbreken!');
+        abort('Maak een .env bestand aan met je database credentials.');
+    }
 }
 
 check('.env bestand', true);
@@ -190,12 +197,32 @@ check('.env bevat DB_HOST', isset($env['DB_HOST']) && !empty($env['DB_HOST']));
 check('.env bevat DB_NAME', isset($env['DB_NAME']) && !empty($env['DB_NAME']));
 check('.env bevat DB_USER', isset($env['DB_USER']) && !empty($env['DB_USER']));
 check('.env bevat DB_PASS', isset($env['DB_PASS']));
-check('.env bevat APP_PEPPER', isset($env['APP_PEPPER']) && strlen($env['APP_PEPPER']) >= 16,
-    'Moet minimaal 16 tekens zijn. Genereer met: php -r "echo bin2hex(random_bytes(32));"');
-
-if (empty($env['ENCRYPTION_KEY']) || strlen($env['ENCRYPTION_KEY']) < 16) {
-    warn('ENCRYPTION_KEY ontbreekt of is te kort in .env. Email encryptie werkt niet goed.');
+// Auto-genereer APP_PEPPER als ontbreekt
+if (empty($env['APP_PEPPER']) || strlen($env['APP_PEPPER']) < 16) {
+    step('APP_PEPPER ontbreekt — automatisch genereren...');
+    $env['APP_PEPPER'] = bin2hex(random_bytes(32));
+    $appended = file_put_contents($envPath, "\nAPP_PEPPER={$env['APP_PEPPER']}\n", FILE_APPEND);
+    check('APP_PEPPER gegenereerd en opgeslagen', $appended !== false);
+} else {
+    check('APP_PEPPER aanwezig', true);
 }
+
+// Auto-genereer ENCRYPTION_KEY als ontbreekt
+if (empty($env['ENCRYPTION_KEY']) || strlen($env['ENCRYPTION_KEY']) < 16) {
+    step('ENCRYPTION_KEY ontbreekt — automatisch genereren...');
+    $env['ENCRYPTION_KEY'] = bin2hex(random_bytes(32));
+    $appended = file_put_contents($envPath, "\nENCRYPTION_KEY={$env['ENCRYPTION_KEY']}\n", FILE_APPEND);
+    check('ENCRYPTION_KEY gegenereerd en opgeslagen', $appended !== false);
+} else {
+    check('ENCRYPTION_KEY aanwezig', true);
+}
+
+// Superadmin credentials uit .env (met fallback defaults)
+$SUPERADMIN_EMAIL      = $env['SUPERADMIN_EMAIL']      ?? 'admin@regulr.vip';
+$SUPERADMIN_PASSWORD   = $env['SUPERADMIN_PASSWORD']    ?? 'Admin123!';
+$SUPERADMIN_FIRST_NAME = $env['SUPERADMIN_FIRST_NAME']  ?? 'Admin';
+$SUPERADMIN_LAST_NAME  = $env['SUPERADMIN_LAST_NAME']   ?? 'REGULR.vip';
+check('.env bevat SUPERADMIN_EMAIL', !empty($SUPERADMIN_EMAIL), 'Gebruikt fallback: admin@regulr.vip');
 
 // ═══════════════════════════════════════════════════════════════
 // STAP 3: UPLOAD DIRECTORIES
@@ -306,15 +333,17 @@ foreach ($migrations as $file => $description) {
     try {
         $sql = file_get_contents($filePath);
         
-        // Splits op meerdere statements (rekening houdend met DELIMITER)
-        // Verwijder comments
-        $sql = preg_replace('/--.*$/m', '', $sql);
+        // Verwijder alleen regel-comments die BEGINNEN met -- (niet -- in strings)
+        $sql = preg_replace('/^\s*--\s.*$/m', '', $sql);
+        // Verwijder block comments
         $sql = preg_replace('/\/\*.*?\*\//s', '', $sql);
+        // Verwijder DELIMITER directives (niet compatibel met PDO)
+        $sql = preg_replace('/^\s*DELIMITER\s+.*$/mi', '', $sql);
         
-        // Split statements
+        // Split statements op ;
         $statements = array_filter(
             array_map('trim', explode(';', $sql)),
-            fn($s) => strlen($s) > 5 // skip empty/whitespace
+            fn($s) => strlen($s) > 5
         );
         
         $success = true;
@@ -445,13 +474,6 @@ try {
     
     // Verify login works
     step("Verifiëren wachtwoord...");
-    $verifyHash = password_verify($SUPERADMIN_PASSWORD . $pepper, 
-        $pdo->prepare("SELECT password_hash FROM users WHERE email = ?")
-            ->execute([$SUPERADMIN_EMAIL]) 
-            ? $pdo->prepare("SELECT password_hash FROM users WHERE email = ?") : null
-    );
-    
-    // Simpele verify
     $stmt = $pdo->prepare("SELECT password_hash FROM users WHERE email = ? AND role = 'superadmin'");
     $stmt->execute([$SUPERADMIN_EMAIL]);
     $row = $stmt->fetch();

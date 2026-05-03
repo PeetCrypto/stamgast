@@ -13,8 +13,6 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../models/Tenant.php';
 require_once __DIR__ . '/../../models/User.php';
-require_once __DIR__ . '/../../services/Email/email_helpers.php';
-require_once __DIR__ . '/../../services/PlatformFeeService.php';
 
 $db = Database::getInstance()->getConnection();
 $tenantModel = new Tenant($db);
@@ -88,6 +86,7 @@ function handleDetail(Tenant $model, int $tenantId): void
     }, $users);
 
     // Platform fee configuration + stats
+    require_once __DIR__ . '/../../services/PlatformFeeService.php';
     $db = Database::getInstance()->getConnection();
     $feeService = new PlatformFeeService($db);
     $feeConfig = $model->getFeeConfig($tenantId);
@@ -104,6 +103,7 @@ function handleDetail(Tenant $model, int $tenantId): void
 
 function handleCreate(Tenant $model, User $userModel, array $input, PDO $db): void
 {
+    require_once __DIR__ . '/../../services/Email/email_helpers.php';
     $v = new Validator();
     $v->string('name', $input['name'] ?? '', 2, 255);
     
@@ -142,7 +142,16 @@ function handleCreate(Tenant $model, User $userModel, array $input, PDO $db): vo
         Response::error('Slug already in use', 'SLUG_EXISTS', 409);
     }
 
-    $tenantId = $model->create($input);
+    try {
+        $tenantId = $model->create($input);
+    } catch (\Throwable $e) {
+        error_log('REGULR tenant create failed: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+        Response::error(
+            'Fout bij aanmaken tenant. Controleer of alle database migraties zijn uitgevoerd. Details: ' . $e->getMessage(),
+            'TENANT_CREATE_FAILED',
+            500
+        );
+    }
 
     // Auto-create admin user for the new tenant
     // contact_email is guaranteed to be present (validated above)
@@ -153,22 +162,38 @@ function handleCreate(Tenant $model, User $userModel, array $input, PDO $db): vo
     $firstName = $nameParts[0];
     $lastName = $nameParts[1] ?? $input['name'];
 
-    $userModel->create([
-        'tenant_id'     => $tenantId,
-        'email'         => $adminEmail,
-        'password_hash' => password_hash($adminPassword . APP_PEPPER, PASSWORD_ARGON2ID),
-        'role'          => 'admin',
-        'first_name'    => $firstName,
-        'last_name'     => $lastName,
-    ]);
+    try {
+        $userModel->create([
+            'tenant_id'     => $tenantId,
+            'email'         => $adminEmail,
+            'password_hash' => password_hash($adminPassword . APP_PEPPER, PASSWORD_ARGON2ID),
+            'role'          => 'admin',
+            'first_name'    => $firstName,
+            'last_name'     => $lastName,
+        ]);
+    } catch (\Throwable $e) {
+        error_log('REGULR admin user create failed: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+        // Rollback: delete the tenant we just created
+        try { $model->delete($tenantId); } catch (\Throwable $_) {}
+        Response::error(
+            'Fout bij aanmaken admin gebruiker. Controleer of alle database migraties zijn uitgevoerd. Details: ' . $e->getMessage(),
+            'ADMIN_CREATE_FAILED',
+            500
+        );
+    }
 
     // Create wallet for admin user
     $adminUserId = (int) $db->lastInsertId();
-    $stmt = $db->prepare(
-        'INSERT INTO `wallets` (`user_id`, `tenant_id`, `balance_cents`, `points_cents`)
-         VALUES (:uid, :tid, 0, 0)'
-    );
-    $stmt->execute([':uid' => $adminUserId, ':tid' => $tenantId]);
+    try {
+        $stmt = $db->prepare(
+            'INSERT INTO `wallets` (`user_id`, `tenant_id`, `balance_cents`, `points_cents`)
+             VALUES (:uid, :tid, 0, 0)'
+        );
+        $stmt->execute([':uid' => $adminUserId, ':tid' => $tenantId]);
+    } catch (\Throwable $e) {
+        error_log('REGULR wallet create failed: ' . $e->getMessage());
+        // Non-fatal: wallet creation failure should not block tenant creation
+    }
 
     // --- Send welcome email with login credentials ---
     $welcomeSubject = 'REGULR.vip - Jouw inloggegevens voor ' . $input['name'];
@@ -224,16 +249,20 @@ function handleCreate(Tenant $model, User $userModel, array $input, PDO $db): vo
         error_log('email_queue insert failed: ' . $e->getMessage());
     }
 
-    // Audit log
-    $audit = new Audit($db);
-    $audit->log(
-        0,
-        currentUserId(),
-        'tenant.created',
-        'tenant',
-        $tenantId,
-        ['name' => $input['name'], 'slug' => $input['slug'], 'admin_email' => $adminEmail]
-    );
+    // Audit log (non-critical — wrap in try-catch)
+    try {
+        $audit = new Audit($db);
+        $audit->log(
+            0,
+            currentUserId(),
+            'tenant.created',
+            'tenant',
+            $tenantId,
+            ['name' => $input['name'], 'slug' => $input['slug'], 'admin_email' => $adminEmail]
+        );
+    } catch (\Throwable $e) {
+        error_log('REGULR audit log failed: ' . $e->getMessage());
+    }
 
     $tenant = $model->findById($tenantId);
     unset($tenant['secret_key']);
@@ -247,91 +276,98 @@ function handleCreate(Tenant $model, User $userModel, array $input, PDO $db): vo
 
 function handleUpdate(Tenant $model, array $input, PDO $db): void
 {
-    $tenantId = (int) ($input['tenant_id'] ?? 0);
-    if ($tenantId <= 0) {
-        Response::error('tenant_id is required', 'MISSING_FIELD', 400);
-    }
-
-    $existing = $model->findById($tenantId);
-    if (!$existing) {
-        Response::notFound('Tenant not found');
-    }
-
-    // Validate fields if present
-    $v = new Validator();
-    if (isset($input['name'])) {
-        $v->string('name', $input['name'], 2, 255);
-    }
-    
-    // Slug: convert to valid format if provided, otherwise auto-generate from name
-    if (!empty($input['slug'])) {
-        // Auto-convert to valid slug format
-        $input['slug'] = strtolower(preg_replace('/[^a-z0-9]+/', '-', trim($input['slug'])));
-        $input['slug'] = trim($input['slug'], '-');
-    } elseif (!empty($input['name'])) {
-        // Auto-generate slug from name if not provided
-        $input['slug'] = strtolower(preg_replace('/[^a-z0-9]+/', '-', trim($input['name'])));
-    }
-    if (!empty($input['slug'])) {
-        $v->slug('slug', $input['slug']);
-    }
-    if (isset($input['brand_color'])) $v->hexColor('brand_color', $input['brand_color']);
-    if (isset($input['secondary_color'])) $v->hexColor('secondary_color', $input['secondary_color']);
-    if (isset($input['mollie_status'])) $v->enum('mollie_status', $input['mollie_status'], ['mock', 'test', 'live']);
-    if (isset($input['contact_email']) && !empty($input['contact_email'])) {
-        if (!isValidEmail($input['contact_email'])) {
-            Response::error('Ongeldig contact e-mailadres', 'INVALID_EMAIL', 400);
+    try {
+        $tenantId = (int) ($input['tenant_id'] ?? 0);
+        if ($tenantId <= 0) {
+            Response::error('tenant_id is required', 'MISSING_FIELD', 400);
         }
-    }
 
-    // Validate fee config fields if present (super-admin only)
-    if (isset($input['platform_fee_percentage'])) {
-        $perc = (float) $input['platform_fee_percentage'];
-        if ($perc < 0 || $perc > 25) {
-            Response::error('Platform fee percentage moet tussen 0 en 25 zijn', 'INVALID_FEE_PERCENTAGE', 400);
+        $existing = $model->findById($tenantId);
+        if (!$existing) {
+            Response::notFound('Tenant not found');
         }
-    }
-    if (isset($input['platform_fee_min_cents'])) {
-        $min = (int) $input['platform_fee_min_cents'];
-        if ($min < 0 || $min > 100000) {
-            Response::error('Minimum fee moet tussen 0 en 100000 cents zijn', 'INVALID_MIN_FEE', 400);
+
+        // Validate fields if present
+        $v = new Validator();
+        if (isset($input['name'])) {
+            $v->string('name', $input['name'], 2, 255);
         }
-    }
-    if (isset($input['invoice_period'])) {
-        if (!in_array($input['invoice_period'], ['week', 'month'], true)) {
-            Response::error('Invoice period moet week of month zijn', 'INVALID_PERIOD', 400);
+        
+        // Slug: convert to valid format if provided, otherwise auto-generate from name
+        if (!empty($input['slug'])) {
+            $input['slug'] = strtolower(preg_replace('/[^a-z0-9]+/', '-', trim($input['slug'])));
+            $input['slug'] = trim($input['slug'], '-');
+        } elseif (!empty($input['name'])) {
+            $input['slug'] = strtolower(preg_replace('/[^a-z0-9]+/', '-', trim($input['name'])));
         }
-    }
-    if (isset($input['btw_number']) && !empty($input['btw_number'])) {
-        if (!preg_match('/^\d{9}[A-Za-z0-9]{2}$/', $input['btw_number'])) {
-            Response::error('Ongeldig BTW-nummer formaat (verwacht: 9 cijfers + 2 tekens, bijv. 123456789B01)', 'INVALID_BTW', 400);
+        if (!empty($input['slug'])) {
+            $v->slug('slug', $input['slug']);
         }
-    }
-    if (isset($input['mollie_connect_status'])) {
-        if (!in_array($input['mollie_connect_status'], ['none', 'pending', 'active', 'suspended', 'revoked'], true)) {
-            Response::error('Ongeldige Connect status', 'INVALID_CONNECT_STATUS', 400);
+        if (isset($input['brand_color'])) $v->hexColor('brand_color', $input['brand_color']);
+        if (isset($input['secondary_color'])) $v->hexColor('secondary_color', $input['secondary_color']);
+        if (isset($input['mollie_status'])) $v->enum('mollie_status', $input['mollie_status'], ['mock', 'test', 'live']);
+        if (isset($input['contact_email']) && !empty($input['contact_email'])) {
+            if (!isValidEmail($input['contact_email'])) {
+                Response::error('Ongeldig contact e-mailadres', 'INVALID_EMAIL', 400);
+            }
         }
-    }
 
-    $v->validate();
-
-    // Check slug uniqueness if changing
-    if (isset($input['slug']) && $input['slug'] !== $existing['slug']) {
-        $slugCheck = $model->findBySlug($input['slug']);
-        if ($slugCheck) {
-            Response::error('Slug already in use', 'SLUG_EXISTS', 409);
+        // Validate fee config fields if present (super-admin only)
+        if (isset($input['platform_fee_percentage'])) {
+            $perc = (float) $input['platform_fee_percentage'];
+            if ($perc < 0 || $perc > 25) {
+                Response::error('Platform fee percentage moet tussen 0 en 25 zijn', 'INVALID_FEE_PERCENTAGE', 400);
+            }
         }
+        if (isset($input['platform_fee_min_cents'])) {
+            $min = (int) $input['platform_fee_min_cents'];
+            if ($min < 0 || $min > 100000) {
+                Response::error('Minimum fee moet tussen 0 en 100000 cents zijn', 'INVALID_MIN_FEE', 400);
+            }
+        }
+        if (isset($input['invoice_period'])) {
+            if (!in_array($input['invoice_period'], ['week', 'month'], true)) {
+                Response::error('Invoice period moet week of month zijn', 'INVALID_PERIOD', 400);
+            }
+        }
+        if (isset($input['btw_number']) && !empty($input['btw_number'])) {
+            if (!preg_match('/^\d{9}[A-Za-z0-9]{2}$/', $input['btw_number'])) {
+                Response::error('Ongeldig BTW-nummer formaat (verwacht: 9 cijfers + 2 tekens, bijv. 123456789B01)', 'INVALID_BTW', 400);
+            }
+        }
+        if (isset($input['mollie_connect_status'])) {
+            if (!in_array($input['mollie_connect_status'], ['none', 'pending', 'active', 'suspended', 'revoked'], true)) {
+                Response::error('Ongeldige Connect status', 'INVALID_CONNECT_STATUS', 400);
+            }
+        }
+
+        $v->validate();
+
+        // Check slug uniqueness if changing
+        if (isset($input['slug']) && $input['slug'] !== $existing['slug']) {
+            $slugCheck = $model->findBySlug($input['slug']);
+            if ($slugCheck) {
+                Response::error('Slug already in use', 'SLUG_EXISTS', 409);
+            }
+        }
+
+        $model->update($tenantId, $input);
+
+        try {
+            $audit = new Audit($db);
+            $audit->log(0, currentUserId(), 'tenant.updated', 'tenant', $tenantId, $input);
+        } catch (\Throwable $e) {
+            error_log('REGULR audit log failed: ' . $e->getMessage());
+        }
+
+        $updated = $model->findById($tenantId);
+        unset($updated['secret_key']);
+
+        Response::success(['tenant' => $updated]);
+    } catch (\Throwable $e) {
+        error_log('REGULR tenant update failed: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+        Response::error('Fout bij bijwerken tenant: ' . $e->getMessage(), 'UPDATE_FAILED', 500);
     }
-
-    $model->update($tenantId, $input);
-
-    $audit = new Audit($db);
-    $audit->log(0, currentUserId(), 'tenant.updated', 'tenant', $tenantId, $input);
-
-    $updated = $model->findById($tenantId);
-    unset($updated['secret_key']);
-
-    Response::success(['tenant' => $updated]);
 }
 
 function handleDelete(Tenant $model, array $input, PDO $db): void

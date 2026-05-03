@@ -1239,6 +1239,9 @@ async function deleteTier(tierId) {
     // INITIALIZATION
     // ============================================
     function initAdmin() {
+        if (window.__adminInitialized) return;
+        window.__adminInitialized = true;
+
         console.log('Initializing Admin...');
         
         const path = window.location.pathname;
