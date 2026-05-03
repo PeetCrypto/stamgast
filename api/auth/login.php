@@ -20,7 +20,7 @@ if ($method !== 'POST') {
 // Get JSON input
 $input = getJsonInput();
 
-$email    = trim($input['email'] ?? '');
+$email = trim($input['email'] ?? '');
 $password = $input['password'] ?? '';
 $tenantId = isset($input['tenant_id']) ? (int) $input['tenant_id'] : null;
 
