@@ -11,6 +11,7 @@ class SmtpTransport
     /** @var resource|false */
     private $socket = false;
     private string $log = '';
+    private string $lastError = '';
 
     public function __construct(array $config)
     {
@@ -23,6 +24,7 @@ class SmtpTransport
     public function send(array $emailData): bool
     {
         try {
+            $this->lastError = '';
             $this->connect();
             $this->ehlo();
 
@@ -39,6 +41,7 @@ class SmtpTransport
 
             return true;
         } catch (\Throwable $e) {
+            $this->lastError = $e->getMessage();
             error_log("SmtpTransport::send - " . $e->getMessage() . " | Log: " . $this->log);
             // Try to gracefully close
             try { $this->quit(); } catch (\Throwable $_) {}
@@ -54,6 +57,14 @@ class SmtpTransport
     public function getLog(): string
     {
         return $this->log;
+    }
+
+    /**
+     * Get the last error message
+     */
+    public function getLastError(): string
+    {
+        return $this->lastError;
     }
 
     // -------------------------------------------------------------------------

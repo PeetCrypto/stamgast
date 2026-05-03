@@ -316,6 +316,9 @@ $migrations = [
     'add_created_at_column.sql'         => 'Transactions created_at',
 ];
 
+// Voeg de nieuwe migratie toe voor bartender invite
+$migrations['add_bartender_invite_migration.php'] = 'Bartender invite template update';
+
 $sqlDir = $rootDir . '/sql/';
 $migrationCount = 0;
 $migrationErrors = 0;

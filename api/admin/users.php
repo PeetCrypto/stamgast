@@ -216,6 +216,84 @@ if ($method === 'GET') {
                 'email' => $email,
             ]);
 
+            // --- Send invite email for admin/bartender roles ---
+            if (in_array($role, ['admin', 'bartender'], true)) {
+                try {
+                    require_once __DIR__ . '/../../services/Email/EmailService.php';
+                    require_once __DIR__ . '/../../models/EmailTemplate.php';
+                    require_once __DIR__ . '/../../models/Tenant.php';
+
+                    $tenantModel = new Tenant($db);
+                    $tenant = $tenantModel->findById($tenantId);
+                    $tenantName = $tenant ? $tenant['name'] : 'REGULR.vip';
+
+                    $emailService = new EmailService($db);
+                    $templateType = ($role === 'bartender') ? 'bartender_invite' : 'admin_invite';
+                    $userName = $firstName . ' ' . $lastName;
+
+                    // Build login URL
+                    $loginUrl = BASE_URL . '/login';
+                    if ($tenant && !empty($tenant['slug'])) {
+                        $loginUrl = BASE_URL . '/j/' . $tenant['slug'] . '/login';
+                    }
+
+                    // Try template-based email first
+                    $templateVars = [
+                        'user_name'       => $userName,
+                        'tenant_name'     => $tenantName,
+                        'invitation_link' => $loginUrl,
+                        'user_email'      => $email,
+                        'user_password'   => $password,
+                    ];
+
+                    $sent = $emailService->sendTemplatedEmail(
+                        $email,
+                        $templateType,
+                        $templateVars,
+                        $tenantId,
+                        'nl'
+                    );
+
+                    // Fallback to direct email if template fails
+                    if (!$sent) {
+                        $subject = ($role === 'bartender')
+                            ? 'REGULR.vip - Jouw bartender account voor ' . $tenantName
+                            : 'REGULR.vip - Jouw admin account voor ' . $tenantName;
+
+                        $html = "<h2>Welkom bij REGULR.vip!</h2>"
+                            . "<p>Er is een " . ($role === 'bartender' ? 'bartender' : 'admin') . " account aangemaakt voor <strong>" . htmlspecialchars($tenantName) . "</strong>.</p>"
+                            . "<p><strong>Jouw inloggegevens:</strong></p>"
+                            . "<ul>"
+                            . "<li>E-mail: <code>" . htmlspecialchars($email) . "</code></li>"
+                            . "<li>Wachtwoord: <code>" . htmlspecialchars($password) . "</code></li>"
+                            . "</ul>"
+                            . "<p>Log in op jouw REGULR.vip omgeving om te beginnen.</p>"
+                            . "<p><em>Verander je wachtwoord na het eerste inloggen!</em></p>";
+
+                        $text = "Welkom bij REGULR.vip!\n\n"
+                            . "Er is een " . ($role === 'bartender' ? 'bartender' : 'admin') . " account aangemaakt voor " . $tenantName . ".\n\n"
+                            . "Inloggegevens:\n"
+                            . "- E-mail: " . $email . "\n"
+                            . "- Wachtwoord: " . $password . "\n\n"
+                            . "Verander je wachtwoord na het eerste inloggen!";
+
+                        $emailService->sendEmail(
+                            $email,
+                            $subject,
+                            $html,
+                            $text,
+                            $templateType,
+                            $tenantId,
+                            $newUserId
+                        );
+                    }
+
+                    error_log("Invite email sent for {$role}: {$email}");
+                } catch (\Throwable $e) {
+                    error_log("Invite email failed for {$role} {$email}: " . $e->getMessage());
+                }
+            }
+
             Response::success([
                 'message' => 'Gebruiker aangemaakt',
                 'user_id' => $newUserId,

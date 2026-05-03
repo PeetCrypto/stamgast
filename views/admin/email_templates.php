@@ -18,7 +18,7 @@
         <div class="row">
             <div class="col-md-12">
                 <div class="alert alert-info">
-                    <strong>Note:</strong> You can manage admin invite, guest confirmation, and marketing templates.
+                    <strong>Note:</strong> You can manage admin invite, bartender invite, guest confirmation, guest password reset, and marketing templates.
                 </div>
             </div>
         </div>
@@ -32,8 +32,18 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link" id="bartender-invite-tab" data-toggle="tab" href="#bartender-invite" role="tab">
+                            Bartender Invite
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" id="guest-confirmation-tab" data-toggle="tab" href="#guest-confirmation" role="tab">
                             Guest Confirmation
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" id="guest-password-reset-tab" data-toggle="tab" href="#guest-password-reset" role="tab">
+                            Guest Password Reset
                         </a>
                     </li>
                     <li class="nav-item">
@@ -62,6 +72,25 @@
                             <i class="fas fa-plus"></i> Add Template
                         </button>
                     </div>
+                    <div class="tab-pane fade" id="bartender-invite" role="tabpanel">
+                        <div class="table-responsive mt-3">
+                            <table class="table table-striped table-hover" id="bartender-invite-table">
+                                <thead>
+                                    <tr>
+                                        <th>Subject</th>
+                                        <th>Last Updated</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Bartender invite templates will be populated by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <button class="btn btn-primary mt-2" onclick="openTemplateEditor('bartender_invite')">
+                            <i class="fas fa-plus"></i> Add Template
+                        </button>
+                    </div>
                     <div class="tab-pane fade" id="guest-confirmation" role="tabpanel">
                         <div class="table-responsive mt-3">
                             <table class="table table-striped table-hover" id="guest-confirmation-table">
@@ -78,6 +107,25 @@
                             </table>
                         </div>
                         <button class="btn btn-primary mt-2" onclick="openTemplateEditor('guest_confirmation')">
+                            <i class="fas fa-plus"></i> Add Template
+                        </button>
+                    </div>
+                    <div class="tab-pane fade" id="guest-password-reset" role="tabpanel">
+                        <div class="table-responsive mt-3">
+                            <table class="table table-striped table-hover" id="guest-password-reset-table">
+                                <thead>
+                                    <tr>
+                                        <th>Subject</th>
+                                        <th>Last Updated</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Guest password reset templates will be populated by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <button class="btn btn-primary mt-2" onclick="openTemplateEditor('guest_password_reset')">
                             <i class="fas fa-plus"></i> Add Template
                         </button>
                     </div>
@@ -140,7 +188,7 @@
                         <label for="admin-template-content">Content *</label>
                         <textarea class="form-control" id="admin-template-content" rows="15" required></textarea>
                         <small class="form-text text-muted">
-                            Available placeholders: {{user_name}}, {{tenant_name}}, {{invitation_link}}, {{verification_code}}, {{campaign_name}}, {{campaign_message}}
+                            Available placeholders: {{user_name}}, {{tenant_name}}, {{invitation_link}}, {{user_email}}, {{user_password}}, {{verification_code}}, {{password_reset_link}}, {{campaign_name}}, {{campaign_message}}
                         </small>
                     </div>
                     
@@ -207,6 +255,34 @@ $(document).ready(function() {
                     });
                 }
                 
+                // Process bartender invite templates
+                var bartenderInviteTemplates = templates.filter(function(template) {
+                    return template.type === 'bartender_invite';
+                });
+                
+                var bartenderInviteTbody = $('#bartender-invite-table tbody');
+                bartenderInviteTbody.empty();
+                
+                if (bartenderInviteTemplates.length === 0) {
+                    bartenderInviteTbody.append('<tr><td colspan="3" class="text-center">No templates found</td></tr>');
+                } else {
+                    bartenderInviteTemplates.forEach(function(template) {
+                        var row = '<tr>' +
+                            '<td>' + template.subject + '</td>' +
+                            '<td>' + new Date(template.updated_at).toLocaleString() + '</td>' +
+                            '<td>' +
+                                '<button class="btn btn-sm btn-info edit-admin-template" data-id="' + template.id + '">' +
+                                    '<i class="fas fa-edit"></i> Edit' +
+                                '</button> ' +
+                                '<button class="btn btn-sm btn-danger delete-admin-template" data-id="' + template.id + '">' +
+                                    '<i class="fas fa-trash"></i> Delete' +
+                                '</button>' +
+                            '</td>' +
+                        '</tr>';
+                        bartenderInviteTbody.append(row);
+                    });
+                }
+                
                 // Process guest confirmation templates
                 var guestConfirmationTemplates = templates.filter(function(template) {
                     return template.type === 'guest_confirmation';
@@ -232,6 +308,34 @@ $(document).ready(function() {
                             '</td>' +
                         '</tr>';
                         guestConfirmationTbody.append(row);
+                    });
+                }
+                
+                // Process guest password reset templates
+                var guestPasswordResetTemplates = templates.filter(function(template) {
+                    return template.type === 'guest_password_reset';
+                });
+                
+                var guestPasswordResetTbody = $('#guest-password-reset-table tbody');
+                guestPasswordResetTbody.empty();
+                
+                if (guestPasswordResetTemplates.length === 0) {
+                    guestPasswordResetTbody.append('<tr><td colspan="3" class="text-center">No templates found</td></tr>');
+                } else {
+                    guestPasswordResetTemplates.forEach(function(template) {
+                        var row = '<tr>' +
+                            '<td>' + template.subject + '</td>' +
+                            '<td>' + new Date(template.updated_at).toLocaleString() + '</td>' +
+                            '<td>' +
+                                '<button class="btn btn-sm btn-info edit-admin-template" data-id="' + template.id + '">' +
+                                    '<i class="fas fa-edit"></i> Edit' +
+                                '</button> ' +
+                                '<button class="btn btn-sm btn-danger delete-admin-template" data-id="' + template.id + '">' +
+                                    '<i class="fas fa-trash"></i> Delete' +
+                                '</button>' +
+                            '</td>' +
+                        '</tr>';
+                        guestPasswordResetTbody.append(row);
                     });
                 }
                 

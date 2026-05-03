@@ -573,6 +573,7 @@ $hasApiKey     = !empty($settings['mollie_connect_api_key']);
                 <select name="type" id="modal-type" class="form-input" required>
                     <option value="tenant_welcome">Tenant Welcome</option>
                     <option value="admin_invite">Admin Invite</option>
+                    <option value="bartender_invite">Bartender Invite</option>
                     <option value="guest_confirmation">Guest Confirmation</option>
                     <option value="guest_password_reset">Guest Password Reset</option>
                     <option value="marketing">Marketing</option>
@@ -662,6 +663,7 @@ function editTemplate(id, type, subject, language) {
         var hints = {
             'tenant_welcome': '{{tenant_name}}, {{password_reset_link}}',
             'admin_invite': '{{user_name}}, {{tenant_name}}, {{invitation_link}}',
+            'bartender_invite': '{{user_name}}, {{tenant_name}}, {{invitation_link}}, {{user_email}}, {{user_password}}',
             'guest_confirmation': '{{guest_name}}, {{tenant_name}}, {{verification_code}}, {{verification_link}}',
             'guest_password_reset': '{{guest_name}}, {{tenant_name}}, {{password_reset_link}}',
             'marketing': '{{tenant_name}}, {{campaign_name}}, {{campaign_message}}, {{action_url}}, {{action_text}}, {{unsubscribe_url}}'

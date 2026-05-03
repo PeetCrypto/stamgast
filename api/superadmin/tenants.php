@@ -196,6 +196,7 @@ function handleCreate(Tenant $model, User $userModel, array $input, PDO $db): vo
     }
 
     // --- Send welcome email with login credentials ---
+    // Try template-based email first, fall back to hardcoded HTML
     $welcomeSubject = 'REGULR.vip - Jouw inloggegevens voor ' . $input['name'];
     $welcomeHtml = "<h2>Welkom bij REGULR.vip!</h2>"
         . "<p>Er is een account aangemaakt voor <strong>" . htmlspecialchars($input['name']) . "</strong>.</p>"
@@ -213,27 +214,60 @@ function handleCreate(Tenant $model, User $userModel, array $input, PDO $db): vo
         . "- Wachtwoord: " . $adminPassword . "\n\n"
         . "Verander je wachtwoord na het eerste inloggen!";
 
-    // 1) Send directly via EmailService (primary — does NOT depend on DB template)
+    // 1) Try template-based email first
+    $emailSent = false;
     try {
         require_once __DIR__ . '/../../services/Email/EmailService.php';
         $emailService = new EmailService($db);
-        $directResult = $emailService->sendEmail(
+        
+        // Try to use the tenant_welcome template from the database
+        $templateResult = $emailService->sendTemplatedEmail(
             $adminEmail,
-            $welcomeSubject,
-            $welcomeHtml,
-            $welcomeText,
             'tenant_welcome',
-            $tenantId,
-            $adminUserId
+            [
+                'tenant_name'        => $input['name'],
+                'user_name'          => $firstName . ' ' . $lastName,
+                'user_email'         => $adminEmail,
+                'user_password'      => $adminPassword,
+                'password_reset_link' => BASE_URL . '/login',
+            ],
+            null,  // global template (no tenant_id)
+            'nl'
         );
-        if (!$directResult) {
-            error_log('Tenant welcome direct email failed for: ' . $adminEmail);
+        if ($templateResult) {
+            $emailSent = true;
+            error_log('Tenant welcome template email sent to: ' . $adminEmail);
         }
     } catch (\Throwable $e) {
-        error_log('Tenant welcome direct email exception: ' . $e->getMessage());
+        error_log('Tenant welcome template email failed: ' . $e->getMessage());
     }
 
-    // 2) Also queue via email_queue table (fallback for batch processing)
+    // 2) Fallback: Send directly via EmailService with hardcoded HTML
+    if (!$emailSent) {
+        try {
+            require_once __DIR__ . '/../../services/Email/EmailService.php';
+            $emailService = new EmailService($db);
+            $directResult = $emailService->sendEmail(
+                $adminEmail,
+                $welcomeSubject,
+                $welcomeHtml,
+                $welcomeText,
+                'tenant_welcome',
+                $tenantId,
+                $adminUserId
+            );
+            if ($directResult) {
+                $emailSent = true;
+                error_log('Tenant welcome direct email sent to: ' . $adminEmail);
+            } else {
+                error_log('Tenant welcome direct email failed for: ' . $adminEmail);
+            }
+        } catch (\Throwable $e) {
+            error_log('Tenant welcome direct email exception: ' . $e->getMessage());
+        }
+    }
+
+    // 3) Also queue via email_queue table (fallback for batch processing)
     try {
         $stmt = $db->prepare(
             'INSERT INTO `email_queue` (`tenant_id`, `user_id`, `subject`, `body_html`, `status`)

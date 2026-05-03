@@ -10,6 +10,7 @@ interface EmailProviderInterface
 {
     public function send(array $emailData): bool;
     public function getName(): string;
+    public function getLastError(): string;
 }
 
 class EmailService
@@ -37,6 +38,16 @@ class EmailService
         ?int $tenantId = null,
         ?int $userId = null
     ): bool {
+        $emailData = [
+            'to' => $to,
+            'subject' => $subject,
+            'html_content' => $htmlContent,
+            'text_content' => $textContent,
+            'template_type' => $templateType,
+            'tenant_id' => $tenantId,
+            'user_id' => $userId
+        ];
+
         try {
             // Get active email configuration
             $config = $this->emailConfigModel->getActiveConfig();
@@ -47,26 +58,23 @@ class EmailService
             // Initialize the appropriate provider
             $provider = $this->initializeProvider($config);
             
-            // Prepare email data
-            $emailData = [
-                'to' => $to,
-                'subject' => $subject,
-                'html_content' => $htmlContent,
-                'text_content' => $textContent,
-                'template_type' => $templateType,
-                'tenant_id' => $tenantId,
-                'user_id' => $userId
-            ];
-
             // Send the email
             $result = $provider->send($emailData);
             
-            // Log the email
-            $this->logEmail($emailData, $result, $config['provider']);
-            
+            // Get error message if send failed
+            $errorMessage = '';
+            if (!$result && method_exists($provider, 'getLastError')) {
+                $errorMessage = $provider->getLastError();
+            }
+
+            // Log the email (success or failure from provider)
+            $this->logEmail($emailData, $result, $config['provider'], $errorMessage ?: null);
+
             return $result;
         } catch (\Exception $e) {
             error_log("EmailService::sendEmail - " . $e->getMessage());
+            // Always log the failure
+            $this->logEmail($emailData, false, 'unknown', $e->getMessage());
             return false;
         }
     }
@@ -127,23 +135,35 @@ class EmailService
     /**
      * Log email in the email_log table
      */
-    private function logEmail(array $emailData, bool $success, string $provider): void
+    private function logEmail(array $emailData, bool $success, string $provider, ?string $errorMessage = null): void
     {
         try {
+            // Generate UUID for char(36) id column
+            $id = sprintf(
+                '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+                mt_rand(0, 0xffff), mt_rand(0, 0xffff),
+                mt_rand(0, 0xffff),
+                mt_rand(0, 0x0fff) | 0x4000,
+                mt_rand(0, 0x3fff) | 0x8000,
+                mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
+            );
+
             $stmt = $this->db->prepare("
                 INSERT INTO email_log 
-                    (tenant_id, user_id, recipient_email, subject, template_type, provider, status, sent_at)
+                    (id, tenant_id, user_id, recipient_email, subject, template_type, provider, status, error_message, sent_at)
                 VALUES 
-                    (:tenant_id, :user_id, :recipient_email, :subject, :template_type, :provider, :status, NOW())
+                    (:id, :tenant_id, :user_id, :recipient_email, :subject, :template_type, :provider, :status, :error_message, NOW())
             ");
             $stmt->execute([
+                ':id' => $id,
                 ':tenant_id' => $emailData['tenant_id'] ?? null,
                 ':user_id' => $emailData['user_id'] ?? null,
                 ':recipient_email' => $emailData['to'],
                 ':subject' => $emailData['subject'],
                 ':template_type' => $emailData['template_type'] ?? null,
                 ':provider' => $provider,
-                ':status' => $success ? 'sent' : 'failed'
+                ':status' => $success ? 'sent' : 'failed',
+                ':error_message' => $errorMessage,
             ]);
         } catch (\Throwable $e) {
             error_log("EmailService::logEmail - " . $e->getMessage());
@@ -154,6 +174,7 @@ class EmailService
 class BrevoProvider implements EmailProviderInterface
 {
     private array $config;
+    private ?SmtpTransport $transport = null;
     
     public function __construct(array $config)
     {
@@ -168,14 +189,20 @@ class BrevoProvider implements EmailProviderInterface
     public function send(array $emailData): bool
     {
         require_once __DIR__ . '/SmtpTransport.php';
-        $transport = new SmtpTransport($this->config);
-        return $transport->send($emailData);
+        $this->transport = new SmtpTransport($this->config);
+        return $this->transport->send($emailData);
+    }
+
+    public function getLastError(): string
+    {
+        return $this->transport ? $this->transport->getLastError() : '';
     }
 }
 
 class SenderNetProvider implements EmailProviderInterface
 {
     private array $config;
+    private ?SmtpTransport $transport = null;
     
     public function __construct(array $config)
     {
@@ -190,14 +217,20 @@ class SenderNetProvider implements EmailProviderInterface
     public function send(array $emailData): bool
     {
         require_once __DIR__ . '/SmtpTransport.php';
-        $transport = new SmtpTransport($this->config);
-        return $transport->send($emailData);
+        $this->transport = new SmtpTransport($this->config);
+        return $this->transport->send($emailData);
+    }
+
+    public function getLastError(): string
+    {
+        return $this->transport ? $this->transport->getLastError() : '';
     }
 }
 
 class AwsSesProvider implements EmailProviderInterface
 {
     private array $config;
+    private ?SmtpTransport $transport = null;
     
     public function __construct(array $config)
     {
@@ -212,7 +245,12 @@ class AwsSesProvider implements EmailProviderInterface
     public function send(array $emailData): bool
     {
         require_once __DIR__ . '/SmtpTransport.php';
-        $transport = new SmtpTransport($this->config);
-        return $transport->send($emailData);
+        $this->transport = new SmtpTransport($this->config);
+        return $this->transport->send($emailData);
+    }
+
+    public function getLastError(): string
+    {
+        return $this->transport ? $this->transport->getLastError() : '';
     }
 }

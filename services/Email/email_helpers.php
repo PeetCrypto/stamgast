@@ -94,6 +94,34 @@ function sendAdminInviteEmail($db, $tenant, $user, $inviteToken, $tenantId) {
 }
 
 /**
+ * Send bartender invite email
+ * 
+ * @param PDO $db Database connection
+ * @param array $tenant Tenant data
+ * @param array $user User data with email and password
+ * @param string $inviteToken Invite token
+ * @param int $tenantId Tenant ID
+ * @return array Result with success status and message
+ */
+function sendBartenderInviteEmail($db, $tenant, $user, $inviteToken, $tenantId) {
+    try {
+        // Prepare template variables
+        $variables = [
+            'user_name' => $user['first_name'] . ' ' . $user['last_name'],
+            'tenant_name' => $tenant['name'],
+            'invitation_link' => BASE_URL . '/accept-invite?token=' . $inviteToken,
+            'user_email' => $user['email'],
+            'user_password' => $user['password'] ?? '',
+        ];
+        
+        // Send the email
+        return sendEmailTemplate($db, $user['email'], 'bartender_invite', $variables, $tenantId);
+    } catch (Exception $e) {
+        return ['success' => false, 'message' => $e->getMessage()];
+    }
+}
+
+/**
  * Send guest confirmation email
  * 
  * @param PDO $db Database connection

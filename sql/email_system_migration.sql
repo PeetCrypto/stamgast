@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS `email_config` (
 -- -------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `email_templates` (
     `id`                INT             NOT NULL AUTO_INCREMENT,
-    `type`              ENUM('tenant_welcome','admin_invite','guest_confirmation','guest_password_reset','marketing') NOT NULL,
+    `type`              ENUM('tenant_welcome','admin_invite','bartender_invite','guest_confirmation','guest_password_reset','marketing') NOT NULL,
     `subject`           VARCHAR(500)    NOT NULL,
     `content`           MEDIUMTEXT      NOT NULL COMMENT 'HTML template with {{placeholders}}',
     `text_content`      TEXT            NULL COMMENT 'Plain-text fallback',

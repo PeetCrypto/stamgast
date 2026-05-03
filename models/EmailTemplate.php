@@ -12,6 +12,7 @@ class EmailTemplate
     // Template type constants
     public const TYPE_TENANT_WELCOME       = 'tenant_welcome';
     public const TYPE_ADMIN_INVITE         = 'admin_invite';
+    public const TYPE_BARTENDER_INVITE     = 'bartender_invite';
     public const TYPE_GUEST_CONFIRMATION   = 'guest_confirmation';
     public const TYPE_GUEST_PASSWORD_RESET = 'guest_password_reset';
     public const TYPE_MARKETING            = 'marketing';
@@ -142,6 +143,7 @@ class EmailTemplate
 
             $validTypes = [
                 self::TYPE_TENANT_WELCOME, self::TYPE_ADMIN_INVITE,
+                self::TYPE_BARTENDER_INVITE,
                 self::TYPE_GUEST_CONFIRMATION, self::TYPE_GUEST_PASSWORD_RESET,
                 self::TYPE_MARKETING,
             ];
@@ -271,6 +273,7 @@ class EmailTemplate
         if ($userRole === 'admin') {
             return in_array($templateType, [
                 self::TYPE_ADMIN_INVITE,
+                self::TYPE_BARTENDER_INVITE,
                 self::TYPE_GUEST_CONFIRMATION,
                 self::TYPE_GUEST_PASSWORD_RESET,
                 self::TYPE_MARKETING,
