@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 /**
  * GET /api/assets/generate_pwa_icon
- * Generate a branded PWA icon with tenant brand_color
+ * Generate a PWA icon using tenant logo if available, otherwise fallback to branded icon.
  *
  * Query: ?tenant_id=1&size=192
  */
@@ -36,11 +36,75 @@ if ($tenant === null) {
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode(['success' => false, 'error' => 'Tenant niet gevonden']);
     exit;
+
+// Try to use tenant logo if available
+$logoPath = $tenant['logo_path'] ?? '';
+if ($logoPath) {
+    // Convert URL to filesystem path
+    // Remove BASE_URL to get relative path from public directory
+    $relativePath = str_replace(BASE_URL, '', $logoPath);
+    // Ensure the path starts with /
+    if ($relativePath !== '' && $relativePath[0] !== '/') {
+        $relativePath = '/' . $relativePath;
+    }
+    $filePath = $_SERVER['DOCUMENT_ROOT'] . $relativePath;
+
+    if (file_exists($filePath)) {
+        // Get image info and create source image based on type
+        $info = getimagesize($filePath);
+        if ($info !== false) {
+            $mime = $info['mime'];
+            $srcImg = null;
+
+            // Load image based on mime type
+            switch ($mime) {
+                case 'image/png':
+                    $srcImg = @imagecreatefrompng($filePath);
+                    break;
+                case 'image/jpeg':
+                    $srcImg = @imagecreatefromjpeg($filePath);
+                    break;
+                case 'image/webp':
+                    if (function_exists('imagecreatefromwebp')) {
+                        $srcImg = @imagecreatefromwebp($filePath);
+                    }
+                    break;
+                // Note: SVG is not supported by GD, so we fall back to generated icon
+                default:
+                    $srcImg = null;
+            }
+
+            if ($srcImg !== false && $srcImg !== null) {
+                // Create target image
+                $img = imagecreatetruecolor($size, $size);
+                if ($img !== false) {
+                    // Preserve transparency for PNG and WebP
+                    if ($mime === 'image/png' || $mime === 'image/webp') {
+                        imagealphablending($img, false);
+                        imagesavealpha($img, true);
+                        $transparent = imagecolorallocatealpha($img, 0, 0, 0, 127);
+                        imagefilledrectangle($img, 0, 0, $size, $size, $transparent);
+                    }
+
+                    // Resize and copy
+                    imagecopyresampled($img, $srcImg, 0, 0, 0, 0, $size, $size, $info[0], $info[1]);
+                    imagedestroy($srcImg);
+
+                    // Output as PNG
+                    header('Content-Type: image/png');
+                    header('Cache-Control: public, max-age=86400');
+                    imagepng($img);
+                    imagedestroy($img);
+                    exit;
+                }
+            }
+        }
+    }
 }
 
-// Check if GD library is available
+// Fallback: generate branded icon if logo not available or processing failed
 if (!extension_loaded('gd') || !function_exists('imagecreatetruecolor')) {
-    // Fallback: redirect to a default icon or return a simple colored PNG
+    // Last resort: simple colored PNG
     generateFallbackIcon($tenant['brand_color'] ?? '#FFC107', $size);
     exit;
 }

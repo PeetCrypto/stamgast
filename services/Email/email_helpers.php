@@ -57,7 +57,7 @@ function sendTenantWelcomeEmail($db, $tenant, $passwordResetToken) {
         // Prepare template variables
         $variables = [
             'tenant_name' => $tenant['name'],
-            'password_reset_link' => 'https://app.regulr.vip/set-password?token=' . $passwordResetToken
+            'password_reset_link' => FULL_BASE_URL . '/set-password?token=' . $passwordResetToken
         ];
         
         // Send the email
@@ -83,7 +83,7 @@ function sendAdminInviteEmail($db, $tenant, $user, $inviteToken, $tenantId) {
         $variables = [
             'user_name' => $user['first_name'] . ' ' . $user['last_name'],
             'tenant_name' => $tenant['name'],
-            'invitation_link' => 'https://app.regulr.vip/accept-invite?token=' . $inviteToken
+            'invitation_link' => FULL_BASE_URL . '/accept-invite?token=' . $inviteToken
         ];
         
         // Send the email
@@ -109,7 +109,7 @@ function sendBartenderInviteEmail($db, $tenant, $user, $inviteToken, $tenantId) 
         $variables = [
             'user_name' => $user['first_name'] . ' ' . $user['last_name'],
             'tenant_name' => $tenant['name'],
-            'invitation_link' => BASE_URL . '/accept-invite?token=' . $inviteToken,
+            'invitation_link' => FULL_BASE_URL . '/accept-invite?token=' . $inviteToken,
             'user_email' => $user['email'],
             'user_password' => $user['password'] ?? '',
         ];
@@ -138,7 +138,7 @@ function sendGuestConfirmationEmail($db, $email, $tenantName, $verificationCode,
             'guest_name' => '',
             'tenant_name' => $tenantName,
             'verification_code' => $verificationCode,
-            'verification_link' => 'https://app.regulr.vip/verify?code=' . $verificationCode
+            'verification_link' => FULL_BASE_URL . '/verify?code=' . $verificationCode
         ];
         
         // Send the email

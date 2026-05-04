@@ -120,9 +120,9 @@
                         window.location.pathname.replace(/\/$/, '').split('?')[0]
                     );
                     if (isServerPage) {
-                        // Server-rendered page with expired session — redirect to login
-                        window.location.href = (window.__BASE_URL || '') + '/login';
-                        throw new Error('Sessie verlopen — doorverwijzen naar login...');
+                        // Server-rendered page with expired session — redirect to branded login
+                        window.location.href = getLoginUrl();
+                        throw new Error('Sessie verlopen — doorverwijzen...');
                     }
                 }
                 throw new Error(data.error || data.message || 'API Error');
@@ -138,6 +138,27 @@
     function getCsrfToken() {
         const meta = document.querySelector('meta[name="csrf-token"]');
         return meta ? meta.content : '';
+    }
+
+    /**
+     * Get the tenant slug from the <meta name="tenant-slug"> tag.
+     * Used to redirect guests to their branded login page /j/{slug}.
+     */
+    function getTenantSlug() {
+        const meta = document.querySelector('meta[name="tenant-slug"]');
+        return meta ? meta.content : '';
+    }
+
+    /**
+     * Build the correct login URL for the current user.
+     * Guests with a tenant slug → /j/{slug}, everyone else → /login.
+     */
+    function getLoginUrl() {
+        const slug = getTenantSlug();
+        if (slug) {
+            return (window.__BASE_URL || '') + '/j/' + slug;
+        }
+        return (window.__BASE_URL || '') + '/login';
     }
 
     // ============================================
@@ -179,6 +200,7 @@
                 // a failed JS session check here is likely a transient API issue.
                 if (window.location.pathname !== '/login' &&
                     window.location.pathname !== '/' &&
+                    !window.location.pathname.startsWith('/j/') &&
                     !isServerRenderedPage()) {
                     redirectToLogin();
                 }
@@ -193,7 +215,7 @@
     }
 
     function redirectToLogin() {
-        window.location.href = (window.__BASE_URL || '') + '/login';
+        window.location.href = getLoginUrl();
     }
 
     function getUserRole() {

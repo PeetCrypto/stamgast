@@ -194,7 +194,7 @@ $sessionTenantName = $_SESSION['tenant_name'] ?? APP_NAME;
             <p class="text-secondary text-sm">
                 Om je aan te melden bij <strong><?= sanitize($tenantName) ?></strong> moet je eerst uitloggen bij je huidige locatie.
             </p>
-            <a href="<?= BASE_URL ?>/logout" class="btn btn-primary" style="margin-top: var(--space-md);">Uitloggen</a>
+            <a href="<?= BASE_URL ?>/logout?return=<?= urlencode('/j/' . $tenantSlug) ?>" class="btn btn-primary" style="margin-top: var(--space-md);">Uitloggen</a>
         </div>
 
         <?php else: ?>

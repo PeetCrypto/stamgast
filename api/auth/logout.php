@@ -30,10 +30,22 @@ $audit->log(
     (int) currentUserId()
 );
 
+// Capture guest slug before destroying session (for branded redirect)
+$role = $_SESSION['role'] ?? '';
+$guestSlug = ($role === 'guest' && isset($_SESSION['tenant']['slug']))
+    ? $_SESSION['tenant']['slug']
+    : null;
+
 // Destroy session via AuthService
 $authService = new AuthService($db);
 $authService->logout();
 
+// Build redirect URL: guests go to /j/{slug}, others to /login
+$redirectUrl = '/login';
+if ($guestSlug) {
+    $redirectUrl = '/j/' . $guestSlug;
+}
+
 Response::success([
-    'redirect' => '/login',
+    'redirect' => $redirectUrl,
 ]);

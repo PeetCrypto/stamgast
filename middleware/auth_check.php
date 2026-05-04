@@ -15,6 +15,10 @@ function authCheck(): void
 
     // Check session timeout
     if (isset($_SESSION['last_activity']) && checkSessionTimeout()) {
+        // For guests: save slug cookie before destroying session so redirects can still find it
+        if (($_SESSION['role'] ?? '') === 'guest' && isset($_SESSION['tenant']['slug'])) {
+            setGuestRedirectSlugCookie($_SESSION['tenant']['slug']);
+        }
         // Session expired - destroy it
         session_unset();
         session_destroy();
@@ -35,11 +39,15 @@ function authCheck(): void
                 $tenantModel = new Tenant($db);
                 if (!$tenantModel->isActive((int) $tenantId)) {
                     // Tenant is disabled — force logout
+                    // For guests: save slug cookie before destroying session
+                    if ($role === 'guest' && isset($_SESSION['tenant']['slug'])) {
+                        setGuestRedirectSlugCookie($_SESSION['tenant']['slug']);
+                    }
                     session_unset();
                     session_destroy();
                     session_start();
                     $_SESSION['flash_error'] = 'Deze locatie is uitgeschakeld door de platformbeheerder. Neem contact op voor meer informatie.';
-                    header('Location: /login');
+                    header('Location: ' . getGuestLoginUrl());
                     exit;
                 }
             }

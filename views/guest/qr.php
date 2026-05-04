@@ -11,7 +11,7 @@ $bodyClass = 'guest-page qr-page';
 // Session and auth are already handled by index.php router.
 // Additional role check for safety.
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'guest') {
-    redirect('/login');
+    redirect(getGuestLoginUrl());
 }
 
 $user = $_SESSION;

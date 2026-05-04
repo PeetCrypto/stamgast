@@ -232,9 +232,9 @@ if ($method === 'GET') {
                     $userName = $firstName . ' ' . $lastName;
 
                     // Build login URL
-                    $loginUrl = BASE_URL . '/login';
+                    $loginUrl = FULL_BASE_URL . '/login';
                     if ($tenant && !empty($tenant['slug'])) {
-                        $loginUrl = BASE_URL . '/j/' . $tenant['slug'] . '/login';
+                        $loginUrl = FULL_BASE_URL . '/j/' . $tenant['slug'] . '/login';
                     }
 
                     // Try template-based email first

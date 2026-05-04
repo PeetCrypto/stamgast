@@ -572,9 +572,19 @@ function handleViewRoute(string $route, string $method): void
 
     // Handle logout (both GET and POST destroy the session)
     if ($route === 'logout') {
+        // Capture return URL from query param (used by cross-tenant logout links)
+        $returnUrl = $_GET['return'] ?? null;
+        if ($returnUrl && preg_match('#^/j/[a-z0-9][a-z0-9-]{0,98}[a-z0-9](/|$)#', $returnUrl)) {
+            // Valid /j/{slug} return URL — save as cookie
+            $slug = explode('/', trim($returnUrl, '/'))[1] ?? '';
+            setGuestRedirectSlugCookie($slug);
+        } elseif (isLoggedIn() && ($_SESSION['role'] ?? '') === 'guest' && isset($_SESSION['tenant']['slug'])) {
+            // For guests: save slug cookie before destroying session for branded redirect
+            setGuestRedirectSlugCookie($_SESSION['tenant']['slug']);
+        }
         session_unset();
         session_destroy();
-        redirect('/login');
+        redirect(getGuestLoginUrl());
     }
 
     // Find view file
@@ -604,7 +614,7 @@ function handleViewRoute(string $route, string $method): void
     // Enforce auth for protected views
     $publicViews = ['shared/login.php', 'shared/register.php'];
     if (!in_array($viewFile, $publicViews) && !isLoggedIn()) {
-        redirect('/login');
+        redirect(getGuestLoginUrl());
     }
 
     // Enforce role-based access

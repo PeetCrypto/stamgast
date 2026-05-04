@@ -68,6 +68,24 @@ define('MAX_PAGE_SIZE', 100);
 $scriptDir = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? ''));
 define('BASE_URL', rtrim($scriptDir, '/'));
 
+// --- FULL BASE URL (scheme + host + path, used in emails) ---
+// Priority: APP_URL from .env > $_SERVER auto-detect
+$_appUrl = getenv('APP_URL');
+if (!empty($_appUrl)) {
+    // APP_URL is set in .env (e.g. http://stamgast.test or https://app.regulr.vip)
+    // Append BASE_URL path if APP_URL doesn't already end with it
+    $_appUrl = rtrim($_appUrl, '/');
+    if (BASE_URL !== '' && !str_ends_with($_appUrl, BASE_URL)) {
+        $_appUrl .= BASE_URL;
+    }
+    define('FULL_BASE_URL', $_appUrl);
+} else {
+    // Auto-detect from server variables
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    define('FULL_BASE_URL', $scheme . '://' . $host . BASE_URL);
+}
+
 // --- PATHS ---
 define('ROOT_PATH', __DIR__ . '/../');
 define('PUBLIC_PATH', ROOT_PATH . 'public/');

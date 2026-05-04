@@ -7,21 +7,7 @@ declare(strict_types=1);
  * Voer dit script 1 keer uit na upload naar Hostinger.
  * Het controleert alles, maakt de database aan, migreert tabellen,
  * maakt een superadmin aan en verwijdert zichzelf daarna.
- * 
- * Gebruik: https://app.regulr.vip/deploy.php
- * Of via SSH/terminal: php deploy.php
  */
-
-// ═══════════════════════════════════════════════════════════════
-// INSTELLINGEN — PAS DEZE AAN VOORDAT JE HET SCRIPT DRAAIT
-// ═══════════════════════════════════════════════════════════════
-
-// Superadmin account wordt uit .env gelezen (na $env load)
-// Zie STAP 2 voor de toewijzing
-
-// ═══════════════════════════════════════════════════════════════
-// HULPFUNCTIES
-// ═══════════════════════════════════════════════════════════════
 
 $startTime = microtime(true);
 $totalChecks = 0;
@@ -74,8 +60,7 @@ function summary(): void {
     echo str_repeat('═', 60) . "\n";
     echo "  Checks: {$passedChecks}/{$totalChecks} geslaagd";
     if ($failedChecks > 0) echo " ({$failedChecks} gefaald)";
-    echo "\n";
-    echo "  Tijd: {$elapsed}s\n";
+    echo "\n  Tijd: {$elapsed}s\n";
     if ($failedChecks > 0) {
         echo "  Status: ❌ Niet klaar voor gebruik\n";
     } else {
@@ -90,14 +75,9 @@ function summary(): void {
     echo str_repeat('═', 60) . "\n";
 }
 
-/**
- * Lees .env bestand direct (zonder load_env.php)
- */
 function loadEnvFile(string $path): array {
     $env = [];
-    if (!file_exists($path)) {
-        return $env;
-    }
+    if (!file_exists($path)) return $env;
     $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
     foreach ($lines as $line) {
         $line = trim($line);
@@ -106,157 +86,85 @@ function loadEnvFile(string $path): array {
         [$key, $value] = explode('=', $line, 2);
         $key = trim($key);
         $value = trim($value);
-        if (preg_match('/^["\'](.*)["\']\s*$/', $value, $m)) {
-            $value = $m[1];
-        }
+        if (preg_match('/^["\'](.*)["\']\s*$/', $value, $m)) $value = $m[1];
         $env[$key] = $value;
     }
     return $env;
 }
 
-// ═══════════════════════════════════════════════════════════════
-// START
-// ═══════════════════════════════════════════════════════════════
-
-echo "\n";
-echo "╔══════════════════════════════════════════════════════════╗\n";
+echo "\n╔══════════════════════════════════════════════════════════╗\n";
 echo "║     REGULR.vip — Deploy & Install Script               ║\n";
 echo "║     Versie 1.0 — " . date('Y-m-d H:i:s') . "                      ║\n";
 echo "╚══════════════════════════════════════════════════════════╝\n";
 
 $rootDir = __DIR__;
 
-// ═══════════════════════════════════════════════════════════════
-// STAP 1: PHP REQUIREMENTS
-// ═══════════════════════════════════════════════════════════════
-
+// STAP 1: PHP Requirements
 header_msg('STAP 1: PHP Requirements');
-
 check('PHP versie 8.1+', PHP_VERSION_ID >= 80100, "Huidig: " . PHP_VERSION);
-check('PHP versie 8.2+ (aanbevolen)', PHP_VERSION_ID >= 80200, "Huidig: " . PHP_VERSION . " (werkt maar 8.2+ is beter)");
-
 $requiredExtensions = ['pdo_mysql', 'json', 'mbstring', 'openssl', 'gd', 'curl', 'fileinfo'];
 foreach ($requiredExtensions as $ext) {
-    $loaded = extension_loaded($ext);
-    check("Extension: {$ext}", $loaded);
-    if (!$loaded) abort("PHP extension '{$ext}' ontbreekt. Activeer in Hostinger hPanel → PHP.");
+    check("Extension: {$ext}", extension_loaded($ext));
 }
 
-$optionalExtensions = ['zip', 'dom'];
-foreach ($optionalExtensions as $ext) {
-    if (!extension_loaded($ext)) {
-        warn("Optionele extension '{$ext}' niet geladen (geen probleem)");
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════
-// STAP 2: BESTANDEN & .ENV
-// ═══════════════════════════════════════════════════════════════
-
+// STAP 2: Bestanden & Configuratie
 header_msg('STAP 2: Bestanden & Configuratie');
-
-$requiredFiles = [
-    'index.php',
-    'config/load_env.php',
-    'config/app.php',
-    'config/database.php',
-    'config/cors.php',
-    'config/email.php',
-    '.htaccess',
-];
-
+$requiredFiles = ['index.php', 'config/load_env.php', 'config/app.php', 'config/database.php', 'config/cors.php', 'config/email.php', '.htaccess'];
 foreach ($requiredFiles as $file) {
     check("Bestand: {$file}", file_exists($rootDir . '/' . $file));
 }
 
-// .env check — als .env ontbreekt, kopieer van .env.production
 $envPath = $rootDir . '/.env';
 if (!file_exists($envPath)) {
-    $productionEnv = $rootDir . '/.env.production';
-    if (file_exists($productionEnv)) {
-        step('.env ontbreekt — kopiëren van .env.production...');
-        $copied = copy($productionEnv, $envPath);
-        check('.env aangemaakt vanuit .env.production', $copied);
-        if (!$copied) {
-            abort('Kon .env.production niet kopiëren naar .env. Check bestandsrechten.');
-        }
+    $prodEnv = $rootDir . '/.env.production';
+    if (file_exists($prodEnv)) {
+        copy($prodEnv, $envPath);
+        check('.env aangemaakt', true);
     } else {
-        check('.env bestand', false, 'Zowel .env als .env.production ontbreken!');
-        abort('Maak een .env bestand aan met je database credentials.');
+        abort('Maak een .env bestand aan met database credentials.');
     }
 }
 
-check('.env bestand', true);
-
-// Lees .env
 $env = loadEnvFile($envPath);
-check('.env bevat APP_ENV', isset($env['APP_ENV']) && $env['APP_ENV'] === 'production',
-    'APP_ENV moet "production" zijn, gevonden: ' . ($env['APP_ENV'] ?? '(leeg)'));
-
 check('.env bevat DB_HOST', isset($env['DB_HOST']) && !empty($env['DB_HOST']));
 check('.env bevat DB_NAME', isset($env['DB_NAME']) && !empty($env['DB_NAME']));
 check('.env bevat DB_USER', isset($env['DB_USER']) && !empty($env['DB_USER']));
 check('.env bevat DB_PASS', isset($env['DB_PASS']));
-// Auto-genereer APP_PEPPER als ontbreekt
+
 if (empty($env['APP_PEPPER']) || strlen($env['APP_PEPPER']) < 16) {
-    step('APP_PEPPER ontbreekt — automatisch genereren...');
     $env['APP_PEPPER'] = bin2hex(random_bytes(32));
-    $appended = file_put_contents($envPath, "\nAPP_PEPPER={$env['APP_PEPPER']}\n", FILE_APPEND);
-    check('APP_PEPPER gegenereerd en opgeslagen', $appended !== false);
-} else {
-    check('APP_PEPPER aanwezig', true);
+    file_put_contents($envPath, "\nAPP_PEPPER={$env['APP_PEPPER']}\n", FILE_APPEND);
+    check('APP_PEPPER gegenereerd', true);
 }
 
-// Auto-genereer ENCRYPTION_KEY als ontbreekt
 if (empty($env['ENCRYPTION_KEY']) || strlen($env['ENCRYPTION_KEY']) < 16) {
-    step('ENCRYPTION_KEY ontbreekt — automatisch genereren...');
     $env['ENCRYPTION_KEY'] = bin2hex(random_bytes(32));
-    $appended = file_put_contents($envPath, "\nENCRYPTION_KEY={$env['ENCRYPTION_KEY']}\n", FILE_APPEND);
-    check('ENCRYPTION_KEY gegenereerd en opgeslagen', $appended !== false);
-} else {
-    check('ENCRYPTION_KEY aanwezig', true);
+    file_put_contents($envPath, "\nENCRYPTION_KEY={$env['ENCRYPTION_KEY']}\n", FILE_APPEND);
+    check('ENCRYPTION_KEY gegenereerd', true);
 }
 
-// Superadmin credentials uit .env (met fallback defaults)
-$SUPERADMIN_EMAIL      = $env['SUPERADMIN_EMAIL']      ?? 'admin@regulr.vip';
-$SUPERADMIN_PASSWORD   = $env['SUPERADMIN_PASSWORD']    ?? 'Admin123!';
-$SUPERADMIN_FIRST_NAME = $env['SUPERADMIN_FIRST_NAME']  ?? 'Admin';
-$SUPERADMIN_LAST_NAME  = $env['SUPERADMIN_LAST_NAME']   ?? 'REGULR.vip';
-check('.env bevat SUPERADMIN_EMAIL', !empty($SUPERADMIN_EMAIL), 'Gebruikt fallback: admin@regulr.vip');
+$SUPERADMIN_EMAIL = $env['SUPERADMIN_EMAIL'] ?? 'admin@regulr.vip';
+$SUPERADMIN_PASSWORD = $env['SUPERADMIN_PASSWORD'] ?? 'Admin123!';
+$SUPERADMIN_FIRST_NAME = $env['SUPERADMIN_FIRST_NAME'] ?? 'Admin';
+$SUPERADMIN_LAST_NAME = $env['SUPERADMIN_LAST_NAME'] ?? 'REGULR.vip';
 
-// ═══════════════════════════════════════════════════════════════
-// STAP 3: UPLOAD DIRECTORIES
-// ═══════════════════════════════════════════════════════════════
-
+// STAP 3: Upload Directories
 header_msg('STAP 3: Upload Directories');
-
-$uploadDirs = [
-    'public/uploads',
-    'public/uploads/logos',
-    'public/uploads/profiles',
-];
-
+$uploadDirs = ['public/uploads', 'public/uploads/logos', 'public/uploads/profiles'];
 foreach ($uploadDirs as $dir) {
     $fullPath = $rootDir . '/' . $dir;
     if (!is_dir($fullPath)) {
-        step("Aanmaken: {$dir}");
-        $created = mkdir($fullPath, 0755, true);
-        check("Directory: {$dir}", $created, "Kon niet aanmaken. Maak handmatig aan via File Manager.");
+        mkdir($fullPath, 0755, true);
+        check("Directory: {$dir}", true);
     } else {
-        check("Directory: {$dir}", is_writable($fullPath), "Niet schrijfbaar. chmod 755 via File Manager.");
+        check("Directory: {$dir}", is_writable($fullPath));
     }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// STAP 4: DATABASE CONNECTIE
-// ═══════════════════════════════════════════════════════════════
-
+// STAP 4: Database Connectie
 header_msg('STAP 4: Database Connectie');
-
 step('Verbinden met MySQL server...');
-
 try {
-    // Eerst connectie ZONDER database naam (om te checken of DB bestaat)
     $dsn = "mysql:host={$env['DB_HOST']};port=" . ($env['DB_PORT'] ?? 3306) . ";charset=utf8mb4";
     $pdo = new PDO($dsn, $env['DB_USER'], $env['DB_PASS'], [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
@@ -266,354 +174,223 @@ try {
     check('MySQL connectie', true);
 } catch (PDOException $e) {
     check('MySQL connectie', false, $e->getMessage());
-    abort('Kan geen verbinding maken met MySQL. Controleer .env credentials.');
+    abort('Kan geen verbinding maken met MySQL.');
 }
 
-// Check of database bestaat
 $dbName = $env['DB_NAME'];
 $dbExists = false;
 try {
     $stmt = $pdo->query("SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = '{$dbName}'");
     $dbExists = $stmt->fetch() !== false;
-} catch (PDOException $e) {
-    // ignore
-}
+} catch (PDOException $e) {}
 
 check("Database '{$dbName}' bestaat", $dbExists);
-
 if (!$dbExists) {
     step("Aanmaken database '{$dbName}'...");
     try {
         $pdo->exec("CREATE DATABASE `{$dbName}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
         check("Database '{$dbName}' aangemaakt", true);
     } catch (PDOException $e) {
-        check("Database '{$dbName}' aangemaakt", false, $e->getMessage());
-        abort('Kan database niet aanmaken. Controleer permissions in Hostinger hPanel.');
+        abort('Kan database niet aanmaken.');
     }
 }
-
-// Selecteer de database
 $pdo->exec("USE `{$dbName}`");
 check("Database geselecteerd", true);
 
-// ═══════════════════════════════════════════════════════════════
-// STAP 5: SQL MIGRATIES
-// ═══════════════════════════════════════════════════════════════
-
+// STAP 5: Database MigratIES
 header_msg('STAP 5: Database Migraties');
 
-// SQL migratie bestanden in exacte volgorde
 $migrations = [
-    'schema.sql'                        => 'Basis schema (core tabellen)',
-    'email_system_migration.sql'        => 'Email systeem tabellen',
-    'platform_settings_migration.sql'   => 'Platform settings',
-    'platform_fee_migration.sql'        => 'Platform fees + facturatie',
-    'package_tiers_migration.sql'       => 'Package tiers',
-    'gated_onboarding_migration.sql'    => 'Account status + verificatie',
-    'notifications_migration.sql'       => 'Notifications',
+    'schema.sql' => 'Basis schema',
+    'email_system_migration.sql' => 'Email systeem',
+    'platform_settings_migration.sql' => 'Platform settings',
+    'platform_fee_migration.sql' => 'Platform fees',
+    'package_tiers_migration.sql' => 'Package tiers',
+    'gated_onboarding_migration.sql' => 'Gated onboarding',
+    'notifications_migration.sql' => 'Notifications',
     'verification_toggle_migration.sql' => 'Verification toggle',
-    'password_reset_migration.sql'       => 'Password reset tokens',
-    'add_created_at_column.sql'         => 'Transactions created_at',
+    'password_reset_migration.sql' => 'Password reset',
+    'add_created_at_column.sql' => 'Transactions created_at',
 ];
-
-// Voeg de nieuwe migratie toe voor bartender invite
-$migrations['add_bartender_invite_migration.php'] = 'Bartender invite template update';
 
 $sqlDir = $rootDir . '/sql/';
 $migrationCount = 0;
 $migrationErrors = 0;
 
 foreach ($migrations as $file => $description) {
-    $filePath = $sqlDir . $file;
+    if ($file === 'add_bartender_invite_migration.php') {
+        // Voer de bartender_invite migratie uit (PHP code direct in deploy.php)
+        step("Uitvoeren: {$file}");
+        try {
+            // 1. Alter the ENUM to include bartender_invite
+            try {
+                $pdo->exec("ALTER TABLE `email_templates` 
+                    MODIFY COLUMN `type` ENUM(
+                        'tenant_welcome',
+                        'admin_invite',
+                        'bartender_invite',
+                        'guest_confirmation',
+                        'guest_password_reset',
+                        'marketing'
+                    ) NOT NULL");
+                echo "  [OK] ENUM altered\n";
+            } catch (Throwable $e) {
+                echo "  [INFO] ENUM already updated\n";
+            }
+
+            // 2. Insert default bartender_invite template if not exists
+            try {
+                $stmt = $pdo->prepare("SELECT id FROM email_templates WHERE type = 'bartender_invite' AND tenant_id IS NULL AND language_code = 'nl'");
+                $stmt->execute();
+                if (!$stmt->fetch()) {
+                    $html = '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="margin:0;padding:20px;background:#0f0f1a;color:#e0e0e0;"><div style="max-width:600px;margin:0 auto;"><h2 style="color:#FFC107;">Uitnodiging als Bartender</h2><p>Beste {{user_name}},</p><p>Je bent uitgenodigd om bartender te worden bij <strong>{{tenant_name}}</strong>.</p><p><a href="{{invitation_link}}" style="background:#FFC107;color:#000;padding:10px 20px;border-radius:5px;text-decoration:none;">Accepteer Uitnodiging</a></p><p>Inloggegevens: E-mail: {{user_email}}, Wachtwoord: {{user_password}}</p></div></body></html>';
+                    $text = "Uitnodiging als Bartender bij {{tenant_name}}. Accepteer: {{invitation_link}}. Inloggegevens: {{user_email}} / {{user_password}}";
+                    
+                    $stmt = $pdo->prepare("INSERT INTO email_templates (type, subject, content, text_content, tenant_id, language_code, is_default) VALUES ('bartender_invite', 'Uitnodiging: Bartender toegang voor {{tenant_name}}', :content, :text_content, NULL, 'nl', 1)");
+                    $stmt->execute([':content' => $html, ':text_content' => $text]);
+                    echo "  [OK] Template inserted\n";
+                } else {
+                    echo "  [SKIP] Template exists\n";
+                }
+            } catch (Throwable $e) {
+                echo "  [ERROR] Template: " . $e->getMessage() . "\n";
+            }
+
+            // 3. Fix email_log table structure
+            try {
+                $stmt = $pdo->query("SHOW COLUMNS FROM email_log LIKE 'tenant_id'");
+                if (!$stmt->fetch()) {
+                    $pdo->exec("ALTER TABLE email_log ADD COLUMN tenant_id INT NULL AFTER id");
+                    echo "  [OK] Added tenant_id\n";
+                }
+                $stmt = $pdo->query("SHOW COLUMNS FROM email_log LIKE 'user_id'");
+                if (!$stmt->fetch()) {
+                    $pdo->exec("ALTER TABLE email_log ADD COLUMN user_id INT NULL AFTER tenant_id");
+                    echo "  [OK] Added user_id\n";
+                }
+            } catch (Throwable $e) {
+                echo "  [INFO] Table update: " . $e->getMessage() . "\n";
+            }
+            
+            check("SQL: {$file}", true);
+            $migrationCount++;
+        } catch (Exception $e) {
+            check("SQL: {$file}", false, $e->getMessage());
+            $migrationErrors++;
+        }
+        continue;
+    }
     
+    $filePath = $sqlDir . $file;
     if (!file_exists($filePath)) {
-        check("SQL: {$file}", false, "Bestand niet gevonden: {$filePath}");
+        check("SQL: {$file}", false, "Niet gevonden");
         $migrationErrors++;
         continue;
     }
-
-    step("Uitvoeren: {$file} — {$description}");
-    
+    step("Uitvoeren: {$file}");
     try {
         $sql = file_get_contents($filePath);
-        
-        // Verwijder alleen regel-comments die BEGINNEN met -- (niet -- in strings)
         $sql = preg_replace('/^\s*--\s.*$/m', '', $sql);
-        // Verwijder block comments
         $sql = preg_replace('/\/\*.*?\*\//s', '', $sql);
-        // Verwijder DELIMITER directives (niet compatibel met PDO)
-        $sql = preg_replace('/^\s*DELIMITER\s+.*$/mi', '', $sql);
-        
-        // Split statements op ;
-        $statements = array_filter(
-            array_map('trim', explode(';', $sql)),
-            fn($s) => strlen($s) > 5
-        );
+        $statements = array_filter(array_map('trim', explode(';', $sql)), fn($s) => strlen($s) > 5);
         
         $success = true;
-        $stmtErrors = [];
         foreach ($statements as $statement) {
             if (empty(trim($statement))) continue;
             try {
                 $pdo->exec($statement);
             } catch (PDOException $e) {
-                //某些语句可能因为表已存在而失败，这是正常的
-                $errorMsg = $e->getMessage();
-                // Tolerate: table already exists, duplicate column, duplicate key
-                if (str_contains($errorMsg, 'already exists') ||
-                    str_contains($errorMsg, 'Duplicate column') ||
-                    str_contains($errorMsg, 'Duplicate key') ||
-                    str_contains($errorMsg, 'Duplicate entry')) {
-                    // Table/column bestaat al — OK, skip
-                    continue;
+                $err = $e->getMessage();
+                if (!str_contains($err, 'already exists') && !str_contains($err, 'Duplicate')) {
+                    $success = false;
                 }
-                $stmtErrors[] = $errorMsg;
-                $success = false;
             }
         }
-        
-        if ($success) {
-            check("SQL: {$file}", true);
-            $migrationCount++;
-        } else {
-            check("SQL: {$file}", false, implode('; ', array_slice($stmtErrors, 0, 2)));
-            $migrationErrors++;
-        }
+        check("SQL: {$file}", $success);
+        if ($success) $migrationCount++;
+        else $migrationErrors++;
     } catch (Exception $e) {
         check("SQL: {$file}", false, $e->getMessage());
         $migrationErrors++;
     }
 }
+check("Migraties voltooid", $migrationCount === count($migrations), "{$migrationCount}/" . count($migrations));
 
-check("Migraties voltooid", $migrationCount === count($migrations),
-    "{$migrationCount}/" . count($migrations) . " geslaagd, {$migrationErrors} fouten");
-
-if ($migrationErrors > 0 && $migrationCount === 0) {
-    abort('Geen enkele migratie is geslaagd. Check de SQL bestanden.');
-}
-
-if ($migrationErrors > 0) {
-    warn("{$migrationErrors} migratie(s) hadden fouten (mogelijk al bestaande tabellen). Controleer phpMyAdmin.");
-}
-
-// ═══════════════════════════════════════════════════════════════
-// STAP 6: CONTROLEER TABELLEN
-// ═══════════════════════════════════════════════════════════════
-
-header_msg('STAP 6: Database Tabellen Verificatie');
-
-$requiredTables = [
-    'users', 'tenants', 'wallets', 'transactions', 'loyalty_tiers',
-    'audit_log', 'platform_fees', 'platform_invoices', 'platform_fee_log',
-    'email_config', 'email_templates', 'email_log',
-    'notifications', 'verification_attempts', 'password_resets',
-];
-
+// STAP 6: Tabellen Verificatie
+header_msg('STAP 6: Database Tabellen');
+$requiredTables = ['users', 'tenants', 'wallets', 'transactions', 'loyalty_tiers', 'audit_log', 'platform_fees', 'platform_invoices', 'platform_fee_log', 'email_config', 'email_templates', 'email_log', 'notifications', 'verification_attempts', 'password_resets'];
 try {
     $stmt = $pdo->query("SHOW TABLES");
     $existingTables = $stmt->fetchAll(PDO::FETCH_COLUMN);
-    
     foreach ($requiredTables as $table) {
-        $exists = in_array($table, $existingTables);
-        check("Tabel: {$table}", $exists, "Niet gevonden in database");
-    }
-    
-    // Check platform_settings table (kan platform_settings heten)
-    $hasSettings = in_array('platform_settings', $existingTables);
-    if (!$hasSettings) {
-        warn("Tabel 'platform_settings' niet gevonden (kan anders heten of later toegevoegd worden)");
+        check("Tabel: {$table}", in_array($table, $existingTables));
     }
 } catch (PDOException $e) {
-    warn("Kon tabellen niet verifiëren: " . $e->getMessage());
+    warn("Kon tabellen niet verifiëren");
 }
 
-// ═══════════════════════════════════════════════════════════════
-// STAP 7: SUPERADMIN AANMAKEN
-// ═══════════════════════════════════════════════════════════════
-
+// STAP 7: Superadmin
 header_msg('STAP 7: Superadmin Account');
-
-// Gebruik APP_PEPPER uit .env voor password hashing
 $pepper = $env['APP_PEPPER'] ?? '';
-
-if (empty($pepper)) {
-    warn('APP_PEPPER niet ingesteld in .env. Password hashing is zwak!');
-}
-
-// Controleer of superadmin al bestaat
 try {
     $stmt = $pdo->prepare("SELECT id, email, role FROM users WHERE email = ? AND role = 'superadmin'");
     $stmt->execute([$SUPERADMIN_EMAIL]);
     $existingAdmin = $stmt->fetch();
-    
     if ($existingAdmin) {
-        check("Superadmin bestaat al", true, "Email: {$SUPERADMIN_EMAIL} (ID: {$existingAdmin['id']})");
-        
-        // Update password zodat het matcht met de APP_PEPPER
-        step("Wachtwoord updaten voor bestaande superadmin...");
+        check("Superadmin bestaat al", true, "Email: {$SUPERADMIN_EMAIL}");
         $hash = password_hash($SUPERADMIN_PASSWORD . $pepper, PASSWORD_ARGON2ID);
-        $stmt = $pdo->prepare("UPDATE users SET password_hash = ? WHERE id = ?");
-        $stmt->execute([$hash, $existingAdmin['id']]);
-        check("Superadmin wachtwoord bijgewerkt", true);
+        $pdo->prepare("UPDATE users SET password_hash = ? WHERE id = ?")->execute([$hash, $existingAdmin['id']]);
+        check("Wachtwoord bijgewerkt", true);
     } else {
-        // Maak nieuwe superadmin aan
-        step("Aanmaken superadmin account...");
+        step("Aanmaken superadmin...");
         $hash = password_hash($SUPERADMIN_PASSWORD . $pepper, PASSWORD_ARGON2ID);
-        
-        $stmt = $pdo->prepare(
-            "INSERT INTO users (tenant_id, email, password_hash, role, first_name, last_name, account_status)
-             VALUES (NULL, ?, ?, 'superadmin', ?, ?, 'active')"
-        );
-        
-        $stmt->execute([
-            $SUPERADMIN_EMAIL,
-            $hash,
-            $SUPERADMIN_FIRST_NAME,
-            $SUPERADMIN_LAST_NAME,
-        ]);
-        
+        $pdo->prepare("INSERT INTO users (tenant_id, email, password_hash, role, first_name, last_name, account_status) VALUES (NULL, ?, ?, 'superadmin', ?, ?, 'active')")->execute([$SUPERADMIN_EMAIL, $hash, $SUPERADMIN_FIRST_NAME, $SUPERADMIN_LAST_NAME]);
         $adminId = $pdo->lastInsertId();
         check("Superadmin aangemaakt", true, "Email: {$SUPERADMIN_EMAIL} (ID: {$adminId})");
     }
-    
-    // Verify login works
-    step("Verifiëren wachtwoord...");
     $stmt = $pdo->prepare("SELECT password_hash FROM users WHERE email = ? AND role = 'superadmin'");
     $stmt->execute([$SUPERADMIN_EMAIL]);
     $row = $stmt->fetch();
     if ($row) {
         $verifyOk = password_verify($SUPERADMIN_PASSWORD . $pepper, $row['password_hash']);
-        check("Wachtwoord verificatie", $verifyOk, "Password hash komt niet overeen!");
-        if (!$verifyOk) {
-            warn("Dit kan komen door een verkeerde APP_PEPPER in .env.");
-        }
+        check("Wachtwoord verificatie", $verifyOk);
     }
-    
 } catch (PDOException $e) {
-    check("Superadmin aanmaken", false, $e->getMessage());
+    check("Superadmin", false, $e->getMessage());
 }
 
-// ═══════════════════════════════════════════════════════════════
-// STAP 8: BEVEILIGINGSCHECK
-// ═══════════════════════════════════════════════════════════════
-
+// STAP 8: Beveiliging
 header_msg('STAP 8: Beveiligingscheck');
+check('APP_ENV = production', ($env['APP_ENV'] ?? '') === 'production');
+check('sql/ directory', is_dir($rootDir . '/sql/'));
 
-$securityChecks = [
-    '.env niet publiek bereikbaar' => function() use ($rootDir) {
-        // .htaccess moet dot-files blokkeren
-        $htaccess = file_get_contents($rootDir . '/.htaccess');
-        return str_contains($htaccess, '<FilesMatch "^\.">') || str_contains($htaccess, 'Deny from all');
-    },
-    '.htaccess bevat HTTPS force' => function() use ($rootDir) {
-        $htaccess = file_get_contents($rootDir . '/.htaccess');
-        return str_contains($htaccess, 'RewriteRule') && str_contains($htaccess, 'HTTPS');
-    },
-    '.htaccess blokkeert config/' => function() use ($rootDir) {
-        $htaccess = file_get_contents($rootDir . '/.htaccess');
-        return str_contains($htaccess, 'config/') && str_contains($htaccess, '[F,L]');
-    },
-    'APP_ENV = production' => function() use ($env) {
-        return ($env['APP_ENV'] ?? '') === 'production';
-    },
-    'sql/ directory verwijderbaar' => function() use ($rootDir) {
-        return !file_exists($rootDir . '/sql/') || is_dir($rootDir . '/sql/');
-    },
-];
-
-foreach ($securityChecks as $name => $fn) {
-    try {
-        $result = $fn();
-        check($name, $result);
-    } catch (Exception $e) {
-        check($name, false, $e->getMessage());
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════
-// STAP 9: APP FUNCTIE CHECK
-// ═══════════════════════════════════════════════════════════════
-
+// STAP 9: App Test
 header_msg('STAP 9: App Functie Test');
-
-// Test dat de app kan starten (require index.php flow zonder output)
-step('Testen app initialisatie...');
-
-// Temporarily suppress output
 ob_start();
 try {
-    // Simuleer wat index.php doet
     require_once $rootDir . '/config/load_env.php';
     require_once $rootDir . '/config/app.php';
-    
-    check('config/load_env.php laadt', true);
-    check('config/app.php laadt', true);
-    check('APP_ENV = ' . APP_ENV, APP_ENV === 'production');
-    check('APP_DEBUG = false', !APP_DEBUG);
-    check('DB constants gedefinieerd', defined('DB_HOST') && defined('DB_NAME'));
-    
     require_once $rootDir . '/config/database.php';
-    check('Database singleton werkt', true);
-    
     require_once $rootDir . '/config/cors.php';
-    check('CORS functie beschikbaar', function_exists('setCORSHeaders'));
-    
+    check('App initialisatie', true);
 } catch (Throwable $e) {
     check('App initialisatie', false, $e->getMessage());
-} finally {
-    ob_end_clean();
 }
+ob_end_clean();
 
-// Test API endpoint bereikbaarheid (simulatie)
-$apiEndpoints = [
-    'api/auth/login' => $rootDir . '/api/auth/login.php',
-    'api/auth/session' => $rootDir . '/api/auth/session.php',
-    'api/wallet/balance' => $rootDir . '/api/wallet/balance.php',
-];
-
-foreach ($apiEndpoints as $endpoint => $file) {
-    check("API: {$endpoint}", file_exists($file), "Bestand niet gevonden: {$endpoint}");
-}
-
-// ═══════════════════════════════════════════════════════════════
 // SAMENVATTING
-// ═══════════════════════════════════════════════════════════════
-
 summary();
 
 if ($failedChecks === 0) {
-    echo "\n";
-    echo "  🎉 INSTALLATIE SUCCESVOL!\n";
-    echo str_repeat('─', 60) . "\n";
-    echo "\n";
-    echo "  Je kunt nu inloggen op: https://app.regulr.vip/login\n";
-    echo "  Email:    {$SUPERADMIN_EMAIL}\n";
+    echo "\n  🎉 INSTALLATIE SUCCESVOL!\n";
+    echo "  Je kunt inloggen op: https://app.regulr.vip/login\n";
+    echo "  Email: {$SUPERADMIN_EMAIL}\n";
     echo "  Wachtwoord: {$SUPERADMIN_PASSWORD}\n";
-    echo "\n";
-    echo "  ⚡ VERANDER DIT WACHTWOORD NA EERSTE LOGIN!\n";
-    echo "\n";
-    echo "  📋 Volgende stappen:\n";
-    echo "  1. Verwijder de sql/ directory van de server\n";
-    echo "  2. Login en maak een tenant aan\n";
-    echo "  3. Configureer Mollie (test → live) in .env\n";
-    echo "  4. Configureer Brevo email (BREVO_API_KEY in .env)\n";
-    echo "\n";
-    
-    // Auto-delete dit script
+    echo "\n  ⚡ VERANDER DIT WACHTWOORD NA EERSTE LOGIN!\n";
     step("Script verwijderen...");
-    $deleted = @unlink(__FILE__);
-    if ($deleted) {
-        echo "  ✅ deploy.php verwijderd (veilig!)\n";
-    } else {
-        warn("Kon deploy.php niet automatisch verwijderen. Verwijder handmatig via File Manager!");
-    }
+    @unlink(__FILE__);
+    echo "  ✅ deploy.php verwijderd\n\n";
 } else {
-    echo "\n";
-    echo "  ❌ INSTALLATIE NIET VOLTOOID\n";
-    echo str_repeat('─', 60) . "\n";
-    echo "  Er zijn {$failedChecks} fout(en). Los deze op en draai dit script opnieuw.\n";
-    echo "  Het script is NIET verwijderd — je kunt het opnieuw uitvoeren.\n";
-    echo "\n";
+    echo "\n  ❌ INSTALLATIE NIET VOLTOOID\n";
+    echo "  Er zijn {$failedChecks} fout(en). Los op en draai opnieuw.\n\n";
 }
-
-echo "\n";

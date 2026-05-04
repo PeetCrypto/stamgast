@@ -51,9 +51,9 @@ $iconSrc = function (int $size) use ($tenantId): string {
 
 // Build manifest
 $manifest = [
-    'name'             => $tenantName . ' - REGULR.vip',
+    'name'             => $tenantName,
     'short_name'       => $tenantName,
-    'description'      => $tenantName . ' Loyaliteitsplatform',
+    'description'      => $tenantName,
     'start_url'        => '/',
     'display'          => 'standalone',
     'background_color' => '#0f0f0f',

@@ -70,9 +70,9 @@ $token = $userModel->createResetToken((int) $user['id'], $email, $tenantId);
 // Build reset link with tenant slug context
 $resetSlug = $tenant['slug'] ?? '';
 if (!empty($resetSlug)) {
-    $resetLink = BASE_URL . '/j/' . $resetSlug . '/reset-password?token=' . $token;
+    $resetLink = FULL_BASE_URL . '/j/' . $resetSlug . '/reset-password?token=' . $token;
 } else {
-    $resetLink = BASE_URL . '/reset-password?token=' . $token;
+    $resetLink = FULL_BASE_URL . '/reset-password?token=' . $token;
 }
 
 // Send reset email

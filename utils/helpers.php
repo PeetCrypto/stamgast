@@ -109,9 +109,59 @@ function requireAuth(): void
         if (isApiRequest()) {
             \Response::unauthorized();
         }
-        header('Location: /login');
+        header('Location: ' . getGuestLoginUrl());
         exit;
     }
+}
+
+/**
+ * Get the login URL for the current user role.
+ * For guests: returns /j/{slug} (from session or cookie fallback).
+ * For others: returns /login.
+ */
+function getGuestLoginUrl(): string
+{
+    $slug = null;
+
+    // 1. Try session tenant (user was logged in, e.g. logout/timeout)
+    if (isset($_SESSION['tenant']['slug'])) {
+        $slug = $_SESSION['tenant']['slug'];
+    }
+
+    // 2. Fallback: cookie set by auth_check before session destroy
+    if ($slug === null && isset($_COOKIE['guest_redirect_slug'])) {
+        $slug = $_COOKIE['guest_redirect_slug'];
+        // Clear the cookie so it's not reused
+        setcookie('guest_redirect_slug', '', [
+            'expires'  => time() - 3600,
+            'path'     => '/',
+            'secure'   => !APP_DEBUG,
+            'httponly'  => true,
+            'samesite'  => 'Strict',
+        ]);
+        unset($_COOKIE['guest_redirect_slug']);
+    }
+
+    if ($slug && is_string($slug) && preg_match('/^[a-z0-9][a-z0-9-]{0,98}[a-z0-9]$/', $slug)) {
+        return '/j/' . $slug;
+    }
+
+    return '/login';
+}
+
+/**
+ * Set a short-lived cookie with the guest tenant slug.
+ * Used by auth_check before session destroy so redirects can still find the slug.
+ */
+function setGuestRedirectSlugCookie(string $slug): void
+{
+    setcookie('guest_redirect_slug', $slug, [
+        'expires'  => time() + 60, // Only valid for 60 seconds
+        'path'     => '/',
+        'secure'   => !APP_DEBUG,
+        'httponly'  => true,
+        'samesite'  => 'Strict',
+    ]);
 }
 
 /**

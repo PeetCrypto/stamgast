@@ -21,6 +21,9 @@ $tenantLogo = $_SESSION['tenant_logo'] ?? ''; // Tenant uploaded logo URL
     <meta name="theme-color" content="#0f0f0f">
     <meta name="description" content="<?= sanitize($tenantName) ?> - Loyalty platform">
     <meta name="csrf-token" content="<?= $csrfToken ?>">
+    <?php if ($userRole === 'guest' && isset($_SESSION['tenant']['slug'])): ?>
+    <meta name="tenant-slug" content="<?= sanitize($_SESSION['tenant']['slug']) ?>">
+    <?php endif; ?>
     <title><?= sanitize($tenantName) ?> - REGULR.vip</title>
 
     <!-- Favicon -->

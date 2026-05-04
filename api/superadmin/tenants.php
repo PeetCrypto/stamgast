@@ -229,7 +229,7 @@ function handleCreate(Tenant $model, User $userModel, array $input, PDO $db): vo
                 'user_name'          => $firstName . ' ' . $lastName,
                 'user_email'         => $adminEmail,
                 'user_password'      => $adminPassword,
-                'password_reset_link' => BASE_URL . '/login',
+                'password_reset_link' => FULL_BASE_URL . '/login',
             ],
             null,  // global template (no tenant_id)
             'nl'
