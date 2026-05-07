@@ -36,7 +36,19 @@ $backLink = !empty($tenantSlug) ? BASE_URL . '/j/' . sanitize($tenantSlug) : BAS
     <title>Wachtwoord resetten — <?= sanitize($tenantName) ?></title>
 
     <link rel="icon" type="image/png" sizes="32x32" href="<?= BASE_URL ?>/icons/favicon.png">
+
+    <!-- iOS PWA -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="<?= sanitize($tenantName) ?>">
+    <?php if (!empty($tenantSlug)): ?>
+    <link rel="manifest" href="<?= BASE_URL ?>/manifest.json.php?slug=<?= urlencode($tenantSlug) ?>">
+    <?php endif; ?>
+    <?php if (!empty($tenantLogo)): ?>
+    <link rel="apple-touch-icon" href="<?= sanitize($tenantLogo) ?>">
+    <?php else: ?>
     <link rel="apple-touch-icon" href="<?= BASE_URL ?>/icons/favicon.png">
+    <?php endif; ?>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">

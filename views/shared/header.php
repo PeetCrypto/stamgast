@@ -19,17 +19,26 @@ $tenantLogo = $_SESSION['tenant_logo'] ?? ''; // Tenant uploaded logo URL
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#0f0f0f">
-    <meta name="description" content="<?= sanitize($tenantName) ?> - Loyalty platform">
+    <meta name="description" content="<?= sanitize($tenantName) ?>">
     <meta name="csrf-token" content="<?= $csrfToken ?>">
     <?php if ($userRole === 'guest' && isset($_SESSION['tenant']['slug'])): ?>
     <meta name="tenant-slug" content="<?= sanitize($_SESSION['tenant']['slug']) ?>">
     <?php endif; ?>
-    <title><?= sanitize($tenantName) ?> - REGULR.vip</title>
+    <title><?= sanitize($tenantName) ?></title>
+
+    <!-- iOS PWA: apple-mobile-web-app-title controls home screen name on iPhone/iPad -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="<?= sanitize($tenantName) ?>">
 
     <!-- Favicon -->
     <link rel="icon" type="image/png" sizes="32x32" href="<?= BASE_URL ?>/icons/favicon.png">
     <link rel="icon" type="image/x-icon" href="<?= BASE_URL ?>/favicon.ico">
+    <?php if (!empty($tenantLogo)): ?>
+    <link rel="apple-touch-icon" href="<?= sanitize($tenantLogo) ?>">
+    <?php else: ?>
     <link rel="apple-touch-icon" href="<?= BASE_URL ?>/icons/favicon.png">
+    <?php endif; ?>
 
     <!-- PWA Manifest -->
     <link rel="manifest" href="<?= BASE_URL ?>/manifest.json.php">

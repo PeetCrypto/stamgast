@@ -17,7 +17,8 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 // Determine tenant branding
-$tenantId = currentTenantId();
+$tenantId   = currentTenantId();
+$tenantSlug = '';
 $tenantName = $_SESSION['tenant_name'] ?? APP_NAME;
 $brandColor = $_SESSION['brand_color'] ?? '#FFC107';
 $secondaryColor = $_SESSION['secondary_color'] ?? '#FF9800';
@@ -26,18 +27,40 @@ $secondaryColor = $_SESSION['secondary_color'] ?? '#FF9800';
 if ($tenantId) {
     try {
         $db = Database::getInstance()->getConnection();
-        $stmt = $db->prepare('SELECT `name`, `brand_color`, `secondary_color` FROM `tenants` WHERE `id` = :id LIMIT 1');
+        $stmt = $db->prepare('SELECT `id`, `slug`, `name`, `brand_color`, `secondary_color` FROM `tenants` WHERE `id` = :id LIMIT 1');
         $stmt->execute([':id' => $tenantId]);
         $tenant = $stmt->fetch();
         if ($tenant) {
-            $tenantName = $tenant['name'];
-            $brandColor = $tenant['brand_color'];
+            $tenantId      = (int) $tenant['id'];
+            $tenantSlug    = $tenant['slug'];
+            $tenantName    = $tenant['name'];
+            $brandColor    = $tenant['brand_color'];
             $secondaryColor = $tenant['secondary_color'];
         }
     } catch (\Throwable $e) {
         // Fall back to session/defaults
     }
+} elseif (!empty($_GET['slug'])) {
+    // No session tenant — try to resolve tenant by slug (for unauthenticated guest pages)
+    try {
+        $db = Database::getInstance()->getConnection();
+        $stmt = $db->prepare('SELECT `id`, `slug`, `name`, `brand_color`, `secondary_color` FROM `tenants` WHERE `slug` = :slug LIMIT 1');
+        $stmt->execute([':slug' => $_GET['slug']]);
+        $tenant = $stmt->fetch();
+        if ($tenant) {
+            $tenantId      = (int) $tenant['id'];
+            $tenantSlug    = $tenant['slug'];
+            $tenantName    = $tenant['name'];
+            $brandColor    = $tenant['brand_color'];
+            $secondaryColor = $tenant['secondary_color'];
+        }
+    } catch (\Throwable $e) {
+        // Fall back to defaults
+    }
 }
+
+// Build start_url: tenant-specific so the PWA always opens in the tenant's environment
+$startUrl = !empty($tenantSlug) ? '/j/' . $tenantSlug : '/';
 
 // Helper: build icon src URL
 // When no tenant context (superadmin, unauthenticated), use the static favicon
@@ -54,7 +77,7 @@ $manifest = [
     'name'             => $tenantName,
     'short_name'       => $tenantName,
     'description'      => $tenantName,
-    'start_url'        => '/',
+    'start_url'        => $startUrl,
     'display'          => 'standalone',
     'background_color' => '#0f0f0f',
     'theme_color'      => $brandColor,

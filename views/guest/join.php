@@ -28,9 +28,18 @@ $sessionTenantName = $_SESSION['tenant_name'] ?? APP_NAME;
     <meta name="csrf-token" content="<?= $csrfToken ?>">
     <title>Word lid — <?= sanitize($tenantName) ?></title>
 
-    <!-- PWA Manifest (tenant-branded) -->
-    <link rel="manifest" href="<?= BASE_URL ?>/manifest.json.php">
+    <!-- iOS PWA: apple-mobile-web-app-title controls home screen name on iPhone/iPad -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="<?= sanitize($tenantName) ?>">
+
+    <!-- PWA Manifest (tenant-branded via slug) -->
+    <link rel="manifest" href="<?= BASE_URL ?>/manifest.json.php?slug=<?= urlencode($tenantSlug) ?>">
+    <?php if (!empty($tenantLogo)): ?>
+    <link rel="apple-touch-icon" href="<?= sanitize($tenantLogo) ?>">
+    <?php else: ?>
     <link rel="apple-touch-icon" href="<?= BASE_URL ?>/icons/favicon.png">
+    <?php endif; ?>
 
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
