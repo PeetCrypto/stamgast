@@ -21,6 +21,9 @@ class FCMClient
     private ?int    $tokenExpires  = null;
     private string  $tokenCachePath;
 
+    /** @var string|null Set after sendMessage() if the token was UNREGISTERED */
+    public ?string $lastUnregisteredToken = null;
+
     // ── Constructor ──────────────────────────────────────────────
 
     public function __construct()
@@ -35,11 +38,11 @@ class FCMClient
     /**
      * Send FCM notification to a single device token via v1 API.
      *
-     * @param  string $token  FCM registration token
-     * @param  string $title  Notification title
-     * @param  string $body   Notification body
-     * @param  array  $data   Optional data payload
-     * @return string|false   JSON response string or false on failure
+     * @param  string       $token  FCM registration token
+     * @param  string       $title  Notification title
+     * @param  string       $body   Notification body
+     * @param  array        $data   Optional data payload
+     * @return string|false JSON response string or false on failure
      */
     public function sendMessage(string $token, string $title, string $body, array $data = [])
     {
@@ -115,9 +118,10 @@ class FCMClient
             $errMsg  = $errData['error']['message'] ?? $result;
             $errSt   = $errData['error']['status'] ?? 'UNKNOWN';
 
-            // UNREGISTERED token → log extra info
+            // UNREGISTERED token → log extra info + track for cleanup
             if ($errSt === 'NOT_FOUND' || str_contains($errMsg, 'NotRegistered')) {
                 error_log("[FCM] Token niet meer geregistreerd: " . substr($token, 0, 20) . "...");
+                $this->lastUnregisteredToken = $token;
             }
 
             error_log("[FCM] HTTP {$httpCode} ({$errSt}): {$errMsg}");

@@ -117,6 +117,13 @@ class PushService
                 $sent++;
             } else {
                 $failed++;
+                // Auto-cleanup stale FCM tokens
+                if ($this->fcm->lastUnregisteredToken) {
+                    $clean = $this->db->prepare("UPDATE users SET fcm_token = NULL WHERE fcm_token = ?");
+                    $clean->execute([$user['fcm_token']]);
+                    $this->fcm->lastUnregisteredToken = null;
+                    error_log('[Push] Stale token removed for user ' . $user['id']);
+                }
             }
         }
 
