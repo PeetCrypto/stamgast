@@ -136,6 +136,8 @@
                 if (permission === 'granted') {
                     getTokenAndSend(messaging, registration);
                 }
+            }).catch(function(err) {
+                console.warn('[Push] Permission request failed:', err);
             });
         } else if (Notification.permission === 'granted') {
             // Al toegestaan — direct token ophalen
@@ -160,17 +162,11 @@
                 console.warn('[Push] Geen FCM token ontvangen (null)');
             }
         }).catch(function(err) {
-            console.error('[Push] ❌ getToken error:', err.code, err.message);
-            // Probeer opnieuw zonder serviceWorkerRegistration als fallback
-            console.log('[Push] Retry zonder serviceWorkerRegistration...');
-            messaging.getToken({ vapidKey: VAPID_KEY }).then(function(token) {
-                if (token) {
-                    console.log('[Push] ✅ FCM token (fallback):', token.substring(0, 30) + '...');
-                    sendTokenToServer(token);
-                }
-            }).catch(function(err2) {
-                console.error('[Push] ❌ getToken fallback ook gefaald:', err2.code, err2.message);
-            });
+            // err can be undefined — guard against property access on undefined
+            var errMsg = (err && err.message) ? err.message : 'unknown error';
+            var errCode = (err && err.code) ? err.code : 'UNKNOWN';
+            console.warn('[Push] getToken failed:', errCode, errMsg);
+            // Token will be retried on next page load; no point retrying with same params
         });
     }
 
