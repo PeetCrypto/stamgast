@@ -46,3 +46,6 @@ reset_admin_password.php
 public/js/fcm-sw-1.js
 public/js/fcm-sw.js
 public/js/firebase-messaging-sw.js
+
+# Firebase credentials (contains private key — never commit)
+config/regulr-vip-firebase-adminsdk-fbsvc-a78cf5314e.json
