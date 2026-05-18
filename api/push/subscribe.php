@@ -1,17 +1,23 @@
 <?php
-declare(strict_types=1);
-
 /**
- * POST /api/push/subscribe
- * Register a Web Push subscription for the authenticated guest
- *
- * Body: { endpoint: string, p256dh: string, auth: string }
+ * FCM Token Subscription Handler
+ * Stores FCM tokens for push notifications
  */
 
 require_once __DIR__ . '/../../services/PushService.php';
 
+// Validate request method
+$method = $_SERVER['REQUEST_METHOD'];
 if ($method !== 'POST') {
     Response::error('Method not allowed', 'METHOD_NOT_ALLOWED', 405);
+}
+
+// Get FCM token from request
+$input = getJsonInput();
+$fcmToken = $input['fcm_token'] ?? $_POST['fcm_token'] ?? null;
+
+if (!$fcmToken) {
+    Response::error('FCM token required', 'INVALID_DATA', 400);
 }
 
 $userId = currentUserId();
@@ -21,45 +27,29 @@ if ($userId === null || $tenantId === null) {
     Response::unauthorized();
 }
 
-$input = getJsonInput();
-
-$endpoint = trim($input['endpoint'] ?? '');
-$p256dh   = trim($input['p256dh'] ?? '');
-$auth     = trim($input['auth'] ?? '');
-
-// Validate required fields
-if ($endpoint === '' || $p256dh === '' || $auth === '') {
-    Response::error('endpoint, p256dh en auth zijn verplicht', 'VALIDATION_ERROR', 422);
-}
-
-// Validate endpoint URL
-if (!filter_var($endpoint, FILTER_VALIDATE_URL)) {
-    Response::error('Ongeldig endpoint URL', 'VALIDATION_ERROR', 422);
-}
-
-// Validate base64 fields (p256dh and auth should be base64-encoded)
-if (!preg_match('/^[A-Za-z0-9+\/]+=*$/', $p256dh) || !preg_match('/^[A-Za-z0-9+\/]+=*$/', $auth)) {
-    Response::error('p256dh en auth moeten base64-geëncodeerd zijn', 'VALIDATION_ERROR', 422);
-}
-
 $db = Database::getInstance()->getConnection();
 $pushService = new PushService($db);
 
 try {
-    $subscriptionId = $pushService->subscribe($userId, $tenantId, $endpoint, $p256dh, $auth);
+    // Store FCM token for user
+    $success = $pushService->storeFcmToken($userId, $fcmToken);
 
-    (new Audit($db))->log(
-        $tenantId,
-        $userId,
-        'push.subscribed',
-        'push_subscription',
-        $subscriptionId
-    );
+    if ($success) {
+        (new Audit($db))->log(
+            $tenantId,
+            $userId,
+            'push.fcm_token_stored',
+            'user',
+            $userId
+        );
 
-    Response::success([
-        'subscription_id' => $subscriptionId,
-        'message'         => 'Push abonnement geregistreerd',
-    ]);
+        Response::success([
+            'message' => 'FCM token stored successfully'
+        ]);
+    } else {
+        Response::error('Failed to store FCM token', 'DB_ERROR', 500);
+    }
 } catch (\Throwable $e) {
-    Response::internalError('Push abonnement registreren mislukt');
+    error_log('[Push Subscribe] Error: ' . $e->getMessage());
+    Response::internalError('Failed to store FCM token');
 }

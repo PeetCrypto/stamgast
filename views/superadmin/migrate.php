@@ -210,7 +210,7 @@ $requiredColumns = [
     ],
     'users' => [
         'tenant_id', 'email', 'password_hash', 'role', 'first_name', 'last_name',
-        'birthdate', 'photo_url', 'photo_status', 'push_token',
+        'birthdate', 'photo_url', 'photo_status', 'fcm_token',
         'account_status', 'verified_at', 'verified_by',
         'verified_birthdate', 'suspended_reason', 'suspended_at', 'suspended_by',
     ],

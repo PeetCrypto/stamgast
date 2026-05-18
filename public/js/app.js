@@ -96,7 +96,9 @@
             credentials: 'same-origin'
         };
         
-        const config = { ...defaults, ...options };
+        // Deep-merge headers so CSRF token + Content-Type are preserved when
+        // callers pass their own options (e.g. { method: 'POST', body: {...} }).
+        const config = { ...defaults, ...options, headers: { ...defaults.headers, ...(options.headers || {}) } };
         
         if (config.body && typeof config.body === 'object') {
             config.body = JSON.stringify(config.body);
@@ -353,7 +355,7 @@
     async function registerServiceWorker() {
         if ('serviceWorker' in navigator) {
             try {
-                const registration = await navigator.serviceWorker.register('/public/js/sw.js');
+                const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
                 log('ServiceWorker registered:', registration);
             } catch (error) {
                 log('ServiceWorker registration failed:', error);
@@ -395,8 +397,9 @@
         // Check session
         await checkSession();
         
-        // Register service worker
-        registerServiceWorker();
+        // Register service worker — MUST be awaited so that
+        // navigator.serviceWorker.ready resolves for push.js
+        await registerServiceWorker();
         
         // Apply tenant branding if available
         if (AppState.user?.tenant_id) {

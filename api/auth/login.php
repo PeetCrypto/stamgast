@@ -13,6 +13,7 @@ require_once __DIR__ . '/../../services/AuthService.php';
 require_once __DIR__ . '/../../utils/audit.php';
 
 // Only allow POST
+$method = $_SERVER['REQUEST_METHOD'];
 if ($method !== 'POST') {
     Response::error('Method not allowed', 'METHOD_NOT_ALLOWED', 405);
 }

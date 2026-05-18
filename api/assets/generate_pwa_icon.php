@@ -36,6 +36,7 @@ if ($tenant === null) {
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode(['success' => false, 'error' => 'Tenant niet gevonden']);
     exit;
+}
 
 // Try to use tenant logo if available
 $logoPath = $tenant['logo_path'] ?? '';

@@ -13,6 +13,9 @@ class SmtpTransport
     private string $log = '';
     private string $lastError = '';
 
+    /** @var string Path to SMTP debug log file */
+    private const DEBUG_LOG = __DIR__ . '/../../logs/smtp_debug.log';
+
     public function __construct(array $config)
     {
         $this->config = $config;
@@ -25,6 +28,13 @@ class SmtpTransport
     {
         try {
             $this->lastError = '';
+            $this->debugLog("=== SMTP SEND START ===");
+            $this->debugLog("To: " . ($emailData['to'] ?? '?'));
+            $this->debugLog("Subject: " . ($emailData['subject'] ?? '?'));
+            $this->debugLog("Host: " . ($this->config['smtp_host'] ?? '?') . ":" . ($this->config['smtp_port'] ?? '?'));
+            $this->debugLog("From: " . ($this->config['from_email'] ?? '?'));
+            $this->debugLog("User: " . ($this->config['smtp_user'] ?? '(empty)'));
+
             $this->connect();
             $this->ehlo();
 
@@ -39,9 +49,13 @@ class SmtpTransport
             $this->envelope($emailData);
             $this->quit();
 
+            $this->debugLog("=== SMTP SEND SUCCESS ===\n");
             return true;
         } catch (\Throwable $e) {
             $this->lastError = $e->getMessage();
+            $this->debugLog("=== SMTP SEND FAILED ===");
+            $this->debugLog("Error: " . $e->getMessage());
+            $this->debugLog("=== END ===\n");
             error_log("SmtpTransport::send - " . $e->getMessage() . " | Log: " . $this->log);
             // Try to gracefully close
             try { $this->quit(); } catch (\Throwable $_) {}
@@ -65,6 +79,15 @@ class SmtpTransport
     public function getLastError(): string
     {
         return $this->lastError;
+    }
+
+    /**
+     * Write to SMTP debug log file
+     */
+    private function debugLog(string $message): void
+    {
+        $line = '[' . date('Y-m-d H:i:s') . '] ' . $message . PHP_EOL;
+        @file_put_contents(self::DEBUG_LOG, $line, FILE_APPEND | LOCK_EX);
     }
 
     // -------------------------------------------------------------------------
@@ -160,18 +183,23 @@ class SmtpTransport
         $pass = $this->config['smtp_pass'] ?? '';
 
         if (empty($user)) {
+            $this->debugLog("AUTH: skipped (no username configured)");
             return; // No auth needed
         }
 
         // Try AUTH LOGIN first, fall back to AUTH PLAIN
         try {
+            $this->debugLog("AUTH: trying AUTH LOGIN");
             $this->sendCommand("AUTH LOGIN", 334);
             $this->sendCommand(base64_encode($user), 334);
             $this->sendCommand(base64_encode($pass), 235);
+            $this->debugLog("AUTH: LOGIN succeeded");
         } catch (\Throwable $e) {
             // AUTH LOGIN failed — try AUTH PLAIN
+            $this->debugLog("AUTH: LOGIN failed, trying AUTH PLAIN");
             // PLAIN format: \0username\0password (base64 encoded)
             $this->sendCommand("AUTH PLAIN " . base64_encode("\0{$user}\0{$pass}"), 235);
+            $this->debugLog("AUTH: PLAIN succeeded");
         }
     }
 
@@ -183,6 +211,8 @@ class SmtpTransport
         $subject   = $emailData['subject'] ?? '(no subject)';
         $html      = $emailData['html_content'] ?? '';
         $text      = $emailData['text_content'] ?? '';
+
+        $this->debugLog("ENVELOPE: FROM=<{$fromEmail}> TO=<{$to}>");
 
         // MAIL FROM
         $this->sendCommand("MAIL FROM:<{$fromEmail}>", 250);
@@ -232,7 +262,8 @@ class SmtpTransport
         $message = implode("\r\n", $headers) . "\r\n\r\n" . $body . "\r\n.";
 
         $this->sendRaw($message);
-        $this->read(250);
+        $result = $this->read(250);
+        $this->debugLog("DATA response: " . trim($result));
     }
 
     private function quit(): void

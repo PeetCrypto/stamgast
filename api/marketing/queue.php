@@ -3,7 +3,12 @@ declare(strict_types=1);
 
 /**
  * GET /api/marketing/queue
- * Get email queue status counts (admin only)
+ * Get email queue status counts + paginated items (admin only)
+ *
+ * Query params:
+ *   page   (int)    — Page number, default 1
+ *   per_page (int)  — Items per page, default 20, max 100
+ *   status (string) — Filter: '', 'pending', 'sent', 'failed'
  */
 
 require_once __DIR__ . '/../../services/MarketingService.php';
@@ -28,11 +33,15 @@ if (!(bool) ($tenant['feature_marketing'] ?? true)) {
     Response::error('Marketing module is uitgeschakeld', 'FEATURE_DISABLED', 403);
 }
 
+$page = (int) ($_GET['page'] ?? 1);
+$perPage = (int) ($_GET['per_page'] ?? 20);
+$status = trim($_GET['status'] ?? '');
+
 $marketingService = new MarketingService($db);
 
 try {
-    $status = $marketingService->getQueueStatus($tenantId);
-    Response::success($status);
+    $result = $marketingService->getQueueStatus($tenantId, $page, $perPage, $status);
+    Response::success($result);
 } catch (\Throwable $e) {
     Response::internalError('Queue status ophalen mislukt');
 }

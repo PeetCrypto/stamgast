@@ -90,6 +90,83 @@ $tiersList      = $tierModel->getByTenant($tenantId);
         font-weight: 600;
         font-size: 13px;
     }
+
+    /* Queue filter buttons */
+    .queue-filter-btn {
+        background: rgba(255,255,255,0.05);
+        border: 1px solid var(--glass-border);
+        color: var(--text-secondary);
+        padding: 4px 12px;
+        border-radius: 16px;
+        font-size: 12px;
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+    .queue-filter-btn:hover { background: rgba(255,255,255,0.1); color: var(--text-primary); }
+    .queue-filter-btn.active {
+        background: var(--accent-gradient);
+        color: #000;
+        border-color: transparent;
+        font-weight: 600;
+    }
+
+    /* Queue table */
+    .queue-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+    }
+    .queue-table th {
+        text-align: left;
+        padding: 8px 12px;
+        color: var(--text-secondary);
+        font-weight: 600;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid var(--glass-border);
+    }
+    .queue-table td {
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--glass-border);
+        vertical-align: middle;
+    }
+    .queue-table tr:last-child td { border-bottom: none; }
+    .queue-table tr:hover td { background: rgba(255,255,255,0.03); }
+
+    .status-badge {
+        display: inline-block;
+        padding: 2px 10px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 600;
+    }
+    .status-badge.sent { background: rgba(76,175,80,0.15); color: var(--success); }
+    .status-badge.pending { background: rgba(255,193,7,0.15); color: var(--accent-primary); }
+    .status-badge.failed { background: rgba(244,67,54,0.15); color: var(--error); }
+
+    /* Queue pagination */
+    .queue-page-btn {
+        background: rgba(255,255,255,0.05);
+        border: 1px solid var(--glass-border);
+        color: var(--text-secondary);
+        padding: 4px 10px;
+        border-radius: 8px;
+        font-size: 12px;
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+    .queue-page-btn:hover { background: rgba(255,255,255,0.1); }
+    .queue-page-btn.active {
+        background: var(--accent-gradient);
+        color: #000;
+        border-color: transparent;
+        font-weight: 600;
+    }
+    .queue-page-btn:disabled {
+        opacity: 0.3;
+        cursor: default;
+    }
 </style>
 
 <div class="container" style="padding: var(--space-lg); max-width: 1000px; margin: 0 auto;">
@@ -210,7 +287,10 @@ $tiersList      = $tierModel->getByTenant($tenantId);
     <div class="glass-card" style="padding: var(--space-lg); margin-bottom: var(--space-xl);">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-md);">
             <h2 style="color: var(--accent-primary);">3. Verzendwachtrij</h2>
-            <button type="button" class="btn btn-secondary btn-sm" id="refresh-queue-btn">Verversen</button>
+            <div style="display: flex; gap: var(--space-sm);">
+                <button type="button" class="btn btn-primary btn-sm" id="process-queue-btn">Verstuur wachtrij</button>
+                <button type="button" class="btn btn-secondary btn-sm" id="refresh-queue-btn">Verversen</button>
+            </div>
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--space-md);">
@@ -230,12 +310,21 @@ $tiersList      = $tierModel->getByTenant($tenantId);
 
         <!-- Recente items -->
         <div style="margin-top: var(--space-lg);">
-            <h3 style="font-size: 14px; font-weight: 600; margin-bottom: var(--space-sm);">Recente berichten</h3>
-            <div id="queue-items" style="max-height: 200px; overflow-y: auto;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-sm);">
+                <h3 style="font-size: 14px; font-weight: 600;">Berichtenoverzicht</h3>
+                <div style="display: flex; gap: 4px;" id="queue-filters">
+                    <button type="button" class="queue-filter-btn active" data-status="">Alle</button>
+                    <button type="button" class="queue-filter-btn" data-status="pending">Wachtend</button>
+                    <button type="button" class="queue-filter-btn" data-status="sent">Verstuurd</button>
+                    <button type="button" class="queue-filter-btn" data-status="failed">Mislukt</button>
+                </div>
+            </div>
+            <div id="queue-items">
                 <p style="color: var(--text-secondary); font-size: 14px; text-align: center; padding: var(--space-md);">
                     Laden...
                 </p>
             </div>
+            <div id="queue-pagination" style="display: flex; justify-content: center; gap: 4px; margin-top: var(--space-sm);"></div>
         </div>
     </div>
 

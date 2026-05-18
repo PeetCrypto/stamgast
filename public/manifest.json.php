@@ -94,6 +94,7 @@ $manifest = [
         ['src' => $iconSrc(384), 'sizes' => '384x384',  'type' => 'image/png', 'purpose' => 'any'],
         ['src' => $iconSrc(512), 'sizes' => '512x512',  'type' => 'image/png', 'purpose' => 'any maskable'],
     ],
+    'gcm_sender_id' => '103953800507',
     'categories' => ['food', 'lifestyle', 'shopping'],
     'shortcuts'  => [
         [
@@ -119,5 +120,5 @@ $manifest = [
 
 // Output as JSON with proper caching headers
 header('Content-Type: application/manifest+json; charset=utf-8');
-header('Cache-Control: private, max-age=300'); // 5 min cache
+header('Cache-Control: no-cache, no-store, must-revalidate');
 echo json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);

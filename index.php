@@ -40,9 +40,14 @@ if (session_status() === PHP_SESSION_NONE) {
 $route = trim($_GET['route'] ?? '', '/');
 $method = $_SERVER['REQUEST_METHOD'];
 
+// Handle subdirectory logic (e.g. localhost/stamgast/api/...)
+if (str_starts_with($route, 'stamgast/')) {
+    $route = substr($route, 9);
+}
+
 // --- Run Auth Check (session timeout etc.) ---
 // Skip auth check for API requests (they have their own auth middleware)
-if ($route !== '' && !str_starts_with($route, 'api/')) {
+if ($route !== '' && !str_starts_with($route, 'api/') && $route !== 'push-test' && $route !== 'sw.js') {
     authCheck();
 }
 
@@ -60,12 +65,55 @@ if (str_starts_with($apiRouteCheck, 'api/')) {
 // ==========================================================================
 
 // --- PWA Manifest (PHP-generated, must be required not readfile'd) ---
-$manifestRoute = $route;
-if (str_starts_with($manifestRoute, 'stamgast/')) {
-    $manifestRoute = substr($manifestRoute, 9);
-}
-if ($manifestRoute === 'manifest.json.php') {
+if ($route === 'manifest.json.php') {
     require PUBLIC_PATH . 'manifest.json.php';
+    exit;
+}
+
+// Served via PHP instead of .htaccess rewrite — works on Hostinger shared hosting
+if ($route === 'sw.js' || $route === 'firebase-messaging-sw.js' || $route === 'fcm-sw.js') {
+    $swPath = PUBLIC_PATH . 'js/' . $route;
+    if (file_exists($swPath)) {
+        header('Content-Type: application/javascript');
+        header('Service-Worker-Allowed: /');
+        header('Cache-Control: no-cache, no-store, must-revalidate');
+        
+        $swContent = file_get_contents($swPath);
+        
+        // Inject Firebase config from constants
+        $swContent = str_replace(
+            [
+                '__FIREBASE_API_KEY__',
+                '__FIREBASE_PROJECT_ID__',
+                '__FIREBASE_MESSAGING_SENDER_ID__',
+                '__FIREBASE_APP_ID__'
+            ],
+            [
+                FIREBASE_API_KEY,
+                FIREBASE_PROJECT_ID,
+                FIREBASE_MESSAGING_SENDER_ID,
+                FIREBASE_APP_ID
+            ],
+            $swContent
+        );
+        
+        echo $swContent;
+        exit;
+    }
+}
+
+// Minimal test SW — no caching, no fetch handler, just push event
+if ($route === 'test-sw.js') {
+    header('Content-Type: application/javascript');
+    header('Service-Worker-Allowed: /');
+    header('Cache-Control: no-cache');
+    echo "self.addEventListener('push', e => { const d = e.data ? e.data.json() : {}; e.waitUntil(self.registration.showNotification(d.title || 'test', { body: d.body || '' })); }); self.addEventListener('install', () => self.skipWaiting()); self.addEventListener('activate', () => self.clients.claim());";
+    exit;
+}
+
+// --- FCM Test Page (temporary diagnostic tool) ---
+if ($route === 'fcm-test') {
+    require __DIR__ . '/fcm-test.php';
     exit;
 }
 
@@ -319,6 +367,9 @@ function handleApiRoute(string $route, string $method): void
             require_once __DIR__ . '/middleware/role_check.php';
             requireAuthenticated();
             switch ($action) {
+                case 'check':
+                    require __DIR__ . '/api/notification/check.php';
+                    break;
                 case 'delete':
                     require __DIR__ . '/api/notification/delete.php';
                     break;
@@ -408,6 +459,9 @@ function handleApiRoute(string $route, string $method): void
                 case 'subscribe':
                     require __DIR__ . '/api/push/subscribe.php';
                     break;
+                case 'config':
+                    require __DIR__ . '/api/push/config.php';
+                    break;
                 case 'send_notification':
                     require_once __DIR__ . '/middleware/role_check.php';
                     requireAdmin();
@@ -437,6 +491,9 @@ function handleApiRoute(string $route, string $method): void
                     break;
                 case 'queue':
                     require __DIR__ . '/api/marketing/queue.php';
+                    break;
+                case 'process':
+                    require __DIR__ . '/api/marketing/process.php';
                     break;
                 default:
                     Response::notFound('Marketing endpoint not found');
@@ -525,6 +582,7 @@ function handleViewRoute(string $route, string $method): void
         'register'        => 'shared/register.php',
         'forgot-password' => 'shared/forgot-password.php',
         'reset-password'  => 'shared/reset-password.php',
+        'push-test'       => 'shared/push-test.php',
 
         // Guest
         'dashboard' => 'guest/dashboard.php',
@@ -572,19 +630,35 @@ function handleViewRoute(string $route, string $method): void
 
     // Handle logout (both GET and POST destroy the session)
     if ($route === 'logout') {
-        // Capture return URL from query param (used by cross-tenant logout links)
+        // Determine redirect URL BEFORE destroying session
+        $logoutRedirect = '/login';
+        
+        // 1. Check return URL from query param (explicit redirect)
         $returnUrl = $_GET['return'] ?? null;
         if ($returnUrl && preg_match('#^/j/[a-z0-9][a-z0-9-]{0,98}[a-z0-9](/|$)#', $returnUrl)) {
-            // Valid /j/{slug} return URL — save as cookie
-            $slug = explode('/', trim($returnUrl, '/'))[1] ?? '';
-            setGuestRedirectSlugCookie($slug);
-        } elseif (isLoggedIn() && ($_SESSION['role'] ?? '') === 'guest' && isset($_SESSION['tenant']['slug'])) {
-            // For guests: save slug cookie before destroying session for branded redirect
-            setGuestRedirectSlugCookie($_SESSION['tenant']['slug']);
+            $logoutRedirect = $returnUrl;
         }
+        // 2. For guests: redirect to branded login /j/{slug}
+        elseif (isLoggedIn() && ($_SESSION['role'] ?? '') === 'guest') {
+            if (isset($_SESSION['tenant']['slug'])) {
+                $logoutRedirect = '/j/' . $_SESSION['tenant']['slug'];
+            } elseif (isset($_SESSION['tenant_id'])) {
+                // Fallback: look up slug from database
+                try {
+                    $tenantModel = new Tenant($db);
+                    $tenantData = $tenantModel->findById((int) $_SESSION['tenant_id']);
+                    if ($tenantData && !empty($tenantData['slug'])) {
+                        $logoutRedirect = '/j/' . $tenantData['slug'];
+                    }
+                } catch (\Throwable $e) {
+                    // Fall through to /login
+                }
+            }
+        }
+
         session_unset();
         session_destroy();
-        redirect(getGuestLoginUrl());
+        redirect($logoutRedirect);
     }
 
     // Find view file

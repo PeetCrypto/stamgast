@@ -9,7 +9,9 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/../../services/PushService.php';
+require_once __DIR__ . '/../../models/Notification.php';
 
+$method = $_SERVER['REQUEST_METHOD'];
 if ($method !== 'POST') {
     Response::error('Method not allowed', 'METHOD_NOT_ALLOWED', 405);
 }
@@ -56,7 +58,19 @@ if ($targetUser === null || (int) $targetUser['tenant_id'] !== $tenantId) {
 $pushService = new PushService($db);
 
 try {
-    $result = $pushService->sendNotification($userId, $tenantId, $title, $body);
+    $result = $pushService->sendNotification($userId, $title, $body);
+
+    // Persist to inbox for this user
+    $notifModel = new Notification($db);
+    $notifModel->create([
+        'tenant_id' => $tenantId,
+        'user_id'   => $userId,
+        'type'      => 'system',
+        'icon'      => '📢',
+        'title'     => $title,
+        'body'      => $body,
+        'color'     => 'var(--accent-primary)',
+    ]);
 
     (new Audit($db))->log(
         $tenantId,
@@ -73,5 +87,6 @@ try {
         'failed'  => $result['failed'],
     ]);
 } catch (\Throwable $e) {
+    error_log('[Push Send] Error: ' . $e->getMessage());
     Response::internalError('Notificatie verzenden mislukt');
 }

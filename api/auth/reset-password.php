@@ -6,7 +6,10 @@ declare(strict_types=1);
  * Resets a user's password using a valid reset token
  */
 
+require_once __DIR__ . '/../../services/AuthService.php';
+
 // Only allow POST
+$method = $_SERVER['REQUEST_METHOD'];
 if ($method !== 'POST') {
     Response::error('Method not allowed', 'METHOD_NOT_ALLOWED', 405);
 }

@@ -10,10 +10,11 @@ require_once __DIR__ . '/../../services/AuthService.php';
 require_once __DIR__ . '/../../models/User.php';
 require_once __DIR__ . '/../../models/Tenant.php';
 require_once __DIR__ . '/../../utils/validator.php';
+require_once __DIR__ . '/../../services/AuthService.php';
 require_once __DIR__ . '/../../utils/audit.php';
-require_once __DIR__ . '/../../services/Email/email_helpers.php';
 
 // Only allow POST
+$method = $_SERVER['REQUEST_METHOD'];
 if ($method !== 'POST') {
     Response::error('Method not allowed', 'METHOD_NOT_ALLOWED', 405);
 }

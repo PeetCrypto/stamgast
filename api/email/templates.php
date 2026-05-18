@@ -15,15 +15,8 @@ require_once __DIR__ . '/../../models/EmailTemplate.php';
 
 header('Content-Type: application/json');
 
-// Auth check — rely on session like other API endpoints
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-if (empty($_SESSION['user_id'])) {
-    http_response_code(401);
-    echo json_encode(['error' => 'Unauthorized']);
-    exit;
-}
+// Auth is handled by the router (index.php → requireAdmin()) before this file is loaded.
+// Session is already active — no need to start it again.
 
 $userRole = $_SESSION['role'] ?? '';
 $tenantId = isset($_SESSION['tenant_id']) ? (int)$_SESSION['tenant_id'] : null;

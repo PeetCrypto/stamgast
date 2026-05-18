@@ -171,7 +171,7 @@ foreach ($hourlyData as $row) {
 // ==========================================
 
 $stmt = $db->prepare(
-    "SELECT u.`id`, u.`first_name`, u.`last_name`, u.`photo_url`, u.`push_token`,
+    "SELECT u.`id`, u.`first_name`, u.`last_name`, u.`photo_url`, u.`fcm_token`,
             COALESCE(SUM(t.`final_total_cents`), 0) AS total_spent_30d,
             COUNT(t.`id`) AS visits_30d
      FROM `users` u
@@ -339,7 +339,7 @@ $recentPush = $stmt->fetchAll();
 $pushSent7d = 0;
 $pushFailed7d = 0;
 foreach ($recentPush as $entry) {
-    $details = json_decode($entry['metadata'], true) ?? [];
+    $details = json_decode($entry['metadata'] ?? '{}', true) ?? [];
     $pushSent7d += (int) ($details['sent'] ?? 0);
     $pushFailed7d += (int) ($details['failed'] ?? 0);
 }
@@ -388,7 +388,7 @@ Response::success([
             'first_name'      => $w['first_name'],
             'last_name'       => $w['last_name'],
             'photo_url'       => $w['photo_url'] ?? null,
-            'has_push'        => !empty($w['push_token']),
+            'has_push'        => !empty($w['fcm_token']),
             'total_spent_30d' => (int) $w['total_spent_30d'],
             'visits_30d'      => (int) $w['visits_30d'],
         ];
@@ -458,7 +458,7 @@ Response::success([
     'recent_push' => array_map(function ($p) {
         return [
             'action'     => $p['action'],
-            'details'    => json_decode($p['metadata'], true) ?? [],
+            'details'    => json_decode($p['metadata'] ?? '{}', true) ?? [],
             'created_at' => $p['created_at'],
         ];
     }, $recentPush),

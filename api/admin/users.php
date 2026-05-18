@@ -77,7 +77,7 @@ if ($method === 'GET') {
     $stmt = $db->prepare(
         "SELECT u.`id`, u.`email`, u.`role`, u.`first_name`, u.`last_name`,
                 u.`birthdate`, u.`photo_url`, u.`photo_status`, u.`account_status`,
-                u.`last_activity`, u.`created_at`,
+                u.`last_activity`, u.`created_at`, u.`fcm_token`,
                 w.`balance_cents`, w.`points_cents`
          FROM `users` u
          LEFT JOIN `wallets` w ON w.`user_id` = u.`id`
@@ -124,6 +124,7 @@ if ($method === 'GET') {
             'tier_name'      => $tierName,
             'last_activity'  => $row['last_activity'],
             'created_at'     => $row['created_at'],
+            'has_push'       => !empty($row['fcm_token']),
         ];
     }, $rows);
 

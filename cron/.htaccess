@@ -1,0 +1,5 @@
+# Block direct web access — cron only runs via CLI
+# If someone navigates to /cron/process_email_queue.php in a browser,
+# they will get a 403 Forbidden response.
+Order Deny,Allow
+Deny from all

@@ -4,10 +4,64 @@
  *
  * - Cache-first for shell assets (CSS, JS, fonts)
  * - Network-first for API data (wallet, transactions)
- * - Push event placeholder (Phase 5)
+ * - Firebase Messaging integration
  */
 
-const CACHE_VERSION = 'regulr-shell-v3';
+// ============================================
+// FIREBASE MESSAGING — Import compat SDK (v8)
+// ============================================
+importScripts('https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js');
+importScripts('https://www.gstatic.com/firebasejs/8.10.1/firebase-messaging.js');
+
+const CACHE_VERSION = 'regulr-shell-v4';
+
+// ============================================
+// FIREBASE INITIALIZATION (v8 style)
+// ============================================
+if (!firebase.apps.length) {
+    firebase.initializeApp({
+        apiKey:            "__FIREBASE_API_KEY__",
+        projectId:         "__FIREBASE_PROJECT_ID__",
+        messagingSenderId: "__FIREBASE_MESSAGING_SENDER_ID__",
+        appId:             "__FIREBASE_APP_ID__"
+    });
+}
+
+const messaging = firebase.messaging();
+
+// Background message handler
+messaging.onBackgroundMessage((payload) => {
+    console.log('[SW-FCM] Background message:', payload);
+    const title = payload.notification?.title || payload.data?.title || 'REGULR.vip';
+    const body = payload.notification?.body || payload.data?.body || '';
+    const icon = payload.notification?.icon || '/icons/favicon.png';
+    
+    const options = {
+        body: body,
+        icon: icon,
+        badge: '/icons/favicon.png',
+        data: { url: payload.data?.url || '/' }
+    };
+    self.registration.showNotification(title, options);
+});
+
+// Notification click handler
+self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+    const url = event.notification.data?.url || '/';
+    event.waitUntil(
+        self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+            .then((clients) => {
+                for (const client of clients) {
+                    if (client.url.includes(self.location.origin) && 'focus' in client) {
+                        return client.focus();
+                    }
+                }
+                return self.clients.openWindow(url);
+            })
+    );
+});
+
 
 // Derive base path from service worker registration scope
 // Works for both domain root (stamgast.test) and subdirectory (localhost/stamgast)
@@ -216,47 +270,8 @@ function isExternalAsset(url) {
 }
 
 // ============================================
-// PUSH EVENT (Phase 5 placeholder)
+// PUSH & NOTIFICATION HANDLERS
 // ============================================
-self.addEventListener('push', (event) => {
-    if (!event.data) return;
-
-    try {
-        const data = event.data.json();
-        const title = data.title || 'REGULR.vip';
-        const options = {
-            body: data.body || '',
-            icon: '/icons/favicon.png',
-            badge: '/icons/favicon.png',
-            vibrate: [100, 50, 100],
-            data: {
-                url: data.url || '/',
-            },
-        };
-
-        event.waitUntil(self.registration.showNotification(title, options));
-    } catch (err) {
-        console.warn('[SW] Push parse error:', err);
-    }
-});
-
-// Handle notification click
-self.addEventListener('notificationclick', (event) => {
-    event.notification.close();
-
-    const url = event.notification.data?.url || '/';
-
-    event.waitUntil(
-        self.clients.matchAll({ type: 'window', includeUncontrolled: true })
-            .then((clients) => {
-                // Focus existing window if open
-                for (const client of clients) {
-                    if (client.url.includes(self.location.origin) && 'focus' in client) {
-                        return client.focus();
-                    }
-                }
-                // Open new window
-                return self.clients.openWindow(url);
-            })
-    );
-});
+// Push en notification handlers zitten in firebase-messaging-sw.js
+// (Firebase Messaging SDK beheert deze via onBackgroundMessage)
+// sw.js is puur voor caching/PWA functionality

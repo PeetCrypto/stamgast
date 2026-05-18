@@ -9,6 +9,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../services/AuthService.php';
 
 // Only allow GET
+$method = $_SERVER['REQUEST_METHOD'];
 if ($method !== 'GET') {
     Response::error('Method not allowed', 'METHOD_NOT_ALLOWED', 405);
 }

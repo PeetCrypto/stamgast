@@ -16,7 +16,7 @@ RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 # --- SET BASE PATH (adjust if in subdirectory on Hostinger) ---
 # Lokaal:  RewriteBase /
 # Productie (subdirectory): RewriteBase /app/
-RewriteBase /
+# RewriteBase /
 
 # --- SECURITY HEADERS ---
 <IfModule mod_headers.c>
@@ -58,7 +58,15 @@ RewriteRule ^sql/ - [F,L]
     Allow from all
 </FilesMatch>
 
+# Allow sw.js service worker with expanded scope
+<FilesMatch "sw\.js$">
+    Header set Service-Worker-Allowed "/"
+</FilesMatch>
+
 # --- ROUTING ---
+# Serve favicon.ico from public/ directory
+RewriteRule ^favicon\.ico$ public/favicon.ico [L]
+
 # Route all requests (except existing files and public/) through index.php
 RewriteCond %{ENV:REDIRECT_STATUS} ^$
 RewriteCond %{REQUEST_FILENAME} !-f

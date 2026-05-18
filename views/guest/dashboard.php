@@ -84,9 +84,10 @@ $isUnverified = ($accountStatus !== 'active' && $verificationRequired);
             <p style="font-size: 24px; margin-bottom: var(--space-xs);">&#128176;</p>
             <p class="text-sm">Wallet</p>
         </a>
-        <a href="<?= BASE_URL ?>/inbox" class="glass-card" style="padding: var(--space-lg); text-align: center; text-decoration: none; color: inherit;">
+        <a href="<?= BASE_URL ?>/inbox" class="glass-card" style="padding: var(--space-lg); text-align: center; text-decoration: none; color: inherit; position: relative;">
             <p style="font-size: 24px; margin-bottom: var(--space-xs);">&#128233;</p>
             <p class="text-sm">Inbox</p>
+            <span class="notif-badge" id="inbox-badge" style="display:none;position:absolute;top:8px;right:8px;background:#4CAF50;color:#fff;font-size:11px;font-weight:700;min-width:20px;height:20px;border-radius:10px;align-items:center;justify-content:center;padding:0 5px;">0</span>
         </a>
         <a href="<?= BASE_URL ?>/profile" class="glass-card" style="padding: var(--space-lg); text-align: center; text-decoration: none; color: inherit;">
             <p style="font-size: 24px; margin-bottom: var(--space-xs);">&#128100;</p>
@@ -94,7 +95,7 @@ $isUnverified = ($accountStatus !== 'active' && $verificationRequired);
         </a>
     </div>
 
-    <a href="<?= BASE_URL ?>/logout" class="btn btn-secondary">Uitloggen</a>
+    <a href="<?= BASE_URL ?>/logout?return=<?= urlencode('/j/' . $tenant['slug']) ?>" class="btn btn-secondary">Uitloggen</a>
 </div>
 
 <!-- PWA Install Prompt Logic -->
@@ -156,6 +157,26 @@ $isUnverified = ($accountStatus !== 'active' && $verificationRequired);
         }
     }, 5000);
 })();
+</script>
+
+<script src="<?= BASE_URL ?>/public/js/app.js"></script>
+<script src="<?= BASE_URL ?>/public/js/push.js"></script>
+<script>
+// Fetch unread inbox count and show badge on Inbox card
+fetch((window.__BASE_URL || '') + '/api/notification/check', {
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' }
+})
+.then(function(r) { return r.json(); })
+.then(function(result) {
+    if (result.success && result.data && result.data.unread_count > 0) {
+        var badge = document.getElementById('inbox-badge');
+        if (badge) {
+            badge.textContent = result.data.unread_count > 99 ? '99+' : result.data.unread_count;
+            badge.style.display = 'flex';
+        }
+    }
+}).catch(function() {});
 </script>
 
 <?php require VIEWS_PATH . 'shared/footer.php'; ?>

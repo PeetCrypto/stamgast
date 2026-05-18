@@ -13,12 +13,10 @@ define('APP_ENV', getenv('APP_ENV') ?: 'development');
 define('APP_DEBUG', APP_ENV === 'development');
 
 // --- DATABASE ---
-// Lokaal: geen .env → root / stamgast_db / leeg wachtwoord (Laragon defaults)
-// Productie: .env met Hostinger credentials
 define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
 define('DB_PORT', (int)(getenv('DB_PORT') ?: 3306));
 define('DB_NAME', getenv('DB_NAME') ?: 'stamgast_db');
-define('DB_USER', getenv('DB_USER') ?: 'root');
+define('DB_USER', getenv('DB_USER') ?: 'u594281888_vip');
 define('DB_PASS', getenv('DB_PASS') ?: '');
 define('DB_CHARSET', 'utf8mb4');
 
@@ -45,6 +43,19 @@ define('MOLLIE_CONNECT_CLIENT_SECRET', getenv('MOLLIE_CONNECT_CLIENT_SECRET') ?:
 define('PLATFORM_FEE_DEFAULT_PERCENTAGE', (float)(getenv('PLATFORM_FEE_DEFAULT_PERCENTAGE') ?: 1.00));
 define('PLATFORM_FEE_DEFAULT_MIN_CENTS', (int)(getenv('PLATFORM_FEE_DEFAULT_MIN_CENTS') ?: 25));
 define('PLATFORM_FEE_BTW_PERCENTAGE', (float)(getenv('PLATFORM_FEE_BTW_PERCENTAGE') ?: 21.00));
+
+// --- Firebase / VAPID ---
+define('FIREBASE_API_KEY', getenv('FIREBASE_API_KEY') ?: 'AIzaSyC1nLHXx8T7alGDDGnj0eBTqJBvPNl0bL0');
+define('FIREBASE_PROJECT_ID', getenv('FIREBASE_PROJECT_ID') ?: 'regulr-vip');
+define('FIREBASE_MESSAGING_SENDER_ID', getenv('FIREBASE_MESSAGING_SENDER_ID') ?: '584188670460');
+define('FIREBASE_APP_ID', getenv('FIREBASE_APP_ID') ?: '1:584188670460:web:3f68a6dba9538b4de17fdb');
+define('VAPID_PUBLIC_KEY', getenv('VAPID_PUBLIC_KEY') ?: 'BErFgT0yeifZRV9c1HPHTH4UUSCmRzwAejmCDogUReiz9oUUXlKSF4jzamgpmhHD8ZZ0h_bxAfE6qgrIljQ78dk');
+define('VAPID_PRIVATE_KEY_PEM', getenv('VAPID_PRIVATE_KEY_PEM') ?: '');
+define('VAPID_SUBJECT', getenv('VAPID_SUBJECT') ?: 'mailto:admin@regulr.vip');
+
+// Legacy FCM (deprecated but kept for fallback)
+define('FIREBASE_PUBLIC_KEY', VAPID_PUBLIC_KEY);
+define('FIREBASE_SERVER_KEY', getenv('FIREBASE_SERVER_KEY') ?: '3D96caBCj6aoJoQIvgVELAnYL7GHps7xkyX70hn5Bks');
 
 // --- WALLET LIMITS ---
 define('DEPOSIT_MIN_CENTS', 500);    // 5 euro minimum

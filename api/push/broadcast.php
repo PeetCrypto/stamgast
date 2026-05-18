@@ -3,13 +3,15 @@ declare(strict_types=1);
 
 /**
  * POST /api/push/broadcast
- * Send a push notification to ALL subscribed users in the tenant (admin only)
+ * Send a push notification to all subscribed guests of a tenant (admin only)
  *
  * Body: { title: string, body: string }
  */
 
 require_once __DIR__ . '/../../services/PushService.php';
+require_once __DIR__ . '/../../models/Notification.php';
 
+$method = $_SERVER['REQUEST_METHOD'];
 if ($method !== 'POST') {
     Response::error('Method not allowed', 'METHOD_NOT_ALLOWED', 405);
 }
@@ -54,21 +56,45 @@ $pushService = new PushService($db);
 try {
     $result = $pushService->broadcastNotification($tenantId, $title, $body);
 
+    // Persist to inbox for ALL guest users (not just push subscribers)
+    $guestStmt = $db->prepare(
+        "SELECT id FROM users WHERE tenant_id = :tid AND role = 'guest' AND (account_status != 'suspended' OR account_status IS NULL)"
+    );
+    $guestStmt->execute([':tid' => $tenantId]);
+    $guests = $guestStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $notifModel = new Notification($db);
+    $inboxCount = 0;
+    foreach ($guests as $guest) {
+        $notifModel->create([
+            'tenant_id' => $tenantId,
+            'user_id'   => (int) $guest['id'],
+            'type'      => 'system',
+            'icon'      => '📢',
+            'title'     => $title,
+            'body'      => $body,
+            'color'     => 'var(--accent-primary)',
+        ]);
+        $inboxCount++;
+    }
+
     (new Audit($db))->log(
         $tenantId,
         currentUserId(),
         'push.broadcast_sent',
         'tenant',
         $tenantId,
-        ['title' => $title, 'sent' => $result['sent'], 'failed' => $result['failed'], 'total' => $result['total_subscriptions']]
+        ['title' => $title, 'sent' => $result['sent'], 'failed' => $result['failed'], 'total' => $result['total_subscriptions'], 'inbox_count' => $inboxCount]
     );
 
     Response::success([
-        'message'            => 'Broadcast verzonden',
-        'sent'               => $result['sent'],
-        'failed'             => $result['failed'],
+        'message'             => 'Broadcast verzonden',
+        'sent'                => $result['sent'],
+        'failed'              => $result['failed'],
         'total_subscriptions' => $result['total_subscriptions'],
+        'inbox_count'         => $inboxCount,
     ]);
 } catch (\Throwable $e) {
+    error_log('[Push Broadcast] Error: ' . $e->getMessage());
     Response::internalError('Broadcast verzenden mislukt');
 }

@@ -779,6 +779,8 @@ async function deleteTier(tierId) {
     // MARKETING STUDIO
     // ============================================
     let segmentedUsers = [];
+    let queuePage = 1;
+    let queueFilter = '';
 
     function loadMarketing() {
         loadQueueStatus();
@@ -802,7 +804,21 @@ async function deleteTier(tierId) {
         });
 
         // Queue refresh
-        document.getElementById('refresh-queue-btn')?.addEventListener('click', loadQueueStatus);
+        document.getElementById('refresh-queue-btn')?.addEventListener('click', () => loadQueueStatus(queuePage, queueFilter));
+
+        // Process queue
+        document.getElementById('process-queue-btn')?.addEventListener('click', processQueue);
+
+        // Queue filters
+        document.querySelectorAll('.queue-filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                queueFilter = btn.dataset.status || '';
+                queuePage = 1;
+                document.querySelectorAll('.queue-filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                loadQueueStatus(queuePage, queueFilter);
+            });
+        });
     }
 
     async function segmentUsers() {
@@ -926,9 +942,13 @@ async function deleteTier(tierId) {
         }
     }
 
-    async function loadQueueStatus() {
+    async function loadQueueStatus(page, filter) {
+        if (page !== undefined) queuePage = page;
+        if (filter !== undefined) queueFilter = filter;
+
         try {
-            const response = await window.REGULR.api('/marketing/queue');
+            const params = new URLSearchParams({ page: queuePage, per_page: 20, status: queueFilter });
+            const response = await window.REGULR.api('/marketing/queue?' + params.toString());
 
             if (response.success) {
                 const data = response.data;
@@ -940,24 +960,94 @@ async function deleteTier(tierId) {
                 if (sentEl) sentEl.textContent = data.sent ?? '--';
                 if (failedEl) failedEl.textContent = data.failed ?? '--';
 
-                // Render recent items if available
+                // Render table
                 const itemsEl = document.getElementById('queue-items');
-                if (itemsEl && data.recent) {
-                    if (data.recent.length === 0) {
-                        itemsEl.innerHTML = '<p style="color:var(--text-secondary);font-size:14px;text-align:center;padding:var(--space-md);">Geen berichten in wachtrij</p>';
-                    } else {
-                        itemsEl.innerHTML = data.recent.map(item => `
-                            <div class="segment-result-item">
-                                <span style="flex:1;">${item.subject || 'Geen onderwerp'}</span>
-                                <span class="seg-email">${item.email || ''}</span>
-                                <span class="seg-tier" style="background:${item.status === 'sent' ? 'rgba(76,175,80,0.15)' : item.status === 'failed' ? 'rgba(244,67,54,0.15)' : 'rgba(255,193,7,0.15)'};color:${item.status === 'sent' ? 'var(--success)' : item.status === 'failed' ? 'var(--error)' : 'var(--accent-primary)'};">${item.status}</span>
-                            </div>
-                        `).join('');
-                    }
+                if (!itemsEl) return;
+
+                const items = data.items || [];
+                if (items.length === 0) {
+                    itemsEl.innerHTML = '<p style="color:var(--text-secondary);font-size:14px;text-align:center;padding:var(--space-md);">Geen berichten gevonden</p>';
+                } else {
+                    itemsEl.innerHTML = '<table class="queue-table"><thead><tr><th>Onderwerp</th><th>Ontvanger</th><th>Status</th><th>Datum</th></tr></thead><tbody>'
+                        + items.map(item => {
+                            const dateStr = item.sent_at || item.created_at;
+                            const shortDate = dateStr ? new Date(dateStr).toLocaleDateString('nl-NL', {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : '-';
+                            const statusLabels = {pending:'Wachtend',sent:'Verstuurd',failed:'Mislukt'};
+                            return '<tr>'
+                                + '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (item.subject || 'Geen onderwerp') + '</td>'
+                                + '<td style="color:var(--text-secondary);font-size:12px;">' + (item.first_name ? item.first_name + ' ' : '') + (item.last_name || '') + '<br><span style="font-size:11px;opacity:0.7;">' + (item.email || '') + '</span></td>'
+                                + '<td><span class="status-badge ' + (item.status || '') + '">' + (statusLabels[item.status] || item.status) + '</span></td>'
+                                + '<td style="color:var(--text-secondary);font-size:12px;white-space:nowrap;">' + shortDate + '</td>'
+                                + '</tr>';
+                        }).join('')
+                        + '</tbody></table>';
                 }
+
+                // Render pagination
+                const pagEl = document.getElementById('queue-pagination');
+                if (!pagEl) return;
+                const pag = data.pagination || {};
+                if (pag.total_pages <= 1) {
+                    pagEl.innerHTML = '';
+                    return;
+                }
+
+                let pagHtml = '<button class="queue-page-btn" onclick="loadQueueStatus(' + (queuePage - 1) + ')"' + (queuePage <= 1 ? ' disabled' : '') + '>&laquo;</button>';
+
+                // Show max 7 page buttons with ellipsis
+                const totalPages = pag.total_pages;
+                const current = queuePage;
+                let startPage = Math.max(1, current - 3);
+                let endPage = Math.min(totalPages, startPage + 6);
+                if (endPage - startPage < 6) startPage = Math.max(1, endPage - 6);
+
+                if (startPage > 1) {
+                    pagHtml += '<button class="queue-page-btn" onclick="loadQueueStatus(1)">1</button>';
+                    if (startPage > 2) pagHtml += '<span style="color:var(--text-secondary);padding:4px;">...</span>';
+                }
+
+                for (let p = startPage; p <= endPage; p++) {
+                    pagHtml += '<button class="queue-page-btn' + (p === current ? ' active' : '') + '" onclick="loadQueueStatus(' + p + ')">' + p + '</button>';
+                }
+
+                if (endPage < totalPages) {
+                    if (endPage < totalPages - 1) pagHtml += '<span style="color:var(--text-secondary);padding:4px;">...</span>';
+                    pagHtml += '<button class="queue-page-btn" onclick="loadQueueStatus(' + totalPages + ')">' + totalPages + '</button>';
+                }
+
+                pagHtml += '<button class="queue-page-btn" onclick="loadQueueStatus(' + (queuePage + 1) + ')"' + (queuePage >= totalPages ? ' disabled' : '') + '>&raquo;</button>';
+                pagEl.innerHTML = pagHtml;
             }
         } catch (error) {
             console.error('Queue status error:', error);
+        }
+    }
+
+    async function processQueue() {
+        const btn = document.getElementById('process-queue-btn');
+        if (!btn) return;
+
+        btn.disabled = true;
+        btn.textContent = 'Bezig met verzenden...';
+
+        try {
+            const response = await window.REGULR.api('/marketing/process', {
+                method: 'POST',
+                body: { batch_size: 50 }
+            });
+
+            if (response.success) {
+                const d = response.data;
+                window.REGULR.showSuccess(d.message || 'Wachtrij verwerkt');
+                loadQueueStatus();
+            } else {
+                throw new Error(response.error || 'Verwerken mislukt');
+            }
+        } catch (error) {
+            window.REGULR.showError('Wachtrij fout: ' + error.message);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Verstuur wachtrij';
         }
     }
 

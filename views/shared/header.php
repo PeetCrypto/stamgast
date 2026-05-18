@@ -21,6 +21,8 @@ $tenantLogo = $_SESSION['tenant_logo'] ?? ''; // Tenant uploaded logo URL
     <meta name="theme-color" content="#0f0f0f">
     <meta name="description" content="<?= sanitize($tenantName) ?>">
     <meta name="csrf-token" content="<?= $csrfToken ?>">
+    <meta name="firebase-vapid-key" content="BJhO9Dm0DcQ1bUOMbpNWuldXNOzFWM8k6uqKG4NzUL49C5JzDQcwkL2Gaec6gDgxP8AMQejBNEo4ZcxGGg-RUs0">
+    <meta name="firebase-api-key" content="AIzaSyC1nLHXx8T7alGDDGnj0eBTqJBvPNl0bL0">
     <?php if ($userRole === 'guest' && isset($_SESSION['tenant']['slug'])): ?>
     <meta name="tenant-slug" content="<?= sanitize($_SESSION['tenant']['slug']) ?>">
     <?php endif; ?>
@@ -50,6 +52,23 @@ $tenantLogo = $_SESSION['tenant_logo'] ?? ''; // Tenant uploaded logo URL
 
     <!-- App Base Path (for JS API calls) -->
     <script>window.__BASE_URL = '<?= defined("BASE_URL") ? BASE_URL : "" ?>';</script>
+
+    <!-- Firebase SDK (compat) -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
+    <script>
+    if (!window.__FIREBASE_INIT) {
+        firebase.initializeApp({
+            apiKey:            "<?= FIREBASE_API_KEY ?>",
+            authDomain:        "<?= FIREBASE_PROJECT_ID ?>.firebaseapp.com",
+            projectId:         "<?= FIREBASE_PROJECT_ID ?>",
+            storageBucket:     "<?= FIREBASE_PROJECT_ID ?>.firebasestorage.app",
+            messagingSenderId: "<?= FIREBASE_MESSAGING_SENDER_ID ?>",
+            appId:             "<?= FIREBASE_APP_ID ?>"
+        });
+        window.__FIREBASE_INIT = true;
+    }
+    </script>
 
     <!-- Midnight Lounge Design System -->
     <link rel="stylesheet" href="<?= BASE_URL ?>/css/midnight-lounge.css">

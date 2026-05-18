@@ -36,7 +36,8 @@ class EmailService
         ?string $textContent = null,
         ?string $templateType = null,
         ?int $tenantId = null,
-        ?int $userId = null
+        ?int $userId = null,
+        ?string $fromName = null
     ): bool {
         $emailData = [
             'to' => $to,
@@ -53,6 +54,11 @@ class EmailService
             $config = $this->emailConfigModel->getActiveConfig();
             if (!$config) {
                 throw new \RuntimeException('No active email configuration found');
+            }
+
+            // Override from_name with tenant name if provided (e.g. marketing emails)
+            if ($fromName !== null && $fromName !== '') {
+                $config['from_name'] = $fromName;
             }
 
             // Initialize the appropriate provider

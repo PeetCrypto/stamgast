@@ -6,6 +6,8 @@ declare(strict_types=1);
  * Handles user segmentation and email queue management
  */
 
+require_once __DIR__ . '/Email/EmailService.php';
+
 class MarketingService
 {
     private PDO $db;
@@ -190,13 +192,21 @@ class MarketingService
     }
 
     /**
-     * Get email queue status counts
+     * Get email queue status counts + paginated recent items
      *
-     * @param int $tenantId Tenant isolation
-     * @return array{pending: int, sent: int, failed: int, total: int}
+     * @param int    $tenantId     Tenant isolation
+     * @param int    $page         Page number (1-based)
+     * @param int    $perPage      Items per page
+     * @param string $statusFilter Filter by status ('', 'pending', 'sent', 'failed')
+     * @return array{pending: int, sent: int, failed: int, total: int, items: array, pagination: array}
      */
-    public function getQueueStatus(int $tenantId): array
+    public function getQueueStatus(int $tenantId, int $page = 1, int $perPage = 20, string $statusFilter = ''): array
     {
+        $page = max(1, $page);
+        $perPage = min(max(1, $perPage), 100);
+        $offset = ($page - 1) * $perPage;
+
+        // Counts by status (always all statuses for the stat cards)
         $stmt = $this->db->prepare(
             'SELECT `status`, COUNT(*) as cnt
              FROM `email_queue`
@@ -212,14 +222,55 @@ class MarketingService
                 $counts[$status] = (int) $row['cnt'];
             }
         }
-
         $counts['total'] = array_sum($counts);
+
+        // Paginated items query
+        $whereClause = 'WHERE eq.`tenant_id` = :tenant_id';
+        $params = [':tenant_id' => $tenantId];
+
+        if (in_array($statusFilter, ['pending', 'sent', 'failed'], true)) {
+            $whereClause .= ' AND eq.`status` = :status_filter';
+            $params[':status_filter'] = $statusFilter;
+        }
+
+        // Count total matching items for pagination
+        $countStmt = $this->db->prepare(
+            "SELECT COUNT(*) as total FROM `email_queue` eq {$whereClause}"
+        );
+        $countStmt->execute($params);
+        $totalItems = (int) $countStmt->fetch()['total'];
+        $totalPages = (int) ceil($totalItems / $perPage);
+
+        // Fetch paginated items
+        $itemStmt = $this->db->prepare(
+            "SELECT eq.`id`, eq.`subject`, eq.`status`, eq.`created_at`, eq.`sent_at`,
+                    u.`email`, u.`first_name`, u.`last_name`
+             FROM `email_queue` eq
+             JOIN `users` u ON u.`id` = eq.`user_id`
+             {$whereClause}
+             ORDER BY eq.`created_at` DESC
+             LIMIT :limit OFFSET :offset"
+        );
+        foreach ($params as $key => $val) {
+            $itemStmt->bindValue($key, $val, PDO::PARAM_STR);
+        }
+        $itemStmt->bindValue(':limit', $perPage, PDO::PARAM_INT);
+        $itemStmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        $itemStmt->execute();
+        $counts['items'] = $itemStmt->fetchAll();
+        $counts['pagination'] = [
+            'page'       => $page,
+            'per_page'   => $perPage,
+            'total_items'=> $totalItems,
+            'total_pages'=> $totalPages,
+        ];
+
         return $counts;
     }
 
     /**
-     * Process pending emails in the queue (called by cron job)
-     * Sends up to $batchSize emails per run
+     * Process pending emails in the queue
+     * Sends up to $batchSize emails per run using EmailService
      *
      * @param int $tenantId Tenant isolation (0 = all tenants)
      * @param int $batchSize Max emails to process
@@ -227,9 +278,15 @@ class MarketingService
      */
     public function processQueue(int $tenantId = 0, int $batchSize = 50): array
     {
-        $sql = "SELECT eq.*, u.`email`
+        // Fetch pending emails with user data for placeholder replacement
+        $sql = "SELECT eq.`id`, eq.`tenant_id`, eq.`user_id`, eq.`subject`, eq.`body_html`,
+                       u.`email`, u.`first_name`, u.`last_name`,
+                       w.`balance_cents`,
+                       t.`name` AS tenant_name
                 FROM `email_queue` eq
                 JOIN `users` u ON u.`id` = eq.`user_id`
+                LEFT JOIN `wallets` w ON w.`user_id` = u.`id`
+                LEFT JOIN `tenants` t ON t.`id` = eq.`tenant_id`
                 WHERE eq.`status` = 'pending'";
 
         $params = [];
@@ -260,9 +317,34 @@ class MarketingService
         foreach ($emails as $email) {
             $processed++;
 
-            // MVP: Mark as sent (actual SMTP delivery deferred to production)
-            // In production, use mail() or an SMTP library here
-            $success = $this->sendEmail($email['email'], $email['subject'], $email['body_html']);
+            // Build placeholder variables for this recipient
+            $balanceEur = number_format(($email['balance_cents'] ?? 0) / 100, 2, ',', '.');
+            $tierName = $this->getUserTierName((int) $email['tenant_id'], (int) $email['user_id']);
+
+            $placeholders = [
+                '{{first_name}}'  => $email['first_name'] ?? '',
+                '{{last_name}}'   => $email['last_name'] ?? '',
+                '{{tenant_name}}' => $email['tenant_name'] ?? APP_NAME,
+                '{{balance}}'     => '€' . $balanceEur,
+                '{{tier}}'        => $tierName,
+            ];
+
+            // Replace placeholders in subject and body
+            $subject  = str_replace(array_keys($placeholders), array_values($placeholders), $email['subject']);
+            $bodyHtml = str_replace(array_keys($placeholders), array_values($placeholders), $email['body_html']);
+
+            // Generate plain text fallback from HTML
+            $textContent = $this->htmlToPlainText($bodyHtml);
+
+            $success = $this->sendEmail(
+                $email['email'],
+                $subject,
+                $bodyHtml,
+                $textContent,
+                (int) $email['tenant_id'],
+                (int) $email['user_id'],
+                $email['tenant_name'] ?? ''
+            );
 
             $updateStmt->execute([
                 ':status' => $success ? 'sent' : 'failed',
@@ -280,30 +362,88 @@ class MarketingService
     }
 
     /**
-     * Send an email (MVP: uses PHP mail(), production: use SMTP)
+     * Send an email using EmailService (SMTP providers) with fallback
      *
-     * @param string $to       Recipient email
-     * @param string $subject  Email subject
-     * @param string $bodyHtml HTML body
+     * @param string $to         Recipient email
+     * @param string $subject    Email subject
+     * @param string $bodyHtml   HTML body
+     * @param string $textContent Plain text fallback
+     * @param int    $tenantId   Tenant ID for logging
+     * @param int    $userId     User ID for logging
      * @return bool Success
      */
-    private function sendEmail(string $to, string $subject, string $bodyHtml): bool
-    {
-        // In development mode, just log and pretend success
-        if (APP_DEBUG) {
-            error_log("[MarketingService] Email to: {$to}, Subject: {$subject}");
-            return true;
+    private function sendEmail(
+        string $to,
+        string $subject,
+        string $bodyHtml,
+        string $textContent,
+        int $tenantId,
+        int $userId,
+        string $tenantName = ''
+    ): bool {
+        try {
+            $emailService = new EmailService($this->db);
+            $result = $emailService->sendEmail(
+                $to,
+                $subject,
+                $bodyHtml,
+                $textContent,
+                'marketing',
+                $tenantId,
+                $userId,
+                $tenantName ?: null
+            );
+
+            if (defined('APP_DEBUG') && APP_DEBUG) {
+                error_log("[MarketingService] Email to: {$to}, Subject: {$subject}, From: {$tenantName}, Result: " . ($result ? 'SENT' : 'FAILED'));
+            }
+
+            return $result;
+        } catch (\Throwable $e) {
+            error_log("[MarketingService] EmailService failed: " . $e->getMessage());
+            return false;
         }
+    }
 
-        // Production: use PHP mail() as fallback
-        $headers = [
-            'MIME-Version: 1.0',
-            'Content-Type: text/html; charset=UTF-8',
-            'From: noreply@REGULR.vip.nl',
-            'Reply-To: noreply@REGULR.vip.nl',
-            'X-Mailer: REGULR.vip-PHP',
-        ];
+    /**
+     * Get the tier name for a user based on their total deposits
+     */
+    private function getUserTierName(int $tenantId, int $userId): string
+    {
+        try {
+            // Calculate total deposits for this user
+            $stmt = $this->db->prepare(
+                "SELECT COALESCE(SUM(`final_total_cents`), 0) AS total
+                 FROM `transactions`
+                 WHERE `user_id` = :user_id AND `tenant_id` = :tenant_id AND `type` = 'deposit'"
+            );
+            $stmt->execute([':user_id' => $userId, ':tenant_id' => $tenantId]);
+            $row = $stmt->fetch();
+            $totalDeposits = (int) ($row['total'] ?? 0);
 
-        return mail($to, $subject, $bodyHtml, implode("\r\n", $headers));
+            // Find matching tier
+            $tiers = (new LoyaltyTier($this->db))->getByTenant($tenantId);
+            $matchedTier = '';
+            foreach ($tiers as $tier) {
+                if ($totalDeposits >= (int) $tier['min_deposit_cents']) {
+                    $matchedTier = $tier['name'];
+                }
+            }
+            return $matchedTier;
+        } catch (\Throwable $e) {
+            return '';
+        }
+    }
+
+    /**
+     * Convert HTML to plain text (simple strip-tags with whitespace cleanup)
+     */
+    private function htmlToPlainText(string $html): string
+    {
+        $text = strip_tags($html);
+        // Normalize whitespace
+        $text = preg_replace('/[ \t]+/', ' ', $text);
+        $text = preg_replace('/\n\s*\n/', "\n\n", $text);
+        return trim($text);
     }
 }
