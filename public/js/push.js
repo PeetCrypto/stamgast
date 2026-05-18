@@ -30,6 +30,7 @@
     var polling = false;
     var pollTimer = null;
     var fcmTokenSent = false;
+    var fcmInitialized = false;
 
     console.log('[Push] System loaded');
 
@@ -74,6 +75,10 @@
     // ════════════════════════════════════════════════════════════
 
     function initFCM() {
+        // Guard against double init (called from both config fetch and init())
+        if (fcmInitialized) return;
+        fcmInitialized = true;
+
         // Check of Firebase beschikbaar is
         if (typeof firebase === 'undefined' || !firebase.messaging) {
             console.warn('[Push] Firebase SDK niet geladen, polling only');
@@ -380,8 +385,7 @@
 
         if (isPublic || isJoin) return;
 
-        // Start FCM (push) + polling fallback
-        initFCM();
+        // Only start polling here; FCM init is handled by the config fetch above
         startPolling();
     }
 
