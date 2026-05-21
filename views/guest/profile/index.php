@@ -159,7 +159,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (move_uploaded_file($file['tmp_name'], $uploadPath)) {
                     // Build URL exactly like logo upload does: BASE_URL . '/public/uploads/profiles/filename'
                     $photoUrl = BASE_URL . '/public/uploads/profiles/' . $newFilename;
-                    $userModel->updatePhoto($userId, $photoUrl);
+                    $userModel->updatePhoto($userId, $photoUrl, 'validated');
                     $successMessage = 'Profielfoto succesvol geüpload!';
                     $user = $userModel->findById($userId);
                 } else {
@@ -290,21 +290,18 @@ if ($photoUrl) {
                 <?php endif; ?>
             </div>
 
-            <?php if ($photoUrl): ?>
-                <?php if ($photoStatus === 'validated'): ?>
-                    <div style="color: var(--success); margin-bottom: var(--space-sm);">✅ Foto goedgekeurd</div>
-                <?php elseif ($photoStatus === 'blocked'): ?>
-                    <div style="color: var(--error); margin-bottom: var(--space-sm);">❌ Foto geweigerd</div>
-                <?php else: ?>
-                    <div style="color: var(--warning); margin-bottom: var(--space-sm);">⏳ Foto wacht op goedkeuring</div>
-                <?php endif; ?>
+            <?php if ($photoUrl && $photoStatus === 'blocked'): ?>
+                <div style="color: var(--error); margin-bottom: var(--space-sm);">❌ Foto is geblokkeerd door beheerder</div>
             <?php endif; ?>
 
-            <form method="POST" enctype="multipart/form-data" style="margin-top: var(--space-md);">
+            <form method="POST" enctype="multipart/form-data" id="photoUploadForm" style="margin-top: var(--space-md);">
                 <input type="hidden" name="action" value="upload_photo">
-                <input type="file" name="profile_photo" accept="image/jpeg,image/png,image/gif,image/webp" required
-                       style="margin-bottom: var(--space-sm); max-width: 300px; margin-left: auto; margin-right: auto; display: block;">
-                <button type="submit" class="btn btn-primary">Foto Uploaden</button>
+                <label class="btn btn-primary" style="display: inline-block; cursor: pointer; margin: 0 auto;">
+                    📷 Foto kiezen
+                    <input type="file" name="profile_photo" accept="image/jpeg,image/png,image/gif,image/webp" required
+                           style="display: none;"
+                           onchange="document.getElementById('photoUploadForm').submit();">
+                </label>
             </form>
         </div>
 
@@ -401,30 +398,125 @@ if ($photoUrl) {
 
         <hr class="profile-divider">
 
-        <!-- ── Notifications ── -->
+        <!-- ── App Beveiliging ── -->
+        <div class="profile-section">
+            <h3>🔒 App Beveiliging</h3>
+            <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: var(--space-md);">
+                Kies hoe je je app wilt ontgrendelen. Je app wordt altijd vergrendeld als je hem op de achtergrond zet. Beveiliging gaat via je PIN-code of FaceID/Vingerafdruk.
+            </p>
+
+            <!-- PIN toggle (onafhankelijk) -->
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:var(--space-md);border-radius:12px;border:1px solid var(--glass-border);background:var(--glass-bg);">
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <span id="security-pin-icon" style="font-size:24px;">🔢</span>
+                    <div>
+                        <strong id="security-pin-label">PIN-code</strong>
+                        <p id="security-pin-desc" style="color:var(--text-secondary);font-size:13px;margin-top:2px;">Niet ingesteld</p>
+                    </div>
+                </div>
+                <button id="security-pin-toggle" type="button" class="btn btn-sm" style="font-size:13px;padding:6px 16px;">Inschakelen</button>
+            </div>
+
+            <!-- FaceID toggle (onafhankelijk, altijd zichtbaar als WebAuthn beschikbaar) -->
+            <div id="security-webauthn-row" style="margin-top:var(--space-md);padding:var(--space-md);border-radius:12px;border:1px solid var(--glass-border);background:var(--glass-bg);">
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <div style="display:flex;align-items:center;gap:12px;">
+                        <span id="security-webauthn-icon" style="font-size:24px;">👤</span>
+                        <div>
+                            <strong id="security-webauthn-label">FaceID / Vingerafdruk</strong>
+                            <p id="security-webauthn-desc" style="color:var(--text-secondary);font-size:13px;margin-top:2px;">Niet ingeschakeld</p>
+                        </div>
+                    </div>
+                    <button id="security-webauthn-toggle" type="button" class="btn btn-sm" style="font-size:13px;padding:6px 16px;">Inschakelen</button>
+                </div>
+                <p id="security-webauthn-error" style="display:none;color:#F44336;font-size:13px;margin-top:var(--space-sm);"></p>
+                <!-- PWA hint: alleen zichtbaar als NIET in standalone mode -->
+                <p id="security-webauthn-pwa-hint" style="display:none;color:#FFC107;font-size:12px;margin-top:var(--space-sm);line-height:1.4;">💡 FaceID werkt het beste als deze app op je thuisscherm staat. Zonder PWA kan een wachtwoordmanager verschijnen i.p.v. FaceID.</p>
+            </div>
+
+            <!-- Inline PIN setup (hidden by default) -->
+            <div id="security-pin-setup" style="display:none;margin-top:var(--space-lg);text-align:center;">
+                <div id="security-setup-step-label" style="font-size:13px;color:var(--accent-primary);margin-bottom:var(--space-sm);font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Stap 1 — Kies je PIN</div>
+
+                <!-- PIN dots -->
+                <div class="security-pin-dots" id="security-pin-dots" style="display:flex;justify-content:center;gap:16px;margin-bottom:var(--space-lg);">
+                    <div style="width:18px;height:18px;border-radius:50%;border:2px solid var(--text-secondary);background:transparent;transition:all 0.2s ease;"></div>
+                    <div style="width:18px;height:18px;border-radius:50%;border:2px solid var(--text-secondary);background:transparent;transition:all 0.2s ease;"></div>
+                    <div style="width:18px;height:18px;border-radius:50%;border:2px solid var(--text-secondary);background:transparent;transition:all 0.2s ease;"></div>
+                    <div style="width:18px;height:18px;border-radius:50%;border:2px solid var(--text-secondary);background:transparent;transition:all 0.2s ease;"></div>
+                </div>
+
+                <div id="security-pin-error" style="color:#ef4444;font-size:14px;min-height:20px;margin-bottom:var(--space-sm);"></div>
+
+                <!-- Numeric keypad -->
+                <div id="security-pin-keypad" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:280px;margin:0 auto;">
+                    <button type="button" class="security-pin-key" data-digit="1" style="width:72px;height:72px;border-radius:50%;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:var(--text-primary);font-size:28px;font-weight:500;display:flex;align-items:center;justify-content:center;cursor:pointer;justify-self:center;-webkit-tap-highlight-color:transparent;user-select:none;">1</button>
+                    <button type="button" class="security-pin-key" data-digit="2" style="width:72px;height:72px;border-radius:50%;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:var(--text-primary);font-size:28px;font-weight:500;display:flex;align-items:center;justify-content:center;cursor:pointer;justify-self:center;-webkit-tap-highlight-color:transparent;user-select:none;">2</button>
+                    <button type="button" class="security-pin-key" data-digit="3" style="width:72px;height:72px;border-radius:50%;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:var(--text-primary);font-size:28px;font-weight:500;display:flex;align-items:center;justify-content:center;cursor:pointer;justify-self:center;-webkit-tap-highlight-color:transparent;user-select:none;">3</button>
+                    <button type="button" class="security-pin-key" data-digit="4" style="width:72px;height:72px;border-radius:50%;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:var(--text-primary);font-size:28px;font-weight:500;display:flex;align-items:center;justify-content:center;cursor:pointer;justify-self:center;-webkit-tap-highlight-color:transparent;user-select:none;">4</button>
+                    <button type="button" class="security-pin-key" data-digit="5" style="width:72px;height:72px;border-radius:50%;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:var(--text-primary);font-size:28px;font-weight:500;display:flex;align-items:center;justify-content:center;cursor:pointer;justify-self:center;-webkit-tap-highlight-color:transparent;user-select:none;">5</button>
+                    <button type="button" class="security-pin-key" data-digit="6" style="width:72px;height:72px;border-radius:50%;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:var(--text-primary);font-size:28px;font-weight:500;display:flex;align-items:center;justify-content:center;cursor:pointer;justify-self:center;-webkit-tap-highlight-color:transparent;user-select:none;">6</button>
+                    <button type="button" class="security-pin-key" data-digit="7" style="width:72px;height:72px;border-radius:50%;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:var(--text-primary);font-size:28px;font-weight:500;display:flex;align-items:center;justify-content:center;cursor:pointer;justify-self:center;-webkit-tap-highlight-color:transparent;user-select:none;">7</button>
+                    <button type="button" class="security-pin-key" data-digit="8" style="width:72px;height:72px;border-radius:50%;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:var(--text-primary);font-size:28px;font-weight:500;display:flex;align-items:center;justify-content:center;cursor:pointer;justify-self:center;-webkit-tap-highlight-color:transparent;user-select:none;">8</button>
+                    <button type="button" class="security-pin-key" data-digit="9" style="width:72px;height:72px;border-radius:50%;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:var(--text-primary);font-size:28px;font-weight:500;display:flex;align-items:center;justify-content:center;cursor:pointer;justify-self:center;-webkit-tap-highlight-color:transparent;user-select:none;">9</button>
+                    <div style="width:72px;height:72px;"></div>
+                    <button type="button" class="security-pin-key" data-digit="0" style="width:72px;height:72px;border-radius:50%;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:var(--text-primary);font-size:28px;font-weight:500;display:flex;align-items:center;justify-content:center;cursor:pointer;justify-self:center;-webkit-tap-highlight-color:transparent;user-select:none;">0</button>
+                    <button type="button" class="security-pin-key" data-digit="backspace" style="width:72px;height:72px;border-radius:50%;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:var(--text-secondary);font-size:20px;font-weight:500;display:flex;align-items:center;justify-content:center;cursor:pointer;justify-self:center;-webkit-tap-highlight-color:transparent;user-select:none;">⌫</button>
+                </div>
+
+                <button type="button" id="security-pin-cancel" class="btn btn-secondary" style="margin-top:var(--space-md);">Annuleren</button>
+            </div>
+
+            <!-- Inline PIN disable (hidden by default) -->
+            <div id="security-pin-disable" style="display:none;margin-top:var(--space-lg);text-align:center;">
+                <p style="font-size:14px;color:var(--text-secondary);margin-bottom:var(--space-md);">Voer je huidige PIN in om de PIN-code uit te schakelen.</p>
+
+                <div class="security-disable-dots" id="security-disable-dots" style="display:flex;justify-content:center;gap:16px;margin-bottom:var(--space-lg);">
+                    <div style="width:18px;height:18px;border-radius:50%;border:2px solid var(--text-secondary);background:transparent;transition:all 0.2s ease;"></div>
+                    <div style="width:18px;height:18px;border-radius:50%;border:2px solid var(--text-secondary);background:transparent;transition:all 0.2s ease;"></div>
+                    <div style="width:18px;height:18px;border-radius:50%;border:2px solid var(--text-secondary);background:transparent;transition:all 0.2s ease;"></div>
+                    <div style="width:18px;height:18px;border-radius:50%;border:2px solid var(--text-secondary);background:transparent;transition:all 0.2s ease;"></div>
+                </div>
+
+                <div id="security-disable-error" style="color:#ef4444;font-size:14px;min-height:20px;margin-bottom:var(--space-sm);"></div>
+
+                <!-- Numeric keypad -->
+                <div id="security-disable-keypad" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:280px;margin:0 auto;">
+                    <button type="button" class="security-disable-key" data-digit="1" style="width:72px;height:72px;border-radius:50%;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:var(--text-primary);font-size:28px;font-weight:500;display:flex;align-items:center;justify-content:center;cursor:pointer;justify-self:center;-webkit-tap-highlight-color:transparent;user-select:none;">1</button>
+                    <button type="button" class="security-disable-key" data-digit="2" style="width:72px;height:72px;border-radius:50%;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:var(--text-primary);font-size:28px;font-weight:500;display:flex;align-items:center;justify-content:center;cursor:pointer;justify-self:center;-webkit-tap-highlight-color:transparent;user-select:none;">2</button>
+                    <button type="button" class="security-disable-key" data-digit="3" style="width:72px;height:72px;border-radius:50%;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:var(--text-primary);font-size:28px;font-weight:500;display:flex;align-items:center;justify-content:center;cursor:pointer;justify-self:center;-webkit-tap-highlight-color:transparent;user-select:none;">3</button>
+                    <button type="button" class="security-disable-key" data-digit="4" style="width:72px;height:72px;border-radius:50%;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:var(--text-primary);font-size:28px;font-weight:500;display:flex;align-items:center;justify-content:center;cursor:pointer;justify-self:center;-webkit-tap-highlight-color:transparent;user-select:none;">4</button>
+                    <button type="button" class="security-disable-key" data-digit="5" style="width:72px;height:72px;border-radius:50%;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:var(--text-primary);font-size:28px;font-weight:500;display:flex;align-items:center;justify-content:center;cursor:pointer;justify-self:center;-webkit-tap-highlight-color:transparent;user-select:none;">5</button>
+                    <button type="button" class="security-disable-key" data-digit="6" style="width:72px;height:72px;border-radius:50%;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:var(--text-primary);font-size:28px;font-weight:500;display:flex;align-items:center;justify-content:center;cursor:pointer;justify-self:center;-webkit-tap-highlight-color:transparent;user-select:none;">6</button>
+                    <button type="button" class="security-disable-key" data-digit="7" style="width:72px;height:72px;border-radius:50%;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:var(--text-primary);font-size:28px;font-weight:500;display:flex;align-items:center;justify-content:center;cursor:pointer;justify-self:center;-webkit-tap-highlight-color:transparent;user-select:none;">7</button>
+                    <button type="button" class="security-disable-key" data-digit="8" style="width:72px;height:72px;border-radius:50%;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:var(--text-primary);font-size:28px;font-weight:500;display:flex;align-items:center;justify-content:center;cursor:pointer;justify-self:center;-webkit-tap-highlight-color:transparent;user-select:none;">8</button>
+                    <button type="button" class="security-disable-key" data-digit="9" style="width:72px;height:72px;border-radius:50%;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:var(--text-primary);font-size:28px;font-weight:500;display:flex;align-items:center;justify-content:center;cursor:pointer;justify-self:center;-webkit-tap-highlight-color:transparent;user-select:none;">9</button>
+                    <div style="width:72px;height:72px;"></div>
+                    <button type="button" class="security-disable-key" data-digit="0" style="width:72px;height:72px;border-radius:50%;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:var(--text-primary);font-size:28px;font-weight:500;display:flex;align-items:center;justify-content:center;cursor:pointer;justify-self:center;-webkit-tap-highlight-color:transparent;user-select:none;">0</button>
+                    <button type="button" class="security-disable-key" data-digit="backspace" style="width:72px;height:72px;border-radius:50%;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:var(--text-secondary);font-size:20px;font-weight:500;display:flex;align-items:center;justify-content:center;cursor:pointer;justify-self:center;-webkit-tap-highlight-color:transparent;user-select:none;">⌫</button>
+                </div>
+
+                <button type="button" id="security-disable-cancel" class="btn btn-secondary" style="margin-top:var(--space-md);">Annuleren</button>
+            </div>
+        </div>
+
+        <hr class="profile-divider">
+
+        <!-- ── Notifications (VERPLICHT — altijd aan) ── -->
         <div class="profile-section">
             <h3>🔔 Notificaties</h3>
             <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: var(--space-md);">
-                Ontvang push berichten over je saldo, betalingen en aanbiedingen.
+                Notificaties staan altijd aan zodat je nooit een bericht mist van <?= sanitize($tenant['name'] ?? APP_NAME) ?>.
             </p>
-            <div style="display:flex;align-items:center;justify-content:space-between;padding:var(--space-md);border-radius:12px;border:1px solid var(--glass-border);background:var(--glass-bg);">
-                <div style="display:flex;align-items:center;gap:12px;">
-                    <span id="push-profile-icon" style="font-size:24px;"><?= $hasFcmToken ? '🔔' : '🔕' ?></span>
-                    <div>
-                        <strong id="push-profile-label"><?= $hasFcmToken ? 'Notificaties aan' : 'Notificaties uit' ?></strong>
-                        <p id="push-profile-desc" style="color:var(--text-secondary);font-size:13px;margin-top:2px;"><?= $hasFcmToken ? 'Je ontvangt push berichten' : 'Je ontvangt geen push berichten' ?></p>
-                    </div>
-                </div>
-                <div id="push-toggle-wrap" style="position:relative;width:52px;height:28px;cursor:pointer;" role="switch" aria-checked="<?= $hasFcmToken ? 'true' : 'false' ?>" tabindex="0">
-                    <span id="push-track" style="position:absolute;inset:0;border-radius:28px;transition:background 0.3s;pointer-events:none;<?= $hasFcmToken ? 'background:#4CAF50;' : 'background:rgba(158,158,158,0.3);' ?>"></span>
-                    <span id="push-knob" style="position:absolute;top:3px;<?= $hasFcmToken ? 'left:27px;' : 'left:3px;' ?>width:22px;height:22px;border-radius:50%;background:#fff;transition:left 0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.3);pointer-events:none;"></span>
+            <div style="display:flex;align-items:center;gap:12px;padding:var(--space-md);border-radius:12px;border:1px solid rgba(76,175,80,0.3);background:rgba(76,175,80,0.06);">
+                <span style="font-size:24px;">🔔</span>
+                <div>
+                    <strong style="color:#4CAF50;">Altijd ingeschakeld</strong>
+                    <p style="color:var(--text-secondary);font-size:13px;margin-top:2px;">Je ontvangt push berichten over saldo, betalingen en aanbiedingen</p>
                 </div>
             </div>
             <p id="push-denied-hint" style="display:none;color:#F44336;font-size:13px;margin-top:var(--space-sm);">
-                Notificaties zijn geblokkeerd in je browser. Pas dit aan in je browser- of apparaatinstellingen.
-            </p>
-            <p id="push-loading" style="display:none;color:var(--text-secondary);font-size:13px;margin-top:var(--space-sm);">
-                ⏳ Bezig...
+                Notificaties zijn geblokkeerd in je apparaatinstellingen. Open je browser- of apparaatinstellingen om notificaties toe te staan.
             </p>
         </div>
     </div>
@@ -432,119 +524,464 @@ if ($photoUrl) {
     <a href="<?= BASE_URL ?>/dashboard" class="btn btn-secondary">Terug naar Dashboard</a>
 </div>
 
-<script src="<?= BASE_URL ?>/public/js/app.js"></script>
+<script src="<?= BASE_URL ?>/public/js/app.js?v=<?= filemtime(PUBLIC_PATH . 'js/app.js') ?>"></script>
 <script src="<?= BASE_URL ?>/public/js/push.js"></script>
 <script>
 (function() {
-    // DB state is the truth
-    var pushEnabled = <?= $hasFcmToken ? 'true' : 'false' ?>;
-    var busy = false;
-    var UNSUBSCRIBE_URL = (window.__BASE_URL || '') + '/api/push/unsubscribe';
-
+    // Push notificaties zijn VERPLICHT — geen toggle, alleen denied-hint
     setTimeout(function() {
-        var wrap = document.getElementById('push-toggle-wrap');
-        var icon = document.getElementById('push-profile-icon');
-        var label = document.getElementById('push-profile-label');
-        var desc = document.getElementById('push-profile-desc');
-        var track = document.getElementById('push-track');
-        var knob = document.getElementById('push-knob');
         var deniedHint = document.getElementById('push-denied-hint');
-        var loadingEl = document.getElementById('push-loading');
-        if (!wrap) return;
 
-        function updateUI(enabled) {
-            pushEnabled = enabled;
-            wrap.setAttribute('aria-checked', enabled ? 'true' : 'false');
-            knob.style.left = enabled ? '27px' : '3px';
-            track.style.background = enabled ? '#4CAF50' : 'rgba(158,158,158,0.3)';
-            icon.textContent = enabled ? '🔔' : '🔕';
-            label.textContent = enabled ? 'Notificaties aan' : 'Notificaties uit';
-            desc.textContent = enabled ? 'Je ontvangt push berichten' : 'Je ontvangt geen push berichten';
+        // Als browser notificaties heeft geblokkeerd → toon hint
+        if (typeof Notification !== 'undefined' && Notification.permission === 'denied') {
+            if (deniedHint) deniedHint.style.display = 'block';
         }
+    }, 500);
+})();
 
-        function setLoading(on) {
-            busy = on;
-            loadingEl.style.display = on ? 'block' : 'none';
-            wrap.style.opacity = on ? '0.5' : '1';
+// ============================================
+// APP BEVEILIGING (PIN en FaceID onafhankelijk)
+// ============================================
+(function() {
+    var BASE = window.__BASE_URL || '';
+
+    // Elements
+    var pinToggle = document.getElementById('security-pin-toggle');
+    var pinIcon = document.getElementById('security-pin-icon');
+    var pinDesc = document.getElementById('security-pin-desc');
+    var pinSetup = document.getElementById('security-pin-setup');
+    var pinDisable = document.getElementById('security-pin-disable');
+    var pinCancel = document.getElementById('security-pin-cancel');
+    var disableCancel = document.getElementById('security-disable-cancel');
+    var webauthnRow = document.getElementById('security-webauthn-row');
+    var webauthnToggle = document.getElementById('security-webauthn-toggle');
+    var webauthnIcon = document.getElementById('security-webauthn-icon');
+    var webauthnDesc = document.getElementById('security-webauthn-desc');
+    var webauthnError = document.getElementById('security-webauthn-error');
+
+    // State
+    var pinEnabled = false;
+    var setupStep = 1;
+    var firstPin = '';
+    var currentEntry = '';
+    var disableEntry = '';
+
+    try { pinEnabled = !!localStorage.getItem('regulr_pin_hash'); } catch(_) {}
+
+    // --- Toast Notification Helper ---
+    function showSuccessToast(message) {
+        var existing = document.getElementById('profile-success-toast');
+        if (existing) existing.remove();
+
+        var toast = document.createElement('div');
+        toast.id = 'profile-success-toast';
+        toast.style.cssText = 'position:fixed;top:20px;right:20px;z-index:10000;'
+            + 'background:rgba(76,175,80,0.95);border:1px solid rgba(76,175,80,0.8);'
+            + 'border-radius:8px;color:#fff;font-size:14px;font-weight:500;'
+            + 'min-width:280px;max-width:380px;padding:16px 20px;'
+            + 'box-shadow:0 8px 24px rgba(0,0,0,0.3);'
+            + 'backdrop-filter:blur(10px);'
+            + 'transform:translateX(120%);transition:transform 0.3s ease;';
+
+        toast.innerHTML = '<div style="display:flex;align-items:center;gap:12px;">'
+            + '<span style="font-size:20px;">✅</span>'
+            + '<span>' + message + '</span>'
+            + '</div>';
+
+        document.body.appendChild(toast);
+
+        requestAnimationFrame(function() {
+            requestAnimationFrame(function() {
+                toast.style.transform = 'translateX(0)';
+            });
+        });
+
+        setTimeout(function() {
+            toast.style.transform = 'translateX(120%)';
+            setTimeout(function() { if (toast.parentNode) toast.remove(); }, 300);
+        }, 3000);
+    }
+
+
+    // --- PIN Hash (SHA-256) ---
+    async function hashPin(pin) {
+        if (window.crypto && crypto.subtle) {
+            try {
+                var encoder = new TextEncoder();
+                var data = encoder.encode(pin + '__regulr_salt__');
+                var hashBuffer = await crypto.subtle.digest('SHA-256', data);
+                return Array.from(new Uint8Array(hashBuffer))
+                    .map(function(b) { return b.toString(16).padStart(2, '0'); })
+                    .join('');
+            } catch (e) {}
         }
-
-        function getCSRF() {
-            var m = document.querySelector('meta[name="csrf-token"]');
-            return m ? m.getAttribute('content') : '';
+        var hash = 0;
+        var str = pin + '__regulr_salt__';
+        for (var i = 0; i < str.length; i++) {
+            hash = ((hash << 5) - hash) + str.charCodeAt(i);
+            hash |= 0;
         }
+        return Math.abs(hash).toString(16).padStart(8, '0') +
+               Math.abs(hash * 31).toString(16).padStart(8, '0');
+    }
 
-        // No Notification API at all
-        if (typeof Notification === 'undefined') {
-            icon.textContent = '🚫';
-            label.textContent = 'Niet ondersteund';
-            desc.textContent = 'Je browser ondersteunt geen push notificaties';
-            wrap.style.cursor = 'not-allowed';
-            wrap.style.opacity = '0.5';
-            wrap.removeAttribute('tabindex');
-            return;
+    // --- Update PIN UI (onafhankelijk van FaceID) ---
+    function updatePinState() {
+    try { pinEnabled = !!localStorage.getItem('regulr_pin_hash'); } catch(_) {}
+
+    // PWA hint: toon FaceID waarschuwing als NIET in standalone/PWA mode
+    (function() {
+        var isStandalone = false;
+        try { isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true; } catch(_) {}
+        if (!isStandalone) {
+            var pwaHint = document.getElementById('security-webauthn-pwa-hint');
+            if (pwaHint) pwaHint.style.display = 'block';
         }
-
-        // If browser denied AND no token in DB → show hint
-        if (Notification.permission === 'denied' && !pushEnabled) {
-            deniedHint.style.display = 'block';
+    })();
+        if (pinEnabled) {
+            pinIcon.textContent = '✅';
+            pinDesc.textContent = 'Ingeschakeld';
+            pinToggle.textContent = 'Uitschakelen';
+            pinToggle.className = 'btn btn-sm btn-secondary';
+        } else {
+            pinIcon.textContent = '🔢';
+            pinDesc.textContent = 'Niet ingesteld';
+            pinToggle.textContent = 'Inschakelen';
+            pinToggle.className = 'btn btn-sm btn-primary';
         }
+    }
 
-        function doToggle() {
-            if (busy) return;
-
-            if (!pushEnabled) {
-                // ── ENABLE ── Use FCMHandler.subscribe() → permission + token + DB
-                setLoading(true);
-                window.FCMHandler.subscribe().then(function(result) {
-                    setLoading(false);
-                    if (result.granted) {
-                        updateUI(true);
-                        deniedHint.style.display = 'none';
-                        try { localStorage.removeItem('push_banner_dismissed'); } catch(_) {}
-                    } else {
-                        updateUI(false);
-                        if (result.reason === 'denied') {
-                            deniedHint.style.display = 'block';
-                        }
-                    }
-                });
-            } else {
-                // ── DISABLE ── Remove FCM token from DB + set localStorage flag
-                setLoading(true);
-                fetch(UNSUBSCRIBE_URL, {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-Token': getCSRF()
-                    }
-                })
-                .then(function(r) { return r.json(); })
-                .then(function(result) {
-                    setLoading(false);
-                    if (result.success) {
-                        updateUI(false);
-                        // Set flag so push.js doesn't auto-resubscribe on next page load
-                        try { localStorage.setItem('push_disabled', '1'); } catch(_) {}
-                    } else {
-                        updateUI(true); // Revert
-                    }
-                })
-                .catch(function() {
-                    setLoading(false);
-                    updateUI(true); // Revert
-                });
-            }
+    // --- Update FaceID UI (onafhankelijk van PIN) ---
+    function updateWebauthnState() {
+        var enabled = false;
+        try { enabled = localStorage.getItem('regulr_webauthn_enabled') === '1'; } catch(_) {}
+        if (enabled) {
+            webauthnIcon.textContent = '✅';
+            webauthnDesc.textContent = 'Ingeschakeld';
+            webauthnToggle.textContent = 'Uitschakelen';
+            webauthnToggle.className = 'btn btn-sm btn-secondary';
+        } else {
+            webauthnIcon.textContent = '👤';
+            webauthnDesc.textContent = 'Niet ingeschakeld';
+            webauthnToggle.textContent = 'Inschakelen';
+            webauthnToggle.className = 'btn btn-sm btn-primary';
         }
+    }
 
-        wrap.addEventListener('click', doToggle);
-        wrap.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                doToggle();
+    // --- Update dots ---
+    function updateDots(containerId, value) {
+        var dots = document.querySelectorAll('#' + containerId + ' > div');
+        dots.forEach(function(dot, i) {
+            dot.style.background = 'transparent';
+            dot.style.borderColor = 'var(--text-secondary)';
+            dot.style.transform = 'scale(1)';
+            if (i < value.length) {
+                dot.style.background = 'var(--accent-primary)';
+                dot.style.borderColor = 'var(--accent-primary)';
+                dot.style.transform = 'scale(1.15)';
             }
         });
-    }, 500);
+    }
+
+    // --- PIN Toggle ---
+    if (pinToggle) {
+        pinToggle.addEventListener('click', function() {
+            if (pinEnabled) {
+                // Show disable panel
+                pinSetup.style.display = 'none';
+                pinDisable.style.display = 'block';
+                disableEntry = '';
+                updateDots('security-disable-dots', '');
+                document.getElementById('security-disable-error').textContent = '';
+            } else {
+                // Show setup panel
+                pinDisable.style.display = 'none';
+                pinSetup.style.display = 'block';
+                setupStep = 1;
+                firstPin = '';
+                currentEntry = '';
+                updateDots('security-pin-dots', '');
+                document.getElementById('security-pin-error').textContent = '';
+                document.getElementById('security-setup-step-label').textContent = 'Stap 1 — Kies je PIN';
+            }
+        });
+    }
+
+    // --- Cancel buttons ---
+    if (pinCancel) pinCancel.addEventListener('click', function() { pinSetup.style.display = 'none'; });
+    if (disableCancel) disableCancel.addEventListener('click', function() { pinDisable.style.display = 'none'; });
+
+    // --- Setup keypad ---
+    var setupKeypad = document.getElementById('security-pin-keypad');
+    if (setupKeypad) {
+        setupKeypad.addEventListener('click', function(e) {
+            var btn = e.target.closest('.security-pin-key');
+            if (!btn) return;
+            var digit = btn.dataset.digit;
+
+            if (digit === 'backspace') {
+                currentEntry = currentEntry.slice(0, -1);
+                updateDots('security-pin-dots', currentEntry);
+                return;
+            }
+            if (currentEntry.length >= 4) return;
+
+            currentEntry += digit;
+            updateDots('security-pin-dots', currentEntry);
+
+            if (currentEntry.length === 4) {
+                processSetupPin();
+            }
+        });
+    }
+
+    async function processSetupPin() {
+        if (setupStep === 1) {
+            firstPin = currentEntry;
+            currentEntry = '';
+            setupStep = 2;
+            document.getElementById('security-setup-step-label').textContent = 'Stap 2 — Bevestig je PIN';
+            updateDots('security-pin-dots', '');
+        } else {
+            if (currentEntry === firstPin) {
+                var hash = await hashPin(currentEntry);
+                try {
+                    localStorage.setItem('regulr_pin_hash', hash);
+                    localStorage.setItem('regulr_pin_set_at', new Date().toISOString());
+                } catch (_) {
+                    document.getElementById('security-pin-error').textContent = 'Kon PIN niet opslaan';
+                    return;
+                }
+                // Success
+                pinSetup.style.display = 'none';
+                updatePinState();
+                showSuccessToast('PIN-code succesvol ingeschakeld!');
+            } else {
+                document.getElementById('security-pin-error').textContent = 'PIN komt niet overeen. Opnieuw.';
+                setupStep = 1;
+                firstPin = '';
+                currentEntry = '';
+                setTimeout(function() {
+                    updateDots('security-pin-dots', '');
+                    document.getElementById('security-setup-step-label').textContent = 'Stap 1 — Kies je PIN';
+                }, 600);
+            }
+        }
+    }
+
+    // --- Disable keypad ---
+    var disableKeypad = document.getElementById('security-disable-keypad');
+    if (disableKeypad) {
+        disableKeypad.addEventListener('click', function(e) {
+            var btn = e.target.closest('.security-disable-key');
+            if (!btn) return;
+            var digit = btn.dataset.digit;
+
+            if (digit === 'backspace') {
+                disableEntry = disableEntry.slice(0, -1);
+                updateDots('security-disable-dots', disableEntry);
+                return;
+            }
+            if (disableEntry.length >= 4) return;
+
+            disableEntry += digit;
+            updateDots('security-disable-dots', disableEntry);
+
+            if (disableEntry.length === 4) {
+                processDisablePin();
+            }
+        });
+    }
+
+    async function processDisablePin() {
+        var hash = await hashPin(disableEntry);
+        var stored = null;
+        try { stored = localStorage.getItem('regulr_pin_hash'); } catch(_) {}
+
+        if (hash === stored) {
+            // Alleen PIN verwijderen — FaceID blijft ongemoeid
+            try {
+                localStorage.removeItem('regulr_pin_hash');
+                localStorage.removeItem('regulr_pin_set_at');
+                sessionStorage.removeItem('regulr_pin_hash');  // Also clear sessionStorage backup
+            } catch(_) {}
+            pinDisable.style.display = 'none';
+            updatePinState();
+            showSuccessToast('PIN-code uitgeschakeld');
+            
+            // Check if Face ID is also disabled — if so, reload to deactivate lock
+            var hasWebAuthn = false;
+            try { hasWebAuthn = localStorage.getItem('regulr_webauthn_enabled') === '1'; } catch(_) {}
+            if (!hasWebAuthn) {
+                setTimeout(function() { window.location.reload(); }, 500);
+            }
+        } else {
+            document.getElementById('security-disable-error').textContent = 'Onjuiste PIN';
+            disableEntry = '';
+            setTimeout(function() { updateDots('security-disable-dots', ''); }, 400);
+        }
+    }
+
+    // --- WebAuthn toggle (onafhankelijk van PIN) ---
+    if (webauthnToggle) {
+        webauthnToggle.addEventListener('click', async function() {
+            var enabled = false;
+            try { enabled = localStorage.getItem('regulr_webauthn_enabled') === '1'; } catch(_) {}
+
+            if (enabled) {
+                try { 
+                    localStorage.removeItem('regulr_webauthn_enabled');
+                    sessionStorage.removeItem('regulr_webauthn_enabled');  // Also clear sessionStorage backup
+                } catch(_) {}
+                updateWebauthnState();
+                showSuccessToast('Face ID uitgeschakeld');
+                
+                // Check if PIN is also disabled — if so, reload to deactivate lock
+                var hasPin = false;
+                try { hasPin = !!localStorage.getItem('regulr_pin_hash'); } catch(_) {}
+                if (!hasPin) {
+                    setTimeout(function() { window.location.reload(); }, 500);
+                }
+                return;
+            }
+
+            // Enable — WebAuthn registration
+            webauthnToggle.disabled = true;
+            webauthnToggle.textContent = '⏳ Bezig...';
+            webauthnError.style.display = 'none';
+
+            try {
+                var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+                var csrfToken = csrfMeta ? csrfMeta.content : '';
+
+                function b64urlToAB(b64url) {
+                    var b64 = b64url.replace(/-/g,'+').replace(/_/g,'/');
+                    while (b64.length % 4 !== 0) b64 += '=';
+                    var bin = atob(b64);
+                    var bytes = new Uint8Array(bin.length);
+                    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                    return bytes.buffer;
+                }
+                function abToB64url(buf) {
+                    var bytes = new Uint8Array(buf);
+                    var bin = '';
+                    for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+                    return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+                }
+
+                var optionsResp = await fetch(BASE + '/api/auth/webauthn/register-options', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken }
+                });
+                var optionsData = await optionsResp.json();
+                if (!optionsData.success) throw new Error(optionsData.error || 'Failed');
+
+                // Als al geregistreerd, verifieer via authenticate flow (toont FaceID prompt)
+                if (optionsData.data && optionsData.data.already_registered) {
+                    webauthnToggle.textContent = '⏳ Verifiëren met FaceID...';
+                    webauthnError.style.display = 'none';
+                    try {
+                        var authResp = await fetch(BASE + '/api/auth/webauthn/authenticate-options', {
+                            method: 'POST',
+                            credentials: 'same-origin',
+                            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken }
+                        });
+                        var authData = await authResp.json();
+                        console.log('[Profile] auth-options response:', authData);
+                        if (!authData.success) throw new Error(authData.error || 'Kon verificatie niet starten');
+                        
+                        var pubKey = {
+                            challenge: b64urlToAB(authData.data.challenge),
+                            rpId: authData.data.rpId,
+                            allowCredentials: (authData.data.allowCredentials || []).map(function(c) {
+                                return { type: c.type, id: b64urlToAB(c.id), transports: c.transports || ['internal'] };
+                            }),
+                            timeout: authData.data.timeout || 60000,
+                            userVerification: authData.data.userVerification || 'required'
+                        };
+                        console.log('[Profile] Starting biometric prompt...');
+                        var credential = await navigator.credentials.get({ publicKey: pubKey });
+                        console.log('[Profile] Biometric success, credential:', credential ? 'OK' : 'null');
+                        
+                        // FaceID werkte! — zet flag aan
+                        try { localStorage.setItem('regulr_webauthn_enabled', '1'); } catch(_) {}
+                        updateWebauthnState();
+                        showSuccessToast('FaceID succesvol ingeschakeld!');
+                        // Reload zodat app-lock module activeert
+                        setTimeout(function() { window.location.reload(); }, 500);
+                    } catch (e) {
+                        console.warn('FaceID verification cancelled/failed:', e.message);
+                        webauthnError.textContent = e.message || 'FaceID verificatie mislukt of geannuleerd';
+                        webauthnError.style.display = 'block';
+                        updateWebauthnState();
+                    }
+                    return;
+                }
+
+                var options = optionsData.data;
+                var publicKey = {
+                    challenge: b64urlToAB(options.challenge),
+                    rp: options.rp,
+                    user: { name: options.user.name, displayName: options.user.displayName, id: b64urlToAB(options.user.id) },
+                    pubKeyCredParams: options.pubKeyCredParams,
+                    timeout: options.timeout || 60000,
+                    excludeCredentials: (options.excludeCredentials || []).map(function(c) {
+                        return { type: c.type, id: b64urlToAB(c.id), transports: c.transports || ['internal'] };
+                    }),
+                    authenticatorSelection: options.authenticatorSelection || { authenticatorAttachment: 'platform', userVerification: 'required' }
+                };
+
+                var credential = await navigator.credentials.create({ publicKey: publicKey });
+
+                var responseBody = {
+                    id: credential.id,
+                    rawId: abToB64url(credential.rawId),
+                    response: {
+                        clientDataJSON: abToB64url(credential.response.clientDataJSON),
+                        attestationObject: abToB64url(credential.response.attestationObject)
+                    },
+                    type: credential.type
+                };
+
+                var verifyResp = await fetch(BASE + '/api/auth/webauthn/register', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+                    body: JSON.stringify(responseBody)
+                });
+                var result = await verifyResp.json();
+                console.log('[Profile] register response:', result);
+                if (!result.success) throw new Error(result.error || 'Registration failed');
+
+                try { localStorage.setItem('regulr_webauthn_enabled', '1'); } catch(_) {}
+                updateWebauthnState();
+                showSuccessToast('FaceID succesvol ingeschakeld!');
+                // Reload zodat app-lock module activeert
+                setTimeout(function() { window.location.reload(); }, 500);
+            } catch (e) {
+                console.warn('WebAuthn registration failed:', e.message);
+                webauthnError.textContent = e.message || 'FaceID kon niet worden ingeschakeld';
+                webauthnError.style.display = 'block';
+                updateWebauthnState();
+            } finally {
+                webauthnToggle.disabled = false;
+            }
+        });
+    }
+
+    // --- Initial state: beide onafhankelijk initialiseren ---
+    updatePinState();
+
+    // FaceID rij altijd tonen als WebAuthn beschikbaar (onafhankelijk van PIN)
+    if (webauthnRow) {
+        if (window.isSecureContext && window.PublicKeyCredential) {
+            webauthnRow.style.display = 'block';
+        } else {
+            webauthnRow.style.display = 'none';
+        }
+    }
+    updateWebauthnState();
 })();
 </script>
 

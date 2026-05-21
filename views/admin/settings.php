@@ -253,7 +253,7 @@ function printQR() {
 }
 </script>
 
-<script src="<?= BASE_URL ?>/public/js/app.js"></script>
+<script src="<?= BASE_URL ?>/public/js/app.js?v=<?= filemtime(PUBLIC_PATH . 'js/app.js') ?>"></script>
 <script src="<?= BASE_URL ?>/public/js/admin.js"></script>
 
 <!-- Points toggle confirmation + instant save (MUST load after app.js for REGULR.api) -->

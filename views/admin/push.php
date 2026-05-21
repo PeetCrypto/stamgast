@@ -344,5 +344,5 @@ $subscriberCount = $pushService->getSubscriptionCount($tenantId);
 </div>
 
 <?php require VIEWS_PATH . 'shared/footer.php'; ?>
-<script src="<?= BASE_URL ?>/public/js/app.js"></script>
+<script src="<?= BASE_URL ?>/public/js/app.js?v=<?= filemtime(PUBLIC_PATH . 'js/app.js') ?>"></script>
 <script src="<?= BASE_URL ?>/public/js/admin.js"></script>

@@ -97,7 +97,7 @@ require __DIR__ . '/../shared/header.php';
 
 <!-- QRCode.js library (qrcodejs - constructor API) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="<?= BASE_URL ?>/public/js/app.js"></script>
+<script src="<?= BASE_URL ?>/public/js/app.js?v=<?= filemtime(PUBLIC_PATH . 'js/app.js') ?>"></script>
 <script src="<?= BASE_URL ?>/public/js/qr.js"></script>
 
 <?php require __DIR__ . '/../shared/footer.php'; ?>

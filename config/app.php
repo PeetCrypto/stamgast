@@ -24,8 +24,25 @@ define('DB_CHARSET', 'utf8mb4');
 // Lokaal: huidige pepper (bestaande accounts blijven werken)
 // Productie: .env met eigen sterke pepper
 define('APP_PEPPER', getenv('APP_PEPPER') ?: 'change-this-to-a-random-string-in-production-32chars-min');
-define('SESSION_TIMEOUT', 1800); // 30 minutes in seconds
+// --- SESSION TIMEOUT ---
+// Staff (admin, bartender, superadmin): 30 minuten
+// Gast (PWA, always-logged-in): 5 jaar (permanent, beveiliging via PIN/FaceID app-lock)
+define('SESSION_TIMEOUT', 1800);                    // 30 min — standaard (staff)
+define('SESSION_TIMEOUT_GUEST', 157680000);         // 5 jaar — gast PWA (altijd ingelogd)
+define('SESSION_COOKIE_LIFETIME_GUEST', 157680000); // 5 jaar — cookie lifetime
+define('SESSION_KEEPALIVE_INTERVAL', 900);           // 15 min — SW keepalive ping
 define('CSRF_TOKEN_LENGTH', 32);
+
+// --- AUTO-LOCK (frontend) ---
+define('APP_LOCK_TIMEOUT_SECONDS', 60);             // 1 minuut achtergrond → lock
+define('PIN_MAX_ATTEMPTS', 5);                      // 5 foute PIN pogingen → 1 min cooldown
+define('PIN_LOCKOUT_ATTEMPTS', 10);                 // 10 foute pogingen → volledige logout
+define('PIN_LENGTH', 4);                            // 4-cijferig
+
+// --- WEBAUTHN ---
+define('WEBAUTHN_RP_NAME', 'REGULR.vip');
+define('WEBAUTHN_CHALLENGE_TIMEOUT', 300);          // 5 minuten challenge geldigheid
+define('WEBAUTHN_USER_VERIFICATION', 'required');   // Forceer FaceID/fingerprint
 
 // --- QR CODE ---
 define('QR_EXPIRY_SECONDS', 60);

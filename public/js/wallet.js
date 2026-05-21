@@ -73,6 +73,12 @@
     async function initDeposit(amountCents) {
         if (depositProcessing) return;
         
+        // Auth gate: require FaceID/PIN voordat storten toegestaan is
+        if (window.REGULR?.appLock?.verify) {
+            var authorized = await window.REGULR.appLock.verify();
+            if (!authorized) return;
+        }
+        
         depositProcessing = true;
         
         try {

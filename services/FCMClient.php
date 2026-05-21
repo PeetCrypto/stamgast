@@ -53,29 +53,18 @@ class FCMClient
             return false;
         }
 
-        // 2. Bouw v1 message payload
+        // 2. Bouw v1 message payload (data-only — geen 'notification' key)
+        //    Data-only messages voorkomen dat FCM automatisch een notification toont.
+        //    De firebase-messaging-sw.js onBackgroundMessage handler doet de display.
         $message = [
             'message' => [
-                'token'        => $token,
-                'notification' => [
+                'token' => $token,
+                'data'  => array_merge($this->stringifyData($data), [
                     'title' => $title,
                     'body'  => $body,
-                ],
-            ],
-        ];
-
-        // Data payload toevoegen als meegegeven
-        if (!empty($data)) {
-            $message['message']['data'] = $this->stringifyData($data);
-        }
-
-        // WebPush options voor klik-gedrag
-        $message['message']['webpush'] = [
-            'notification' => [
-                'icon' => '/public/images/logo-192x192.png',
-            ],
-            'fcm_options' => [
-                'link' => $this->getBaseUrl(),
+                    'icon'  => '/public/images/logo-192x192.png',
+                    'url'   => $this->getBaseUrl() . '/inbox',
+                ]),
             ],
         ];
 

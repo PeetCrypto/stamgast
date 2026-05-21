@@ -13,16 +13,20 @@ function authCheck(): void
         session_start();
     }
 
-    // Check session timeout
-    if (isset($_SESSION['last_activity']) && checkSessionTimeout()) {
-        // For guests: save slug cookie before destroying session so redirects can still find it
-        if (($_SESSION['role'] ?? '') === 'guest' && isset($_SESSION['tenant']['slug'])) {
-            setGuestRedirectSlugCookie($_SESSION['tenant']['slug']);
+    // Check session timeout (role-afhankelijk: gast 60 dagen, staff 30 min)
+    if (isset($_SESSION['last_activity'])) {
+        $role = $_SESSION['role'] ?? '';
+        $timeout = ($role === 'guest') ? SESSION_TIMEOUT_GUEST : SESSION_TIMEOUT;
+        if ((time() - (int)$_SESSION['last_activity']) > $timeout) {
+            // For guests: save slug cookie before destroying session so redirects can still find it
+            if ($role === 'guest' && isset($_SESSION['tenant']['slug'])) {
+                setGuestRedirectSlugCookie($_SESSION['tenant']['slug']);
+            }
+            // Session expired - destroy it
+            session_unset();
+            session_destroy();
+            session_start();
         }
-        // Session expired - destroy it
-        session_unset();
-        session_destroy();
-        session_start();
     }
 
     // Update last activity

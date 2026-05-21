@@ -211,14 +211,16 @@ function updateLastActivity(): void
 }
 
 /**
- * Check session timeout (30 minutes inactivity)
+ * Check session timeout (role-afhankelijk: gast 60 dagen, staff 30 min)
  */
 function checkSessionTimeout(): bool
 {
     if (!isset($_SESSION['last_activity'])) {
         return false;
     }
-    return (time() - $_SESSION['last_activity']) > SESSION_TIMEOUT;
+    $role = $_SESSION['role'] ?? '';
+    $timeout = ($role === 'guest') ? SESSION_TIMEOUT_GUEST : SESSION_TIMEOUT;
+    return (time() - (int)$_SESSION['last_activity']) > $timeout;
 }
 
 /**

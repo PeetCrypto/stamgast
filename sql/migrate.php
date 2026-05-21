@@ -189,6 +189,15 @@ $migrations = [
         },
     ],
     [
+        'name'   => 'WebAuthn Credentials & Challenges',
+        'file'   => 'webauthn_migration.sql',
+        'type'   => 'table',
+        'check'  => function (PDO $db): bool {
+            return tableExists($db, 'user_credentials')
+                && tableExists($db, 'webauthn_challenges');
+        },
+    ],
+    [
         'name'   => 'FCM Token & Profile Columns',
         'type'   => 'inline',
         'check'  => function (PDO $db): bool {
@@ -252,19 +261,27 @@ function runMigrationFile(PDO $db, string $filePath): array
     $errors = [];
     $statementsRun = 0;
 
-    // Split on semicolons (respecting that some content may contain semicolons in strings)
-    // For simple migration files this is sufficient
-    $statements = array_filter(
-        array_map('trim', explode(";\n", $sql)),
-        fn(string $s) => !empty($s) && !str_starts_with($s, '--') && $s !== ';'
-    );
+    // Remove comment lines (-- ...) and split on semicolons
+    // This handles multi-line CREATE TABLE statements correctly
+    $lines = explode("\n", $sql);
+    $cleanLines = [];
+    foreach ($lines as $line) {
+        $trimmed = trim($line);
+        // Skip empty lines and comment-only lines
+        if ($trimmed === '' || str_starts_with($trimmed, '--')) {
+            continue;
+        }
+        $cleanLines[] = $line;
+    }
+    $cleanSql = implode("\n", $cleanLines);
+
+    // Split on semicolons followed by newline (or end of string)
+    $statements = explode(";\n", $cleanSql);
 
     foreach ($statements as $statement) {
+        $statement = trim($statement);
         $statement = rtrim($statement, ';');
         if (empty($statement)) continue;
-        
-        // Skip pure comment lines
-        if (preg_match('/^\s*--/', $statement)) continue;
 
         try {
             $db->exec($statement);
@@ -415,6 +432,7 @@ function runVerification(PDO $db): void
         'notifications', 'email_config', 'email_templates', 'email_log',
         'platform_fees', 'platform_invoices', 'platform_fee_log',
         'platform_settings', 'verification_attempts',
+        'user_credentials', 'webauthn_challenges',
     ];
 
     $requiredColumns = [

@@ -8,15 +8,12 @@ declare(strict_types=1);
  * Wraps the CLI migrate.php with HTML output instead of ANSI color codes.
  *
  * Usage:
- *   https://app.regulr.vip/sql/web_migrate.php?key=YOUR_MIGRATE_KEY
+ *   https://app.regulr.vip/migrate
+ *   (must be logged in as superadmin — enforced by index.php router)
  *
  * Security:
- *   Requires MIGRATE_KEY in .env file. The ?key= URL parameter must match exactly.
- *   Uses hash_equals() for timing-safe comparison.
- *
- * Requirements:
- *   - MIGRATE_KEY must be set in .env
- *   - sql/migrate.php must exist (the actual migration runner)
+ *   The /migrate route in index.php requires superadmin session.
+ *   No additional key needed.
  */
 
 // ── 1. Define HTML color functions BEFORE including migrate.php ──────────────
@@ -32,28 +29,24 @@ define('REGULR_MIGRATE_ALLOW_WEB', true);
 
 // ── 3. Load project bootstrap ────────────────────────────────────────────────
 //    Populates getenv() with DB_HOST, DB_NAME, DB_USER, DB_PASS, etc.
-require_once dirname(__DIR__) . '/config/load_env.php';
-require_once dirname(__DIR__) . '/config/app.php';
-
-// ── 4. Security gate ─────────────────────────────────────────────────────────
-$migrateKey  = getenv('MIGRATE_KEY') ?: '';
-$providedKey = $_GET['key'] ?? '';
-
-if (empty($migrateKey)) {
-    http_response_code(403);
-    die('<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>'
-        . '<h2 style="color:#f44336">403 Forbidden</h2>'
-        . '<p>MIGRATE_KEY is not configured in .env</p>'
-        . '<p>Add <code>MIGRATE_KEY=your-secret-string</code> to your .env file.</p>'
-        . '</body></html>');
+//    index.php already loaded config, but include guard for direct access
+if (!defined('APP_ENV')) {
+    require_once dirname(__DIR__) . '/config/load_env.php';
+    require_once dirname(__DIR__) . '/config/app.php';
 }
 
-if (empty($providedKey) || !hash_equals($migrateKey, $providedKey)) {
+// ── 4. Security gate ─────────────────────────────────────────────────────────
+// When included via /migrate route in index.php, auth is already checked.
+// When accessed directly, require superadmin session.
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+if (empty($_SESSION['role']) || $_SESSION['role'] !== 'superadmin') {
     http_response_code(403);
     die('<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>'
         . '<h2 style="color:#f44336">403 Forbidden</h2>'
-        . '<p>Invalid or missing migration key.</p>'
-        . '<p>Usage: <code>web_migrate.php?key=YOUR_MIGRATE_KEY</code></p>'
+        . '<p>Alleen de superadmin kan migraties uitvoeren.</p>'
+        . '<p><a href="/login">Inloggen</a></p>'
         . '</body></html>');
 }
 

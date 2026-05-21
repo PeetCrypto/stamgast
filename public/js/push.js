@@ -9,7 +9,7 @@
  * 2. Als permission al granted → direct FCM token ophalen
  * 3. Luister naar foreground messages via onMessage()
  * 4. Polling als fallback voor non-push browsers
- * 5. FCMHandler.subscribe() — toggle kan dit aanroepen om permission + token te regelen
+ * 5. FCMHandler.subscribe() — dashboard overlay & profile pagina gebruiken dit
  */
 
 (function() {
@@ -66,24 +66,15 @@
                 VAPID_KEY = config.data.vapid_key;
                 console.log('[Push] VAPID key loaded from server');
             }
-    // Auto-init: if permission already granted AND user hasn't disabled, get token
+    // Auto-init: if permission already granted → always get token (push is mandatory)
     if (Notification.permission === 'granted') {
-        var pushDisabled = false;
-        try { pushDisabled = localStorage.getItem('push_disabled') === '1'; } catch(_) {}
-        if (!pushDisabled) {
-            ensureSWAndGetToken();
-        } else {
-            console.log('[Push] User disabled notifications — skipping auto-subscribe');
-        }
+        ensureSWAndGetToken();
     }
         })
-        .catch(function() {
+        .catch(function(err) {
+            console.warn('[Push] Failed to load config:', err.message);
             if (Notification.permission === 'granted') {
-                var pushDisabled = false;
-                try { pushDisabled = localStorage.getItem('push_disabled') === '1'; } catch(_) {}
-                if (!pushDisabled) {
-                    ensureSWAndGetToken();
-                }
+                ensureSWAndGetToken();
             }
         });
 

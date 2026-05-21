@@ -53,6 +53,17 @@ $tenantLogo = $_SESSION['tenant_logo'] ?? ''; // Tenant uploaded logo URL
     <!-- App Base Path (for JS API calls) -->
     <script>window.__BASE_URL = '<?= defined("BASE_URL") ? BASE_URL : "" ?>';</script>
 
+    <!-- Global error handler for manifest and other JSON parsing errors -->
+    <script>
+    window.addEventListener('error', function(e) {
+        // Suppress manifest.json.php parsing errors from console
+        if (e.filename && e.filename.includes('manifest.json.php')) {
+            console.warn('[App] Manifest loading issue - notifications may be limited');
+            e.preventDefault();
+        }
+    });
+    </script>
+
     <!-- Firebase SDK (compat) -->
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
@@ -70,10 +81,16 @@ $tenantLogo = $_SESSION['tenant_logo'] ?? ''; // Tenant uploaded logo URL
     }
     </script>
 
+    <!-- App Lock & PIN (alleen voor ingelogde gasten) -->
+    <?php if ($userRole === 'guest'): ?>
+    <link rel="stylesheet" href="<?= BASE_URL ?>/css/app-lock.css?v=<?= filemtime(PUBLIC_PATH . 'css/app-lock.css') ?>">
+    <script src="<?= BASE_URL ?>/js/app-lock.js?v=<?= filemtime(PUBLIC_PATH . 'js/app-lock.js') ?>" defer></script>
+    <?php endif; ?>
+
     <!-- Midnight Lounge Design System -->
-    <link rel="stylesheet" href="<?= BASE_URL ?>/css/midnight-lounge.css">
-    <link rel="stylesheet" href="<?= BASE_URL ?>/css/components.css">
-    <link rel="stylesheet" href="<?= BASE_URL ?>/css/views.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>/css/midnight-lounge.css?v=<?= filemtime(PUBLIC_PATH . 'css/midnight-lounge.css') ?>">
+    <link rel="stylesheet" href="<?= BASE_URL ?>/css/components.css?v=<?= filemtime(PUBLIC_PATH . 'css/components.css') ?>">
+    <link rel="stylesheet" href="<?= BASE_URL ?>/css/views.css?v=<?= filemtime(PUBLIC_PATH . 'css/views.css') ?>">
 
     <!-- Tenant-specific CSS variable overrides -->
     <style>
@@ -99,9 +116,7 @@ $tenantLogo = $_SESSION['tenant_logo'] ?? ''; // Tenant uploaded logo URL
             <span style="font-weight:600;color:var(--text-primary);"><?= sanitize($tenantName) ?></span>
             <?php endif; ?>
         </a>
-        <span style="flex:1;display:flex;align-items:center;justify-content:flex-end;color:rgba(255,255,255,0.6);font-size:14px;">
-            Hoi, <?= sanitize($userName) ?>
-        </span>
+        <span style="flex:1;"></span>
 
         <?php elseif ($userRole === 'superadmin'): ?>
         <!-- Superadmin: only REGULR.vip logo -->

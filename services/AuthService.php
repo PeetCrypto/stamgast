@@ -171,6 +171,14 @@ class AuthService
         // Regenerate session ID (anti-session-fixation)
         regenerateSession();
 
+        // Voor gasten: stel cookie lifetime in op 60 dagen
+        if ($user['role'] === 'guest') {
+            $params = session_get_cookie_params();
+            setcookie(session_name(), session_id(), time() + SESSION_COOKIE_LIFETIME_GUEST,
+                $params['path'], $params['domain'], $params['secure'], $params['httponly']
+            );
+        }
+
         // Set core session data
         $_SESSION['user_id']       = (int) $user['id'];
         $_SESSION['tenant_id']     = $user['tenant_id'] !== null ? (int) $user['tenant_id'] : null;
@@ -266,7 +274,19 @@ class AuthService
             }
         }
 
-        return $info;
+        // Add app lock info for guests
+        if ($user && $user['role'] === 'guest') {
+            $userId = (int) $_SESSION['user_id'];
+            
+            // Check if user has PIN or WebAuthn credentials
+            $stmt = $this->db->prepare('SELECT COUNT(*) as count FROM user_credentials WHERE user_id = ?');
+            $stmt->execute([$userId]);
+            $hasWebAuthn = $stmt->fetch(PDO::FETCH_ASSOC)['count'] > 0;
+            
+            $info['user']['app_lock'] = [
+                'has_webauthn' => $hasWebAuthn,
+            ];
+        }
 
         return $info;
     }

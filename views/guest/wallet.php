@@ -151,7 +151,7 @@ require __DIR__ . '/../shared/header.php';
 <!-- Alerts Container -->
 <div class="alerts-container"></div>
 
-<script src="<?= BASE_URL ?>/public/js/app.js"></script>
+<script src="<?= BASE_URL ?>/public/js/app.js?v=<?= filemtime(PUBLIC_PATH . 'js/app.js') ?>"></script>
 <script src="<?= BASE_URL ?>/public/js/wallet.js"></script>
 
 <?php require __DIR__ . '/../shared/footer.php'; ?>

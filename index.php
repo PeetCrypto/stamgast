@@ -27,13 +27,42 @@ spl_autoload_register(function (string $class) {
 
 // --- Start Session ---
 if (session_status() === PHP_SESSION_NONE) {
-    session_set_cookie_params([
-        'httponly'  => true,
-        'secure'    => (!APP_DEBUG), // Only secure in production
-        'samesite'  => 'Strict',
-        'lifetime'  => SESSION_TIMEOUT,
-    ]);
-    session_start();
+    // Bepaal cookie lifetime op basis van rol
+    // Bij nieuwe login is role nog niet bekend → korte lifetime (30 min)
+    // Na login wordt cookie vernieuwd met juiste lifetime (zie keepalive endpoint)
+    $cookieLifetime = SESSION_TIMEOUT; // default 30 min (staff)
+
+    // Als session cookie bestaat: probeer rol te bepalen voor juiste lifetime
+    // Dit werkt omdat PHP de session data pas NA session_start() leest,
+    // maar we kunnen de session ID gebruiken om de session file te openen.
+    // Simpelere aanpak: start met korte lifetime, keepalive/login vernieuwt later.
+    if (isset($_COOKIE[session_name()])) {
+        // Bestaande session — start met session om rol te checken
+        session_set_cookie_params([
+            'httponly'  => true,
+            'secure'    => (!APP_DEBUG),
+            'samesite'  => 'Lax',
+            'lifetime'  => $cookieLifetime,
+        ]);
+        session_start();
+
+        // Nu we session data hebben: check rol en vernieuw cookie indien gast
+        if (isset($_SESSION['role']) && $_SESSION['role'] === 'guest') {
+            $params = session_get_cookie_params();
+            setcookie(session_name(), session_id(), time() + SESSION_COOKIE_LIFETIME_GUEST,
+                $params['path'], $params['domain'], $params['secure'], $params['httponly']
+            );
+        }
+    } else {
+        // Nieuwe session (geen cookie)
+        session_set_cookie_params([
+            'httponly'  => true,
+            'secure'    => (!APP_DEBUG),
+            'samesite'  => 'Lax',
+            'lifetime'  => $cookieLifetime,
+        ]);
+        session_start();
+    }
 }
 
 // --- Get Route ---
@@ -251,6 +280,20 @@ if (str_starts_with($joinRoute, 'j/')) {
     exit;
 }
 
+// --- Database Migration (superadmin only) ---
+if ($route === 'migrate') {
+    if (isLoggedIn() && currentUserRole() === 'superadmin') {
+        require ROOT_PATH . 'sql/web_migrate.php';
+    } else {
+        http_response_code(403);
+        echo '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>';
+        echo '<h2 style="color:#f44336">403 — Geen toegang</h2>';
+        echo '<p>Alleen de superadmin kan database migraties uitvoeren.</p>';
+        echo '</body></html>';
+    }
+    exit;
+}
+
 // --- View Routes ---
 handleViewRoute($route, $method);
 exit;
@@ -293,6 +336,23 @@ function handleApiRoute(string $route, string $method): void
                     break;
                 case 'reset-password':
                     require __DIR__ . '/api/auth/reset-password.php';
+                    break;
+                case 'keepalive':
+                    require __DIR__ . '/api/auth/keepalive.php';
+                    break;
+                case 'webauthn':
+                    // WebAuthn sub-endpoints: register-options, register, authenticate-options, authenticate
+                    $subAction = $segments[2] ?? '';
+                    if (in_array($subAction, ['register-options', 'register', 'authenticate-options', 'authenticate'], true)) {
+                        require_once __DIR__ . '/middleware/role_check.php';
+                        requireAuthenticated();
+                        if (currentUserRole() !== 'guest') {
+                            Response::error('WebAuthn is only available for guests', 'FORBIDDEN', 403);
+                        }
+                        require __DIR__ . "/api/auth/webauthn/{$subAction}.php";
+                    } else {
+                        Response::notFound('WebAuthn endpoint not found');
+                    }
                     break;
                 default:
                     Response::notFound('Auth endpoint not found');
@@ -595,6 +655,7 @@ function handleViewRoute(string $route, string $method): void
         'qr'        => 'guest/qr.php',
         'inbox'     => 'guest/inbox.php',
         'profile'   => 'guest/profile/index.php',
+        'pin-setup' => 'guest/pin-setup.php',
 
         // Bartender
         'bartender' => 'bartender/dashboard.php',

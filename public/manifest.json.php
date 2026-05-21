@@ -7,6 +7,25 @@ declare(strict_types=1);
  * Reference: https://developer.mozilla.org/en-US/docs/Web/Manifest
  */
 
+// Set error handler to catch errors before JSON output
+set_error_handler(function($errno, $errstr, $errfile, $errline) {
+    // Log error but don't output it (would break JSON)
+    error_log("[Manifest] Error: $errstr in $errfile:$errline");
+    return true; // Suppress default error handling
+});
+
+// Set exception handler
+set_exception_handler(function($e) {
+    error_log("[Manifest] Exception: " . $e->getMessage());
+    header('Content-Type: application/json; charset=utf-8');
+    http_response_code(500);
+    echo json_encode([
+        'error' => 'Manifest generation failed',
+        'message' => $e->getMessage()
+    ]);
+    exit;
+});
+
 require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../utils/helpers.php';
@@ -39,6 +58,7 @@ if ($tenantId) {
         }
     } catch (\Throwable $e) {
         // Fall back to session/defaults
+        error_log("[Manifest] Failed to fetch tenant: " . $e->getMessage());
     }
 } elseif (!empty($_GET['slug'])) {
     // No session tenant — try to resolve tenant by slug (for unauthenticated guest pages)
@@ -56,6 +76,7 @@ if ($tenantId) {
         }
     } catch (\Throwable $e) {
         // Fall back to defaults
+        error_log("[Manifest] Failed to fetch tenant by slug: " . $e->getMessage());
     }
 }
 

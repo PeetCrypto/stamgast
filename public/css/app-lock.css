@@ -1,0 +1,206 @@
+/* ==========================================================================
+   REGULR.vip — App Lock Screen
+   Full-screen overlay met PIN keypad en biometric unlock
+   ========================================================================== */
+
+/* --- Lock screen overlay --- */
+.app-lock-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    background: #0f0f0f;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.app-lock-screen.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* --- Lock content container --- */
+.lock-content {
+    text-align: center;
+    max-width: 340px;
+    width: 100%;
+    padding: 0 var(--space-lg, 24px);
+}
+
+/* --- Lock icon --- */
+.lock-icon {
+    font-size: 48px;
+    margin-bottom: var(--space-md, 16px);
+    animation: lock-pulse 2s ease-in-out infinite;
+}
+
+@keyframes lock-pulse {
+    0%, 100% { opacity: 0.7; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.1); }
+}
+
+/* --- Title / subtitle --- */
+.lock-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: #ffffff;
+    margin-bottom: var(--space-xs, 8px);
+}
+
+.lock-subtitle {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.5);
+    margin-bottom: var(--space-xl, 32px);
+}
+
+/* --- Biometric button --- */
+.lock-biometric-btn {
+    display: block;
+    width: 100%;
+    padding: var(--space-md, 16px);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-bottom: var(--space-md, 16px);
+    -webkit-tap-highlight-color: transparent;
+}
+
+.lock-biometric-btn:active {
+    background: rgba(255, 255, 255, 0.15);
+    transform: scale(0.98);
+}
+
+.lock-biometric-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* --- Divider --- */
+.lock-divider {
+    color: rgba(255, 255, 255, 0.35);
+    font-size: 13px;
+    margin-bottom: var(--space-lg, 24px);
+    position: relative;
+}
+
+.lock-divider::before,
+.lock-divider::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 30%;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.lock-divider::before { left: 0; }
+.lock-divider::after { right: 0; }
+
+/* --- PIN dots --- */
+.lock-pin-dots {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    margin-bottom: var(--space-lg, 24px);
+}
+
+.lock-pin-dot {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    background: transparent;
+    transition: all 0.2s ease;
+}
+
+.lock-pin-dot.filled {
+    background: var(--accent-primary, #FFC107);
+    border-color: var(--accent-primary, #FFC107);
+    transform: scale(1.2);
+}
+
+.lock-pin-dot.error {
+    border-color: #ef4444;
+    background: #ef4444;
+    animation: pin-shake 0.4s ease;
+}
+
+.lock-pin-dot.success {
+    border-color: #4CAF50;
+    background: #4CAF50;
+    transform: scale(1.2);
+}
+
+@keyframes pin-shake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-8px); }
+    40% { transform: translateX(8px); }
+    60% { transform: translateX(-4px); }
+    80% { transform: translateX(4px); }
+}
+
+/* --- Error / attempts text --- */
+.lock-error {
+    color: #ef4444;
+    font-size: 14px;
+    min-height: 20px;
+    margin-top: var(--space-sm, 8px);
+    display: none;
+}
+
+.lock-attempts {
+    color: rgba(255, 255, 255, 0.35);
+    font-size: 12px;
+    margin-top: var(--space-xs, 8px);
+    min-height: 16px;
+}
+
+/* --- Numeric Keypad --- */
+.lock-keypad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    max-width: 280px;
+    margin: 0 auto var(--space-lg, 24px);
+}
+
+.lock-key {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05);
+    color: #ffffff;
+    font-size: 28px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    justify-self: center;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    transition: all 0.15s ease;
+}
+
+.lock-key:active {
+    background: rgba(255, 255, 255, 0.15);
+    transform: scale(0.95);
+}
+
+.lock-key--empty {
+    visibility: hidden;
+}
+
+.lock-key--back {
+    font-size: 20px;
+    color: rgba(255, 255, 255, 0.5);
+}

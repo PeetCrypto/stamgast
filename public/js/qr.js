@@ -313,6 +313,21 @@
             return;
         }
         
+        // Auth gate: require FaceID/PIN voordat QR gegenereerd wordt
+        if (window.REGULR?.appLock?.verify) {
+            const authorized = await window.REGULR.appLock.verify();
+            if (!authorized) {
+                // Gebruiker weigerde authenticatie — toon placeholder
+                var container = document.getElementById('qr-container');
+                if (container) {
+                    container.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--text-secondary);">' +
+                        '<p style="font-size:32px;margin-bottom:0.5rem;">&#128274;</p>' +
+                        '<p>Ontgrendel om je QR code te zien</p></div>';
+                }
+                return;
+            }
+        }
+        
         // Guest QR display - generate new QR
         await generateQR();
         

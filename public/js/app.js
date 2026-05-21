@@ -194,6 +194,7 @@
                 AppState.accountStatus = data.user.account_status || 'unverified';
                 AppState.sessionChecked = true;
                 log('Session valid:', AppState.user);
+
                 return true;
             } else {
                 AppState.user = null;

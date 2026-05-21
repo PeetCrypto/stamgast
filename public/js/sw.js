@@ -112,7 +112,7 @@ self.addEventListener('install', (event) => {
 });
 
 // ============================================
-// ACTIVATE — Clean up old caches
+// ACTIVATE — Clean up old caches + start keepalive
 // ============================================
 self.addEventListener('activate', (event) => {
     event.waitUntil(
@@ -132,7 +132,41 @@ self.addEventListener('activate', (event) => {
                 return self.clients.claim();
             })
     );
+
+    // Start keepalive ping to keep PHP session alive for guests
+    startKeepalive();
 });
+
+// ============================================
+// SESSION KEEPALIVE (elke 15 minuten)
+// Houdt de PHP sessie levend voor gasten
+// ============================================
+const KEEPALIVE_INTERVAL = 15 * 60 * 1000; // 15 minuten
+
+function startKeepalive() {
+    // Ping elke 15 minuten
+    setInterval(async () => {
+        try {
+            const response = await fetch(BASE + '/api/auth/keepalive', {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers: { 'Accept': 'application/json' }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success && data.data?.role === 'guest') {
+                    console.log('[SW] Keepalive OK — session extended');
+                }
+            } else if (response.status === 401 || response.status === 403) {
+                console.log('[SW] Keepalive failed — session expired or suspended');
+            }
+        } catch (e) {
+            // Netwerk fout — negeer, probeer opnieuw over 15 min
+            console.warn('[SW] Keepalive network error:', e.message);
+        }
+    }, KEEPALIVE_INTERVAL);
+}
 
 // ============================================
 // FETCH — Routing strategy

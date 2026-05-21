@@ -338,7 +338,7 @@ $tiersList      = $tierModel->getByTenant($tenantId);
 <!-- Alerts -->
 <div class="alerts-container"></div>
 
-<script src="<?= BASE_URL ?>/public/js/app.js"></script>
+<script src="<?= BASE_URL ?>/public/js/app.js?v=<?= filemtime(PUBLIC_PATH . 'js/app.js') ?>"></script>
 <script src="<?= BASE_URL ?>/public/js/admin.js"></script>
 
 <?php require VIEWS_PATH . 'shared/footer.php'; ?>
