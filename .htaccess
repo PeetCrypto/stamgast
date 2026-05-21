@@ -32,6 +32,8 @@ RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
 # --- BLOCK ACCESS TO SENSITIVE FILES ---
 # Block direct access to config, models, services, middleware, utils, views, sql
+# Exception: sql/web_migrate.php is allowed (browser-accessible migration runner)
+RewriteRule ^sql/web_migrate\.php$ - [L]
 RewriteRule ^config/ - [F,L]
 RewriteRule ^models/ - [F,L]
 RewriteRule ^services/ - [F,L]

@@ -190,6 +190,54 @@ $tenantName = $_SESSION['tenant_name'] ?? APP_NAME;
                     <input type="text" id="tier-name" class="form-input" placeholder="Bijv. Brons, Silver, Goud, Platina" required>
                 </div>
 
+                <div class="form-group">
+                    <label>Model *</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-sm);">
+                        <label class="model-type-option" style="cursor:pointer;">
+                            <input type="radio" name="tier-model-type" value="discount" id="model-discount" checked style="margin-right:6px;">
+                            <strong>Kortingsmodel</strong>
+                            <small style="display:block;opacity:0.7;font-size:0.75rem;margin-top:2px;">Stort €100 → krijg korting op dranken & eten</small>
+                        </label>
+                        <label class="model-type-option" style="cursor:pointer;">
+                            <input type="radio" name="tier-model-type" value="bonus" id="model-bonus" style="margin-right:6px;">
+                            <strong>Opwaardeerbonus</strong>
+                            <small style="display:block;opacity:0.7;font-size:0.75rem;margin-top:2px;">Stort €100 → krijg €110 tegoed (optioneel eten korting)</small>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- BONUS MODEL FIELDS (hidden by default) -->
+                <div id="bonus-fields" style="display:none;">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="tier-bonus-percentage">Bonus percentage (%)</label>
+                            <input type="number" id="tier-bonus-percentage" class="form-input" min="0" max="100" value="10" step="1">
+                            <small class="help-text">Bijv. 10% = stort €100, krijg €110 tegoed</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="tier-food-discount">Eten korting (%) <small style="opacity:0.6;">optioneel</small></label>
+                            <input type="number" id="tier-food-discount" class="form-input" min="0" max="100" value="0" step="0.5">
+                            <small class="help-text">Extra korting op non-alcohol, max 100%</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- DISCOUNT MODEL FIELDS (visible by default) -->
+                <div id="discount-fields">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="tier-alc-discount">Alcohol korting (%)</label>
+                            <input type="number" id="tier-alc-discount" class="form-input" min="0" max="25" value="0" step="0.5">
+                            <small class="help-text">Max 25% (wettelijk)</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="tier-food-discount-d">Eten korting (%)</label>
+                            <input type="number" id="tier-food-discount-d" class="form-input" min="0" max="100" value="0" step="0.5">
+                            <small class="help-text">Max 100%</small>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="form-row">
                     <div class="form-group">
                         <label for="tier-topup-amount">Opwaardeerbedrag (€) *</label>
@@ -200,19 +248,6 @@ $tenantName = $_SESSION['tenant_name'] ?? APP_NAME;
                         <label for="tier-min-deposit">Drempelbedrag (€)</label>
                         <input type="number" id="tier-min-deposit" class="form-input" min="0" step="1" value="0">
                         <small class="help-text">Totaal gestort om dit pakket te bereiken</small>
-                    </div>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="tier-alc-discount">Alcohol korting (%)</label>
-                        <input type="number" id="tier-alc-discount" class="form-input" min="0" max="25" value="0" step="0.5">
-                        <small class="help-text">Max 25% (wettelijk)</small>
-                    </div>
-                    <div class="form-group">
-                        <label for="tier-food-discount">Eten korting (%)</label>
-                        <input type="number" id="tier-food-discount" class="form-input" min="0" max="100" value="0" step="0.5">
-                        <small class="help-text">Max 100%</small>
                     </div>
                 </div>
 

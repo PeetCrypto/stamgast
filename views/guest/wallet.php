@@ -25,6 +25,7 @@ $tenantModel = new Tenant($db);
 $tenantData = $tenantModel->findById((int) ($user['tenant_id'] ?? 0));
 $verificationRequired = (bool) ($tenantData['verification_required'] ?? true);
 $isUnverified = ($accountStatus !== 'active' && $verificationRequired);
+$pointsEnabled = (bool) ($tenantData['points_enabled'] ?? true);
 
 require __DIR__ . '/../shared/header.php';
 ?>
@@ -45,12 +46,14 @@ require __DIR__ . '/../shared/header.php';
                 €0,00
             </div>
             <div class="wallet-balance-card__meta">
+                <?php if ($pointsEnabled): ?>
                 <div class="wallet-balance-card__points">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
                     </svg>
                     <span id="wallet-points">0</span> punten
                 </div>
+                <?php endif; ?>
                 <div class="wallet-balance-card__tier">
                     <span class="tier-badge" id="wallet-tier">-</span>
                 </div>

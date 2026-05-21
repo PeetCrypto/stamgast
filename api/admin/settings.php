@@ -36,6 +36,7 @@ if ($method === 'GET') {
         'whitelisted_ips'    => $tenant['whitelisted_ips'],
         'feature_push'           => (bool) ($tenant['feature_push'] ?? true),
         'feature_marketing'      => (bool) ($tenant['feature_marketing'] ?? true),
+        'points_enabled'         => (bool) ($tenant['points_enabled'] ?? true),
         'verification_required'  => (bool) ($tenant['verification_required'] ?? true),
         'contact_name'       => $tenant['contact_name'] ?? '',
         'contact_email'      => $tenant['contact_email'] ?? '',
@@ -171,6 +172,11 @@ if ($method === 'GET') {
             }
             $data[$field] = $val;
         }
+    }
+
+    // Points toggle (admin-editable — controls whether guests earn points)
+    if (isset($input['points_enabled'])) {
+        $data['points_enabled'] = (int) (bool) $input['points_enabled'];
     }
 
     if (empty($data)) {

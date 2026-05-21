@@ -505,6 +505,12 @@ textarea.form-input {
     border: 1px solid rgba(255, 193, 7, 0.3);
 }
 
+.badge--green {
+    background: rgba(76, 175, 80, 0.15);
+    color: #4CAF50;
+    border: 1px solid rgba(76, 175, 80, 0.3);
+}
+
 .badge--success {
     background: rgba(76, 175, 80, 0.2);
     color: var(--success);

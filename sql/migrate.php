@@ -21,12 +21,12 @@ if (php_sapi_name() !== 'cli' && !defined('REGULR_MIGRATE_ALLOW_WEB')) {
     die("This script can only be run from CLI.\n");
 }
 
-// ── Color helpers for CLI output ────────────────────────────────────────────
-function green(string $text): string  { return "\033[32m{$text}\033[0m"; }
-function red(string $text): string    { return "\033[31m{$text}\033[0m"; }
-function yellow(string $text): string { return "\033[33m{$text}\033[0m"; }
-function bold(string $text): string   { return "\033[1m{$text}\033[0m"; }
-function dim(string $text): string    { return "\033[2m{$text}\033[0m"; }
+// ── Color helpers for CLI output (overridable by web_migrate.php) ───────────
+if (!function_exists('green'))   { function green(string $text): string   { return "\033[32m{$text}\033[0m"; } }
+if (!function_exists('red'))     { function red(string $text): string     { return "\033[31m{$text}\033[0m"; } }
+if (!function_exists('yellow'))  { function yellow(string $text): string  { return "\033[33m{$text}\033[0m"; } }
+if (!function_exists('bold'))    { function bold(string $text): string    { return "\033[1m{$text}\033[0m"; } }
+if (!function_exists('dim'))     { function dim(string $text): string     { return "\033[2m{$text}\033[0m"; } }
 
 // ── Load environment ────────────────────────────────────────────────────────
 $rootPath = dirname(__DIR__);
@@ -97,6 +97,14 @@ $migrations = [
         },
     ],
     [
+        'name'   => 'Password Reset Tokens',
+        'file'   => 'password_reset_migration.sql',
+        'type'   => 'table',
+        'check'  => function (PDO $db): bool {
+            return tableExists($db, 'password_resets');
+        },
+    ],
+    [
         'name'   => 'Notifications Table',
         'file'   => 'notifications_migration.sql',
         'type'   => 'table',
@@ -162,6 +170,48 @@ $migrations = [
         'type'   => 'alter',
         'check'  => function (PDO $db): bool {
             return columnExists($db, 'tenants', 'verification_required');
+        },
+    ],
+    [
+        'name'   => 'Points Toggle',
+        'file'   => 'points_toggle_migration.sql',
+        'type'   => 'alter',
+        'check'  => function (PDO $db): bool {
+            return columnExists($db, 'tenants', 'points_enabled');
+        },
+    ],
+    [
+        'name'   => 'Tier Model Type (discount/bonus)',
+        'file'   => 'model_type_migration.sql',
+        'type'   => 'alter',
+        'check'  => function (PDO $db): bool {
+            return columnExists($db, 'loyalty_tiers', 'model_type');
+        },
+    ],
+    [
+        'name'   => 'FCM Token & Profile Columns',
+        'type'   => 'inline',
+        'check'  => function (PDO $db): bool {
+            return columnExists($db, 'users', 'fcm_token')
+                && columnExists($db, 'users', 'phone')
+                && columnExists($db, 'users', 'street');
+        },
+        'run'    => function (PDO $db): bool {
+            $cols = [
+                ['fcm_token',      "ALTER TABLE `users` ADD COLUMN `fcm_token` TEXT NULL AFTER `push_token`"],
+                ['phone',          "ALTER TABLE `users` ADD COLUMN `phone` VARCHAR(20) NULL DEFAULT NULL"],
+                ['address',        "ALTER TABLE `users` ADD COLUMN `address` TEXT NULL DEFAULT NULL"],
+                ['street',         "ALTER TABLE `users` ADD COLUMN `street` VARCHAR(100) NULL DEFAULT NULL"],
+                ['house_number',   "ALTER TABLE `users` ADD COLUMN `house_number` VARCHAR(10) NULL DEFAULT NULL"],
+                ['postal_code',    "ALTER TABLE `users` ADD COLUMN `postal_code` VARCHAR(10) NULL DEFAULT NULL"],
+                ['city',           "ALTER TABLE `users` ADD COLUMN `city` VARCHAR(50) NULL DEFAULT NULL"],
+            ];
+            foreach ($cols as [$col, $sql]) {
+                if (!columnExists($db, 'users', $col)) {
+                    $db->exec($sql);
+                }
+            }
+            return true;
         },
     ],
 ];
@@ -288,6 +338,26 @@ foreach ($migrations as $i => $migration) {
     }
 
     $num = $i + 1;
+
+    // Inline migration (no SQL file, uses callable)
+    if (($migration['type'] ?? '') === 'inline' && isset($migration['run'])) {
+        echo "  {$num}. Running {$migration['name']}...";
+        try {
+            $ok = ($migration['run'])($db);
+            $verifyOk = ($migration['check'])($db);
+            if ($ok && $verifyOk) {
+                echo green(" ✓ OK") . "\n";
+            } else {
+                echo yellow(" ⚠ RAN but check still fails\n");
+                $failed++;
+            }
+        } catch (\Throwable $e) {
+            echo red(" ✗ FAILED: " . $e->getMessage()) . "\n";
+            $failed++;
+        }
+        continue;
+    }
+
     $file = $migration['file'];
     $fullPath = __DIR__ . '/' . $file;
     
@@ -341,6 +411,7 @@ function runVerification(PDO $db): void
     $requiredTables = [
         'tenants', 'users', 'wallets', 'loyalty_tiers', 'transactions',
         'push_subscriptions', 'email_queue', 'audit_log',
+        'password_resets',
         'notifications', 'email_config', 'email_templates', 'email_log',
         'platform_fees', 'platform_invoices', 'platform_fee_log',
         'platform_settings', 'verification_attempts',
@@ -361,19 +432,25 @@ function runVerification(PDO $db): void
             'verification_cooldown_sec', 'verification_max_attempts',
             // Verification toggle migration
             'verification_required',
+            // Points toggle migration
+            'points_enabled',
         ],
         'users' => [
             'tenant_id', 'email', 'password_hash', 'role', 'first_name', 'last_name',
-            'birthdate', 'photo_url', 'photo_status', 'push_token',
+            'birthdate', 'photo_url', 'photo_status',
             // Gated onboarding migration
             'account_status', 'verified_at', 'verified_by',
             'verified_birthdate', 'suspended_reason', 'suspended_at', 'suspended_by',
+            // FCM & profile columns migration (fcm_token replaces legacy push_token)
+            'fcm_token', 'phone', 'street', 'house_number', 'postal_code', 'city',
         ],
         'loyalty_tiers' => [
             'id', 'tenant_id', 'name', 'min_deposit_cents',
             // Package tiers migration
             'topup_amount_cents', 'alcohol_discount_perc', 'food_discount_perc',
             'points_multiplier', 'is_active', 'sort_order',
+            // Model type migration
+            'model_type', 'bonus_percentage',
         ],
         'transactions' => [
             'id', 'tenant_id', 'user_id', 'type', 'final_total_cents',

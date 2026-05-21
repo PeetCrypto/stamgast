@@ -352,6 +352,9 @@ $firstName = $_SESSION['first_name'] ?? 'Bartender';
         }
         if (u.tier && u.tier.name) {
             badges += ' <span class="badge badge--gold">' + u.tier.name + '</span>';
+            if (u.tier.model_type === 'bonus' && u.tier.bonus_percentage > 0) {
+                badges += ' <span class="badge badge--green">+' + u.tier.bonus_percentage + '% bonus</span>';
+            }
         }
         $('#pay-badges').innerHTML = badges;
 
@@ -430,7 +433,9 @@ $firstName = $_SESSION['first_name'] ?? 'Bartender';
 
         if (currentUser && currentUser.user && currentUser.user.tier) {
             var tier = currentUser.user.tier;
-            var alcPerc = Math.min(tier.alcohol_discount || 0, 25);
+            // BONUS MODEL: no alcohol discount, only food discount
+            var isBonusModel = (tier.model_type === 'bonus');
+            var alcPerc = isBonusModel ? 0 : Math.min(tier.alcohol_discount || 0, 25);
             var foodPerc = tier.food_discount || 0;
             alcDiscount = Math.floor(alcCents * alcPerc / 100);
             foodDiscount = Math.floor(foodCents * foodPerc / 100);

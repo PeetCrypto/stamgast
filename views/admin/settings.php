@@ -167,6 +167,29 @@ if (!$tenant) {
                 <input type="number" id="verification-cooldown-sec" class="form-input" value="<?= (int) ($tenant['verification_cooldown_sec'] ?? 180) ?>" min="0" max="600">
             </div>
         </div>
+
+        <!-- Punten Systeem (admin-editable) -->
+        <div style="margin-bottom: var(--space-xl);">
+            <h2 style="margin-bottom: var(--space-md); color: var(--accent-primary);">Punten Systeem</h2>
+            <p class="text-sm" style="color: var(--text-secondary); margin-bottom: var(--space-md);">
+                Bepaal of je gasten punten kunnen sparen bij betalingen. Bestaande punten blijven bewaard, ook als je het systeem uitschakelt.
+            </p>
+            <div id="points-toggle-container" style="display: flex; align-items: center; gap: var(--space-md); padding: var(--space-md); border-radius: 12px; background: <?= ($tenant['points_enabled'] ?? true) ? 'rgba(76,175,80,0.06)' : 'rgba(255,193,7,0.06)' ?>; border: 1px solid <?= ($tenant['points_enabled'] ?? true) ? 'rgba(76,175,80,0.2)' : 'rgba(255,193,7,0.2)' ?>;">
+                <label style="position: relative; display: inline-block; width: 52px; height: 28px; flex-shrink: 0; cursor: pointer;">
+                    <input type="checkbox" id="points-enabled" <?= ($tenant['points_enabled'] ?? true) ? 'checked' : '' ?> style="opacity: 0; width: 0; height: 0; position: absolute;">
+                    <span id="points-slider-track" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: <?= ($tenant['points_enabled'] ?? true) ? 'var(--accent-primary, #FFC107)' : '#666' ?>; border-radius: 28px; transition: background-color .3s;">
+                        <span id="points-slider-knob" style="position: absolute; height: 22px; width: 22px; left: <?= ($tenant['points_enabled'] ?? true) ? '26px' : '3px' ?>; bottom: 3px; background-color: white; border-radius: 50%; transition: left .3s;"></span>
+                    </span>
+                </label>
+                <div>
+                    <strong id="points-status-label"><?= ($tenant['points_enabled'] ?? true) ? 'Punten sparen is ingeschakeld' : 'Punten sparen is uitgeschakeld' ?></strong>
+                    <p class="text-sm" style="color: var(--text-secondary); margin-top: 2px;" id="points-desc-label">
+                        <?= ($tenant['points_enabled'] ?? true) ? 'Je gasten sparen punten bij elke betaling.' : 'Je gasten sparen geen punten bij betalingen.' ?>
+                    </p>
+                </div>
+            </div>
+        </div>
+
         <!-- Features (READ-ONLY — bepaald door platform beheerder) -->
         <div style="margin-bottom: var(--space-xl);">
             <h2 style="margin-bottom: var(--space-md); color: var(--accent-primary);">Modules
@@ -181,6 +204,9 @@ if (!$tenant) {
                 </span>
                 <span class="badge" style="padding: 8px 16px; border-radius: 20px; background: <?= ($tenant['verification_required'] ?? true) ? 'rgba(76,175,80,0.2); color: #4CAF50; border: 1px solid rgba(76,175,80,0.3)' : 'rgba(158,158,158,0.2); color: #9e9e9e; border: 1px solid rgba(158,158,158,0.3)' ?>;">
                     <?= ($tenant['verification_required'] ?? true) ? '✓' : '✗' ?> ID-Verificatie
+                </span>
+                <span id="points-badge" class="badge" style="padding: 8px 16px; border-radius: 20px; background: <?= ($tenant['points_enabled'] ?? true) ? 'rgba(76,175,80,0.2); color: #4CAF50; border: 1px solid rgba(76,175,80,0.3)' : 'rgba(244,67,54,0.2); color: #f44336; border: 1px solid rgba(244,67,54,0.3)' ?>;">
+                    <?= ($tenant['points_enabled'] ?? true) ? '✓' : '✗' ?> Punten Systeem
                 </span>
             </div>
         </div>
@@ -199,6 +225,21 @@ if (!$tenant) {
 <!-- Alerts -->
 <div class="alerts-container"></div>
 
+<!-- Points Toggle Confirmation Modal -->
+<div id="points-confirm-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.7);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);justify-content:center;align-items:center;">
+    <div style="background:linear-gradient(145deg,#1a1a2e,#16213e);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:32px;max-width:440px;width:90%;box-shadow:0 25px 50px rgba(0,0,0,0.5);text-align:center;">
+        <div style="width:64px;height:64px;margin:0 auto var(--space-md);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:32px;" id="points-modal-icon-wrap">
+            <span id="points-modal-icon">⚠️</span>
+        </div>
+        <h3 style="margin:0 0 12px;font-size:20px;color:#fff;" id="points-modal-title">Let op!</h3>
+        <p style="color:rgba(255,255,255,0.65);margin:0 0 28px;line-height:1.65;font-size:15px;" id="points-modal-message"></p>
+        <div style="display:flex;gap:12px;justify-content:center;">
+            <button id="points-modal-cancel" style="padding:12px 28px;border-radius:12px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.7);cursor:pointer;font-size:15px;font-weight:500;transition:all .2s;">Annuleren</button>
+            <button id="points-modal-confirm" style="padding:12px 28px;border-radius:12px;border:none;cursor:pointer;font-size:15px;font-weight:600;transition:all .2s;" class="btn btn-primary">Doorgaan</button>
+        </div>
+    </div>
+</div>
+
 <!-- Print function for QR code -->
 <script>
 function printQR() {
@@ -214,5 +255,105 @@ function printQR() {
 
 <script src="<?= BASE_URL ?>/public/js/app.js"></script>
 <script src="<?= BASE_URL ?>/public/js/admin.js"></script>
+
+<!-- Points toggle confirmation + instant save (MUST load after app.js for REGULR.api) -->
+<script>
+(function() {
+    var checkbox = document.getElementById('points-enabled');
+    if (!checkbox) return;
+
+    var originalState = checkbox.checked;
+
+    function showPointsConfirm(message, enabling) {
+        return new Promise(function(resolve) {
+            var modal = document.getElementById('points-confirm-modal');
+            var msgEl = document.getElementById('points-modal-message');
+            var titleEl = document.getElementById('points-modal-title');
+            var iconWrap = document.getElementById('points-modal-icon-wrap');
+            var iconEl = document.getElementById('points-modal-icon');
+            var confirmBtn = document.getElementById('points-modal-confirm');
+            var cancelBtn = document.getElementById('points-modal-cancel');
+
+            msgEl.textContent = message;
+            titleEl.textContent = enabling ? 'Punten Systeem Inschakelen' : 'Punten Systeem Uitschakelen';
+            iconEl.textContent = enabling ? '⭐' : '⚠️';
+            iconWrap.style.background = enabling ? 'rgba(76,175,80,0.15)' : 'rgba(255,193,7,0.15)';
+
+            modal.style.display = 'flex';
+
+            function cleanup() {
+                modal.style.display = 'none';
+                confirmBtn.removeEventListener('click', onConfirm);
+                cancelBtn.removeEventListener('click', onCancel);
+                modal.removeEventListener('click', onBackdrop);
+            }
+            function onConfirm() { cleanup(); resolve(true); }
+            function onCancel() { cleanup(); resolve(false); }
+            function onBackdrop(e) { if (e.target === modal) { cleanup(); resolve(false); } }
+
+            confirmBtn.addEventListener('click', onConfirm);
+            cancelBtn.addEventListener('click', onCancel);
+            modal.addEventListener('click', onBackdrop);
+        });
+    }
+
+    function updateSliderVisual(on) {
+        var track = document.getElementById('points-slider-track');
+        var knob = document.getElementById('points-slider-knob');
+        var container = document.getElementById('points-toggle-container');
+        var badge = document.getElementById('points-badge');
+        if (track) track.style.backgroundColor = on ? 'var(--accent-primary, #FFC107)' : '#666';
+        if (knob) knob.style.left = on ? '26px' : '3px';
+        if (container) {
+            container.style.background = on ? 'rgba(76,175,80,0.06)' : 'rgba(255,193,7,0.06)';
+            container.style.borderColor = on ? 'rgba(76,175,80,0.2)' : 'rgba(255,193,7,0.2)';
+        }
+        if (badge) {
+            badge.textContent = (on ? '✓' : '✗') + ' Punten Systeem';
+            badge.style.background = on ? 'rgba(76,175,80,0.2)' : 'rgba(244,67,54,0.2)';
+            badge.style.color = on ? '#4CAF50' : '#f44336';
+            badge.style.border = on ? '1px solid rgba(76,175,80,0.3)' : '1px solid rgba(244,67,54,0.3)';
+        }
+    }
+
+    function doSave(enabling) {
+        window.REGULR.api('/admin/settings', {
+            method: 'POST',
+            body: { points_enabled: enabling ? 1 : 0 }
+        })
+        .then(function(result) {
+            originalState = enabling;
+            var statusLabel = document.getElementById('points-status-label');
+            var descLabel = document.getElementById('points-desc-label');
+            if (statusLabel) statusLabel.textContent = enabling ? 'Punten sparen is ingeschakeld' : 'Punten sparen is uitgeschakeld';
+            if (descLabel) descLabel.textContent = enabling ? 'Je gasten sparen punten bij elke betaling.' : 'Je gasten sparen geen punten bij betalingen.';
+            updateSliderVisual(enabling);
+            window.REGULR.showSuccess(enabling ? 'Puntenysteem ingeschakeld voor al je klanten' : 'Puntenysteem uitgeschakeld — punten zijn niet meer beschikbaar');
+        })
+        .catch(function(err) {
+            checkbox.checked = originalState;
+            updateSliderVisual(originalState);
+            window.REGULR.showError(err.message || 'Fout bij opslaan');
+        });
+    }
+
+    checkbox.addEventListener('change', function() {
+        var enabling = checkbox.checked;
+
+        var message = enabling
+            ? 'Het puntenysteem wordt geactiveerd voor al je klanten. Gasten kunnen vanaf nu punten sparen bij betalingen.'
+            : 'Wanneer je het puntenysteem uitschakelt, zijn de gespaarde punten niet meer beschikbaar voor je gasten. Bestaande punten blijven wel bewaard in het systeem.';
+
+        showPointsConfirm(message, enabling).then(function(confirmed) {
+            if (!confirmed) {
+                checkbox.checked = !enabling;
+                updateSliderVisual(!enabling);
+                return;
+            }
+            doSave(enabling);
+        });
+    });
+})();
+</script>
 
 <?php require VIEWS_PATH . 'shared/footer.php'; ?>

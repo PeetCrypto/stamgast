@@ -92,8 +92,12 @@
     // Server always recalculates authoritatively
     // ============================================
     function calculateDiscounts(alcCents, foodCents, tier) {
-        const alcPerc = Math.min(tier?.alcohol_discount_perc || 0, 25);
-        const foodPerc = tier?.food_discount_perc || 0;
+        // Property names must match api/pos/scan.php response:
+        // tier.alcohol_discount and tier.food_discount (NOT _perc suffix)
+        // BONUS MODEL: alcohol discount is always 0
+        const isBonusModel = (tier?.model_type === 'bonus');
+        const alcPerc = isBonusModel ? 0 : Math.min(tier?.alcohol_discount || 0, 25);
+        const foodPerc = tier?.food_discount || 0;
 
         const discountAlc = Math.floor(alcCents * alcPerc / 100);
         const discountFood = Math.floor(foodCents * foodPerc / 100);

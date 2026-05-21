@@ -171,6 +171,53 @@ class Transaction
     }
 
     /**
+     * Find a recent duplicate payment to prevent double-deduction on retry.
+     *
+     * Checks if an identical payment (same user, bartender, amounts, type='payment')
+     * was created within the last N seconds. Returns the existing transaction if found.
+     *
+     * @param int $userId          Guest user ID
+     * @param int $tenantId        Tenant ID
+     * @param int $bartenderId     Bartender who processed the payment
+     * @param int $amountAlcCents  Alcohol amount in cents
+     * @param int $amountFoodCents Food amount in cents
+     * @param int $windowSeconds   Deduplication window (default 60 seconds)
+     * @return array|null Existing transaction if duplicate found, null otherwise
+     */
+    public function findRecentDuplicatePayment(
+        int $userId,
+        int $tenantId,
+        int $bartenderId,
+        int $amountAlcCents,
+        int $amountFoodCents,
+        int $windowSeconds = 60
+    ): ?array {
+        $stmt = $this->db->prepare(
+            'SELECT * FROM `transactions`
+             WHERE `user_id` = :user_id
+               AND `tenant_id` = :tenant_id
+               AND `bartender_id` = :bartender_id
+               AND `type` = :type
+               AND `amount_alc_cents` = :alc
+               AND `amount_food_cents` = :food
+               AND `created_at` >= DATE_SUB(NOW(), INTERVAL :window SECOND)
+             ORDER BY `created_at` DESC
+             LIMIT 1'
+        );
+        $stmt->execute([
+            ':user_id'     => $userId,
+            ':tenant_id'   => $tenantId,
+            ':bartender_id' => $bartenderId,
+            ':type'        => 'payment',
+            ':alc'         => $amountAlcCents,
+            ':food'        => $amountFoodCents,
+            ':window'      => $windowSeconds,
+        ]);
+        $result = $stmt->fetch();
+        return $result ?: null;
+    }
+
+    /**
      * Get revenue stats for a tenant (today, this week)
      *
      * @return array{today: int, week: int, total: int}

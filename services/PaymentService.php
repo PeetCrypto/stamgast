@@ -55,6 +55,47 @@ class PaymentService
             throw new \InvalidArgumentException('Er moet minimaal één bedrag ingevuld zijn');
         }
 
+        // ── STAP 1b: IDEMPOTENTIE CHECK (dubbele betaling voorkomen) ─
+        // Als een identieke betaling binnen 60 seconden al is verwerkt,
+        // retourneer het bestaande resultaat i.p.v. dubbel af te schrijven.
+        $transactionModel = new Transaction($this->db);
+        $duplicate = $transactionModel->findRecentDuplicatePayment(
+            $userId,
+            $tenantId,
+            $bartenderId,
+            $amountAlcCents,
+            $amountFoodCents,
+            60 // 60 seconden dedup window
+        );
+
+        if ($duplicate !== null) {
+            // Log de duplicate poging
+            $audit = new Audit($this->db);
+            $audit->log(
+                $tenantId,
+                $bartenderId,
+                'payment.duplicate_blocked',
+                'transaction',
+                (int) $duplicate['id'],
+                [
+                    'user_id'           => $userId,
+                    'original_tx_id'    => (int) $duplicate['id'],
+                    'amount_alc_cents'  => $amountAlcCents,
+                    'amount_food_cents' => $amountFoodCents,
+                ]
+            );
+
+            // Retourneer het originele transactie-resultaat
+            return [
+                'success'           => true,
+                'transaction_id'    => (int) $duplicate['id'],
+                'final_total'       => (int) $duplicate['final_total_cents'],
+                'discount_applied'  => (int) $duplicate['discount_alc_cents'] + (int) $duplicate['discount_food_cents'],
+                'points_earned'     => (int) $duplicate['points_earned'],
+                'duplicate'         => true,
+            ];
+        }
+
         // ── STAP 2: USER & TIER OPHALEN ─────────────────────────────
         $userModel = new User($this->db);
         $user = $userModel->findById($userId);
@@ -78,7 +119,13 @@ class PaymentService
         $tier = $tierModel->determineTier($tenantId, $totalDeposits);
 
         // ── STAP 3: KORTING BEREKENEN (SERVER-SIDE!) ────────────────
-        $alcDiscountPerc = min((float) $tier['alcohol_discount_perc'], (float) ALCOHOL_DISCOUNT_MAX);
+        // BONUS MODEL: alcohol discount is always 0, only food discount (if set) applies.
+        // DISCOUNT MODEL: both alcohol and food discounts apply (standard behavior).
+        $isBonusModel = ($tier['model_type'] ?? LoyaltyTier::MODEL_DISCOUNT) === LoyaltyTier::MODEL_BONUS;
+
+        $alcDiscountPerc = $isBonusModel
+            ? 0 // No alcohol discount in bonus model
+            : min((float) $tier['alcohol_discount_perc'], (float) ALCOHOL_DISCOUNT_MAX);
         $foodDiscountPerc = min((float) $tier['food_discount_perc'], (float) FOOD_DISCOUNT_MAX);
 
         $discountAlcCents = (int) floor($amountAlcCents * $alcDiscountPerc / 100);
@@ -88,33 +135,47 @@ class PaymentService
         $discountTotal = $discountAlcCents + $discountFoodCents;
 
         // Calculate points earned: FLOOR(final_total * multiplier / 100)
+        // Skip points if tenant has disabled the points system
+        $tenantModelPts = new Tenant($this->db);
+        $tenantRow = $tenantModelPts->findById($tenantId);
+        $pointsEnabled = (bool) ($tenantRow['points_enabled'] ?? true);
+
         $pointsMultiplier = (float) $tier['points_multiplier'];
-        $pointsEarned = (int) floor($finalTotal * $pointsMultiplier / 100);
+        $pointsEarned = $pointsEnabled ? (int) floor($finalTotal * $pointsMultiplier / 100) : 0;
 
-        // ── STAP 4: SALDO CHECK (DOUBLE-SPEND PROTECTIE) ────────────
+        // ── STAP 4+5: ATOMAIRE TRANSACTIE (saldo check + afschrijving in 1 lock) ──
+        // De saldo-check en afschrijving zijn IN de transactie met row-lock
+        // om race conditions te voorkomen (twee bartenders tegelijk).
         $walletModel = new Wallet($this->db);
-        $wallet = $walletModel->findByUserAndTenant($userId, $tenantId);
 
-        if ($wallet === null) {
-            throw new \RuntimeException('Wallet niet gevonden');
-        }
-
-        $currentBalance = (int) $wallet['balance_cents'];
-        if ($currentBalance < $finalTotal) {
-            $shortage = $finalTotal - $currentBalance;
-            throw new \RuntimeException(
-                'Onvoldoende saldo. Tekort: €' . centsToEuro($shortage)
-            );
-        }
-
-        // ── STAP 5: ATOMAIRE TRANSACTIE ─────────────────────────────
         try {
             $this->db->beginTransaction();
 
-            // a) Deduct from wallet
-            $walletModel->updateBalance($userId, -$finalTotal, $pointsEarned);
+            // a) Lock wallet row (SELECT ... FOR UPDATE voorkomt concurrent reads)
+            $wallet = $walletModel->lockForUpdate($userId, $tenantId);
 
-            // b) Create transaction record
+            if ($wallet === null) {
+                $this->db->rollBack();
+                throw new \RuntimeException('Wallet niet gevonden');
+            }
+
+            $currentBalance = (int) $wallet['balance_cents'];
+            if ($currentBalance < $finalTotal) {
+                $this->db->rollBack();
+                $shortage = $finalTotal - $currentBalance;
+                throw new \RuntimeException(
+                    'Onvoldoende saldo. Tekort: €' . centsToEuro($shortage)
+                );
+            }
+
+            // b) Deduct from wallet (SQL-level guard against negative balance)
+            $deducted = $walletModel->updateBalance($userId, -$finalTotal, $pointsEarned);
+            if (!$deducted) {
+                $this->db->rollBack();
+                throw new \RuntimeException('Onvoldoende saldo. Probeer opnieuw.');
+            }
+
+            // c) Create transaction record
             $transactionId = $transactionModel->create([
                 'tenant_id'           => $tenantId,
                 'user_id'             => $userId,
@@ -130,7 +191,7 @@ class PaymentService
                 'description'         => 'Betaling via POS',
             ]);
 
-            // c) Audit trail
+            // d) Audit trail
             $audit = new Audit($this->db);
             $audit->log(
                 $tenantId,
@@ -149,8 +210,13 @@ class PaymentService
 
             $this->db->commit();
 
+        } catch (\InvalidArgumentException $e) {
+            // Re-throw validation errors without wrapping
+            throw $e;
+        } catch (\RuntimeException $e) {
+            // Re-throw runtime errors (insufficient balance) without wrapping
+            throw $e;
         } catch (\Throwable $e) {
-            $this->db->rollBack();
             throw new \RuntimeException('Betaling mislukt: ' . $e->getMessage());
         }
 

@@ -459,6 +459,11 @@ function handleApiRoute(string $route, string $method): void
                 case 'subscribe':
                     require __DIR__ . '/api/push/subscribe.php';
                     break;
+                case 'unsubscribe':
+                    require_once __DIR__ . '/middleware/role_check.php';
+                    requireAuthenticated();
+                    require __DIR__ . '/api/push/unsubscribe.php';
+                    break;
                 case 'config':
                     require __DIR__ . '/api/push/config.php';
                     break;

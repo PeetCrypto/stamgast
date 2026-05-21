@@ -139,6 +139,8 @@ try {
             ],
             'tier'         => [
                 'name'              => $tier['name'],
+                'model_type'        => $tier['model_type'] ?? 'discount',
+                'bonus_percentage'  => (float) ($tier['bonus_percentage'] ?? 0),
                 'alcohol_discount'  => (float) $tier['alcohol_discount_perc'],
                 'food_discount'     => (float) $tier['food_discount_perc'],
                 'points_multiplier' => (float) $tier['points_multiplier'],

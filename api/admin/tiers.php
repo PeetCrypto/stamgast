@@ -28,6 +28,8 @@ if ($method === 'GET') {
             'name'                  => $tier['name'],
             'min_deposit_cents'     => (int) $tier['min_deposit_cents'],
             'topup_amount_cents'    => (int) $tier['topup_amount_cents'],
+            'model_type'            => $tier['model_type'] ?? LoyaltyTier::MODEL_DISCOUNT,
+            'bonus_percentage'      => (float) ($tier['bonus_percentage'] ?? 0),
             'alcohol_discount_perc' => (float) $tier['alcohol_discount_perc'],
             'food_discount_perc'    => (float) $tier['food_discount_perc'],
             'points_multiplier'     => (float) $tier['points_multiplier'],
@@ -58,11 +60,18 @@ if ($method === 'GET') {
         $name               = trim($input['name'] ?? '');
         $minDepositCents    = (int) ($input['min_deposit_cents'] ?? 0);
         $topupAmountCents   = (int) ($input['topup_amount_cents'] ?? LoyaltyTier::MIN_TOPUP_CENTS);
+        $modelType          = $input['model_type'] ?? LoyaltyTier::MODEL_DISCOUNT;
+        $bonusPercentage    = (float) ($input['bonus_percentage'] ?? 0);
         $alcDiscount        = (float) ($input['alcohol_discount_perc'] ?? 0);
         $foodDiscount       = (float) ($input['food_discount_perc'] ?? 0);
         $pointsMultiplier   = (float) ($input['points_multiplier'] ?? 1.0);
         $sortOrder          = (int) ($input['sort_order'] ?? $tierModel->getNextSortOrder($tenantId));
         $isActive           = isset($input['is_active']) ? (int) $input['is_active'] : 1;
+
+        // Validate model type
+        if (!in_array($modelType, [LoyaltyTier::MODEL_DISCOUNT, LoyaltyTier::MODEL_BONUS])) {
+            Response::error('Ongeldig model type. Gebruik: discount of bonus', 'VALIDATION_ERROR', 422);
+        }
 
         // Validate
         if ($name === '') {
@@ -74,12 +83,29 @@ if ($method === 'GET') {
         if ($topupAmountCents > DEPOSIT_MAX_CENTS) {
             Response::error('Opwaardeerbedrag mag maximaal €' . (DEPOSIT_MAX_CENTS / 100) . ' zijn', 'VALIDATION_ERROR', 422);
         }
-        if ($alcDiscount < 0 || $alcDiscount > ALCOHOL_DISCOUNT_MAX) {
-            Response::error('Alcohol korting moet tussen 0% en ' . ALCOHOL_DISCOUNT_MAX . '% zijn (wettelijk maximum)', 'VALIDATION_ERROR', 422);
+
+        // Model-specific validation
+        if ($modelType === LoyaltyTier::MODEL_BONUS) {
+            // Bonus model: bonus_percentage is required
+            if ($bonusPercentage < 0 || $bonusPercentage > LoyaltyTier::BONUS_MAX) {
+                Response::error('Bonus percentage moet tussen 0% en ' . LoyaltyTier::BONUS_MAX . '% zijn', 'VALIDATION_ERROR', 422);
+            }
+            // Alcohol discount is NOT allowed in bonus model
+            $alcDiscount = 0;
+            // Food discount is optional (extra non-alcohol discount)
+            if ($foodDiscount < 0 || $foodDiscount > FOOD_DISCOUNT_MAX) {
+                Response::error('Eten korting moet tussen 0% en ' . FOOD_DISCOUNT_MAX . '% zijn', 'VALIDATION_ERROR', 422);
+            }
+        } else {
+            // Discount model: standard validation
+            if ($alcDiscount < 0 || $alcDiscount > ALCOHOL_DISCOUNT_MAX) {
+                Response::error('Alcohol korting moet tussen 0% en ' . ALCOHOL_DISCOUNT_MAX . '% zijn (wettelijk maximum)', 'VALIDATION_ERROR', 422);
+            }
+            if ($foodDiscount < 0 || $foodDiscount > FOOD_DISCOUNT_MAX) {
+                Response::error('Eten korting moet tussen 0% en ' . FOOD_DISCOUNT_MAX . '% zijn', 'VALIDATION_ERROR', 422);
+            }
         }
-        if ($foodDiscount < 0 || $foodDiscount > FOOD_DISCOUNT_MAX) {
-            Response::error('Eten korting moet tussen 0% en ' . FOOD_DISCOUNT_MAX . '% zijn', 'VALIDATION_ERROR', 422);
-        }
+
         if ($pointsMultiplier < 0.5 || $pointsMultiplier > 10) {
             Response::error('Punten multiplier moet tussen 0.5 en 10 zijn', 'VALIDATION_ERROR', 422);
         }
@@ -89,6 +115,8 @@ if ($method === 'GET') {
             'name'                  => $name,
             'min_deposit_cents'     => $minDepositCents,
             'topup_amount_cents'    => $topupAmountCents,
+            'model_type'            => $modelType,
+            'bonus_percentage'      => $bonusPercentage,
             'alcohol_discount_perc' => $alcDiscount,
             'food_discount_perc'    => $foodDiscount,
             'points_multiplier'     => $pointsMultiplier,
@@ -139,10 +167,35 @@ if ($method === 'GET') {
             }
             $data['topup_amount_cents'] = $val;
         }
+        if (isset($input['model_type'])) {
+            if (!in_array($input['model_type'], [LoyaltyTier::MODEL_DISCOUNT, LoyaltyTier::MODEL_BONUS])) {
+                Response::error('Ongeldig model type', 'VALIDATION_ERROR', 422);
+            }
+            $data['model_type'] = $input['model_type'];
+
+            // When switching model type, enforce constraints
+            if ($input['model_type'] === LoyaltyTier::MODEL_BONUS) {
+                $data['alcohol_discount_perc'] = 0; // No alcohol discount in bonus mode
+            }
+        }
+        if (isset($input['bonus_percentage'])) {
+            $val = (float) $input['bonus_percentage'];
+            if ($val < 0 || $val > LoyaltyTier::BONUS_MAX) {
+                Response::error('Bonus percentage moet tussen 0% en ' . LoyaltyTier::BONUS_MAX . '% zijn', 'VALIDATION_ERROR', 422);
+            }
+            $data['bonus_percentage'] = $val;
+        }
         if (isset($input['alcohol_discount_perc'])) {
             $val = (float) $input['alcohol_discount_perc'];
             if ($val < 0 || $val > ALCOHOL_DISCOUNT_MAX) {
                 Response::error('Alcohol korting moet tussen 0% en ' . ALCOHOL_DISCOUNT_MAX . '% zijn', 'VALIDATION_ERROR', 422);
+            }
+            // Block alcohol discount in bonus model
+            if (isset($input['model_type']) && $input['model_type'] === LoyaltyTier::MODEL_BONUS) {
+                Response::error('Alcohol korting is niet beschikbaar in het bonus model', 'VALIDATION_ERROR', 422);
+            }
+            if (!isset($input['model_type']) && ($tier['model_type'] ?? '') === LoyaltyTier::MODEL_BONUS) {
+                Response::error('Alcohol korting is niet beschikbaar in het bonus model', 'VALIDATION_ERROR', 422);
             }
             $data['alcohol_discount_perc'] = $val;
         }

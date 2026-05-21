@@ -181,6 +181,7 @@ $postalCode  = $user['postal_code'] ?? '';
 $city        = $user['city'] ?? '';
 $photoUrl    = $user['photo_url'] ?? '';
 $photoStatus = $user['photo_status'] ?? 'unvalidated';
+$hasFcmToken = !empty($user['fcm_token']);
 
 // Determine photo img src (handle both old relative paths and new full URLs)
 $photoImgSrc = '';
@@ -397,9 +398,154 @@ if ($photoUrl) {
                 </form>
             </div>
         </div>
+
+        <hr class="profile-divider">
+
+        <!-- ── Notifications ── -->
+        <div class="profile-section">
+            <h3>🔔 Notificaties</h3>
+            <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: var(--space-md);">
+                Ontvang push berichten over je saldo, betalingen en aanbiedingen.
+            </p>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:var(--space-md);border-radius:12px;border:1px solid var(--glass-border);background:var(--glass-bg);">
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <span id="push-profile-icon" style="font-size:24px;"><?= $hasFcmToken ? '🔔' : '🔕' ?></span>
+                    <div>
+                        <strong id="push-profile-label"><?= $hasFcmToken ? 'Notificaties aan' : 'Notificaties uit' ?></strong>
+                        <p id="push-profile-desc" style="color:var(--text-secondary);font-size:13px;margin-top:2px;"><?= $hasFcmToken ? 'Je ontvangt push berichten' : 'Je ontvangt geen push berichten' ?></p>
+                    </div>
+                </div>
+                <div id="push-toggle-wrap" style="position:relative;width:52px;height:28px;cursor:pointer;" role="switch" aria-checked="<?= $hasFcmToken ? 'true' : 'false' ?>" tabindex="0">
+                    <span id="push-track" style="position:absolute;inset:0;border-radius:28px;transition:background 0.3s;pointer-events:none;<?= $hasFcmToken ? 'background:#4CAF50;' : 'background:rgba(158,158,158,0.3);' ?>"></span>
+                    <span id="push-knob" style="position:absolute;top:3px;<?= $hasFcmToken ? 'left:27px;' : 'left:3px;' ?>width:22px;height:22px;border-radius:50%;background:#fff;transition:left 0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.3);pointer-events:none;"></span>
+                </div>
+            </div>
+            <p id="push-denied-hint" style="display:none;color:#F44336;font-size:13px;margin-top:var(--space-sm);">
+                Notificaties zijn geblokkeerd in je browser. Pas dit aan in je browser- of apparaatinstellingen.
+            </p>
+            <p id="push-loading" style="display:none;color:var(--text-secondary);font-size:13px;margin-top:var(--space-sm);">
+                ⏳ Bezig...
+            </p>
+        </div>
     </div>
 
     <a href="<?= BASE_URL ?>/dashboard" class="btn btn-secondary">Terug naar Dashboard</a>
 </div>
+
+<script src="<?= BASE_URL ?>/public/js/app.js"></script>
+<script src="<?= BASE_URL ?>/public/js/push.js"></script>
+<script>
+(function() {
+    // DB state is the truth
+    var pushEnabled = <?= $hasFcmToken ? 'true' : 'false' ?>;
+    var busy = false;
+    var UNSUBSCRIBE_URL = (window.__BASE_URL || '') + '/api/push/unsubscribe';
+
+    setTimeout(function() {
+        var wrap = document.getElementById('push-toggle-wrap');
+        var icon = document.getElementById('push-profile-icon');
+        var label = document.getElementById('push-profile-label');
+        var desc = document.getElementById('push-profile-desc');
+        var track = document.getElementById('push-track');
+        var knob = document.getElementById('push-knob');
+        var deniedHint = document.getElementById('push-denied-hint');
+        var loadingEl = document.getElementById('push-loading');
+        if (!wrap) return;
+
+        function updateUI(enabled) {
+            pushEnabled = enabled;
+            wrap.setAttribute('aria-checked', enabled ? 'true' : 'false');
+            knob.style.left = enabled ? '27px' : '3px';
+            track.style.background = enabled ? '#4CAF50' : 'rgba(158,158,158,0.3)';
+            icon.textContent = enabled ? '🔔' : '🔕';
+            label.textContent = enabled ? 'Notificaties aan' : 'Notificaties uit';
+            desc.textContent = enabled ? 'Je ontvangt push berichten' : 'Je ontvangt geen push berichten';
+        }
+
+        function setLoading(on) {
+            busy = on;
+            loadingEl.style.display = on ? 'block' : 'none';
+            wrap.style.opacity = on ? '0.5' : '1';
+        }
+
+        function getCSRF() {
+            var m = document.querySelector('meta[name="csrf-token"]');
+            return m ? m.getAttribute('content') : '';
+        }
+
+        // No Notification API at all
+        if (typeof Notification === 'undefined') {
+            icon.textContent = '🚫';
+            label.textContent = 'Niet ondersteund';
+            desc.textContent = 'Je browser ondersteunt geen push notificaties';
+            wrap.style.cursor = 'not-allowed';
+            wrap.style.opacity = '0.5';
+            wrap.removeAttribute('tabindex');
+            return;
+        }
+
+        // If browser denied AND no token in DB → show hint
+        if (Notification.permission === 'denied' && !pushEnabled) {
+            deniedHint.style.display = 'block';
+        }
+
+        function doToggle() {
+            if (busy) return;
+
+            if (!pushEnabled) {
+                // ── ENABLE ── Use FCMHandler.subscribe() → permission + token + DB
+                setLoading(true);
+                window.FCMHandler.subscribe().then(function(result) {
+                    setLoading(false);
+                    if (result.granted) {
+                        updateUI(true);
+                        deniedHint.style.display = 'none';
+                        try { localStorage.removeItem('push_banner_dismissed'); } catch(_) {}
+                    } else {
+                        updateUI(false);
+                        if (result.reason === 'denied') {
+                            deniedHint.style.display = 'block';
+                        }
+                    }
+                });
+            } else {
+                // ── DISABLE ── Remove FCM token from DB + set localStorage flag
+                setLoading(true);
+                fetch(UNSUBSCRIBE_URL, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': getCSRF()
+                    }
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(result) {
+                    setLoading(false);
+                    if (result.success) {
+                        updateUI(false);
+                        // Set flag so push.js doesn't auto-resubscribe on next page load
+                        try { localStorage.setItem('push_disabled', '1'); } catch(_) {}
+                    } else {
+                        updateUI(true); // Revert
+                    }
+                })
+                .catch(function() {
+                    setLoading(false);
+                    updateUI(true); // Revert
+                });
+            }
+        }
+
+        wrap.addEventListener('click', doToggle);
+        wrap.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                doToggle();
+            }
+        });
+    }, 500);
+})();
+</script>
 
 <?php require VIEWS_PATH . 'shared/footer.php'; ?>

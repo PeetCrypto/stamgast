@@ -402,15 +402,34 @@ function renderPackagesGrid(tiers) {
     grid.innerHTML = tiers.map(tier => {
         const isActive = tier.is_active === 1;
         const topupEur = (tier.topup_amount_cents / 100).toFixed(0);
-        const hasDiscount = tier.alcohol_discount_perc > 0 || tier.food_discount_perc > 0;
+        const isBonus = tier.model_type === 'bonus';
 
-        return `
-        <div class="package-card ${isActive ? '' : 'is-inactive'}" data-tier-id="${tier.id}">
-            <div class="package-card__badge ${isActive ? 'package-card__badge--active' : 'package-card__badge--inactive'}"
-                 title="${isActive ? 'Actief' : 'Inactief'}"></div>
-            <div class="package-card__name">${tier.name}</div>
-            <div class="package-card__amount">&euro;${topupEur}</div>
-            <div class="package-card__discounts">
+        let discountHtml = '';
+        if (isBonus) {
+            // Bonus model: show bonus percentage + optional food discount
+            const bonusEur = (tier.topup_amount_cents * tier.bonus_percentage / 100 / 100).toFixed(0);
+            const totalEur = (tier.topup_amount_cents / 100 * (1 + tier.bonus_percentage / 100)).toFixed(0);
+            discountHtml = `
+                <div class="package-card__discount-row">
+                    <span class="package-card__discount-label">Stort</span>
+                    <span class="package-card__discount-value">€${topupEur}</span>
+                </div>
+                <div class="package-card__discount-row">
+                    <span class="package-card__discount-label">Tegoed</span>
+                    <span class="package-card__discount-value" style="color:var(--brand-color,#FFC107);">€${totalEur} <small style="opacity:0.7;">(+${bonusEur})</small></span>
+                </div>
+                ${tier.food_discount_perc > 0 ? `
+                <div class="package-card__discount-row">
+                    <span class="package-card__discount-label">Eten korting</span>
+                    <span class="package-card__discount-value">${tier.food_discount_perc}%</span>
+                </div>` : ''}
+                <div class="package-card__discount-row">
+                    <span class="package-card__discount-label">Punten</span>
+                    <span class="package-card__discount-value">${tier.points_multiplier}x</span>
+                </div>`;
+        } else {
+            // Discount model: show alcohol + food discounts
+            discountHtml = `
                 <div class="package-card__discount-row">
                     <span class="package-card__discount-label">Dranken korting</span>
                     <span class="package-card__discount-value">${tier.alcohol_discount_perc}%</span>
@@ -422,7 +441,21 @@ function renderPackagesGrid(tiers) {
                 <div class="package-card__discount-row">
                     <span class="package-card__discount-label">Punten</span>
                     <span class="package-card__discount-value">${tier.points_multiplier}x</span>
-                </div>
+                </div>`;
+        }
+
+        const modelBadge = isBonus
+            ? '<span style="font-size:0.7rem;background:rgba(76,175,80,0.15);color:#4CAF50;padding:2px 8px;border-radius:8px;">Bonus</span>'
+            : '<span style="font-size:0.7rem;background:rgba(255,193,7,0.15);color:#FFC107;padding:2px 8px;border-radius:8px;">Korting</span>';
+
+        return `
+        <div class="package-card ${isActive ? '' : 'is-inactive'}" data-tier-id="${tier.id}">
+            <div class="package-card__badge ${isActive ? 'package-card__badge--active' : 'package-card__badge--inactive'}"
+                 title="${isActive ? 'Actief' : 'Inactief'}"></div>
+            <div class="package-card__name">${tier.name} ${modelBadge}</div>
+            <div class="package-card__amount">€${topupEur}</div>
+            <div class="package-card__discounts">
+                ${discountHtml}
             </div>
             <div class="package-card__actions">
                 <button class="btn btn-sm btn-secondary btn-toggle-tier" data-id="${tier.id}" data-active="${isActive ? 0 : 1}">
@@ -457,22 +490,45 @@ function renderPackagesGrid(tiers) {
 function openTierModal(tierId) {
     const tier = tiersData.find(t => t.id === tierId);
     const isEdit = !!tier;
+    const modelType = tier?.model_type || 'discount';
 
     document.getElementById('tier-modal-title').textContent = isEdit ? `Bewerk: ${tier.name}` : 'Nieuw Pakket';
     document.getElementById('tier-id').value = tier?.id || '';
     document.getElementById('tier-name').value = tier?.name || '';
     document.getElementById('tier-topup-amount').value = tier ? tier.topup_amount_cents / 100 : 100;
     document.getElementById('tier-min-deposit').value = tier ? tier.min_deposit_cents / 100 : 0;
-    document.getElementById('tier-alc-discount').value = tier?.alcohol_discount_perc || 0;
-    document.getElementById('tier-food-discount').value = tier?.food_discount_perc || 0;
     document.getElementById('tier-multiplier').value = tier?.points_multiplier || 1;
     document.getElementById('tier-sort-order').value = tier?.sort_order ?? 0;
     document.getElementById('tier-is-active').checked = tier ? tier.is_active === 1 : true;
     document.getElementById('delete-tier-btn').style.display = isEdit ? 'inline-block' : 'none';
 
+    // Set model type radio
+    document.getElementById('model-discount').checked = (modelType === 'discount');
+    document.getElementById('model-bonus').checked = (modelType === 'bonus');
+    toggleModelFields(modelType);
+
+    // Set model-specific values
+    if (modelType === 'bonus') {
+        document.getElementById('tier-bonus-percentage').value = tier?.bonus_percentage || 10;
+        document.getElementById('tier-food-discount').value = tier?.food_discount_perc || 0;
+    } else {
+        document.getElementById('tier-alc-discount').value = tier?.alcohol_discount_perc || 0;
+        document.getElementById('tier-food-discount-d').value = tier?.food_discount_perc || 0;
+    }
+
     // Open modal overlay and modal
     document.getElementById('tier-modal-overlay').classList.add('modal-overlay--open');
     document.getElementById('tier-modal').classList.add('show');
+}
+
+function toggleModelFields(modelType) {
+    const isBonus = (modelType === 'bonus');
+    document.getElementById('bonus-fields').style.display = isBonus ? 'block' : 'none';
+    document.getElementById('discount-fields').style.display = isBonus ? 'none' : 'block';
+}
+
+function getSelectedModelType() {
+    return document.getElementById('model-bonus').checked ? 'bonus' : 'discount';
 }
 
 async function saveTier() {
@@ -488,17 +544,28 @@ async function saveTier() {
         return;
     }
 
+    const modelType = getSelectedModelType();
+
     const data = {
         tier_id: document.getElementById('tier-id').value,
         name: document.getElementById('tier-name').value,
+        model_type: modelType,
         topup_amount_cents: Math.round(topupEur * 100),
         min_deposit_cents: Math.round((parseFloat(document.getElementById('tier-min-deposit').value) || 0) * 100),
-        alcohol_discount_perc: parseFloat(document.getElementById('tier-alc-discount').value) || 0,
-        food_discount_perc: parseFloat(document.getElementById('tier-food-discount').value) || 0,
         points_multiplier: parseFloat(document.getElementById('tier-multiplier').value) || 1,
         sort_order: parseInt(document.getElementById('tier-sort-order').value) || 0,
         is_active: document.getElementById('tier-is-active').checked ? 1 : 0,
     };
+
+    if (modelType === 'bonus') {
+        data.bonus_percentage = parseFloat(document.getElementById('tier-bonus-percentage').value) || 0;
+        data.food_discount_perc = parseFloat(document.getElementById('tier-food-discount').value) || 0;
+        data.alcohol_discount_perc = 0; // Not allowed in bonus model
+    } else {
+        data.alcohol_discount_perc = parseFloat(document.getElementById('tier-alc-discount').value) || 0;
+        data.food_discount_perc = parseFloat(document.getElementById('tier-food-discount-d').value) || 0;
+        data.bonus_percentage = 0;
+    }
 
     try {
         const response = await window.REGULR.api('/admin/tiers', {
@@ -1408,6 +1475,10 @@ async function deleteTier(tierId) {
             const tierId = parseInt(document.getElementById('tier-id').value);
             if (tierId) deleteTier(tierId);
         });
+
+        // Model type radio toggle
+        document.getElementById('model-discount')?.addEventListener('change', () => toggleModelFields('discount'));
+        document.getElementById('model-bonus')?.addEventListener('change', () => toggleModelFields('bonus'));
         
         console.log('Admin initialized');
     }

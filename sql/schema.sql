@@ -88,8 +88,10 @@ CREATE TABLE IF NOT EXISTS `loyalty_tiers` (
     `name`                  VARCHAR(100)    NOT NULL,
     `min_deposit_cents`     BIGINT          DEFAULT 0 COMMENT 'Threshold to reach this tier',
     `topup_amount_cents`    INT             NOT NULL DEFAULT 10000 COMMENT 'Fixed top-up amount for this package (min 10000 = EUR100)',
-    `alcohol_discount_perc` DECIMAL(5,2)    DEFAULT 0.00 COMMENT 'Max 25% (legal limit)',
-    `food_discount_perc`    DECIMAL(5,2)    DEFAULT 0.00 COMMENT 'Max 100%',
+    `model_type`            ENUM('discount','bonus') NOT NULL DEFAULT 'discount' COMMENT 'discount = percentage discounts, bonus = deposit bonus credit',
+    `bonus_percentage`      DECIMAL(5,2)    NOT NULL DEFAULT 0.00 COMMENT 'Bonus % for bonus model (10 = deposit 100 get 110)',
+    `alcohol_discount_perc` DECIMAL(5,2)    DEFAULT 0.00 COMMENT 'Max 25% (legal limit), only for discount model',
+    `food_discount_perc`    DECIMAL(5,2)    DEFAULT 0.00 COMMENT 'Max 100%, works in both models',
     `points_multiplier`     DECIMAL(3,2)    DEFAULT 1.00 COMMENT 'Points multiplier',
     `is_active`             TINYINT(1)      NOT NULL DEFAULT 1 COMMENT '0 = package disabled by admin, 1 = active',
     `sort_order`            INT             NOT NULL DEFAULT 0 COMMENT 'Display order, lower = first',
@@ -97,6 +99,7 @@ CREATE TABLE IF NOT EXISTS `loyalty_tiers` (
     `updated_at`            TIMESTAMP       DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     INDEX `idx_tiers_tenant` (`tenant_id`),
+    INDEX `idx_model_type` (`tenant_id`, `model_type`),
     CONSTRAINT `fk_tiers_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenants`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

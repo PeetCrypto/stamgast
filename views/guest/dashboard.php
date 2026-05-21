@@ -21,9 +21,12 @@ $pointsCents = $wallet ? (int) $wallet['points_cents'] : 0;
 // Get account status for gated onboarding
 $userModel = new User($db);
 $accountStatus = $userModel->getAccountStatus($userId);
+$user = $userModel->findById($userId);
+$hasFcmToken = !empty($user['fcm_token']);
 $tenantModel = new Tenant($db);
 $tenant = $tenantModel->findById($tenantId);
 $verificationRequired = (bool) ($tenant['verification_required'] ?? true);
+$pointsEnabled = (bool) ($tenant['points_enabled'] ?? true);
 $isUnverified = ($accountStatus !== 'active' && $verificationRequired);
 ?>
 
@@ -36,7 +39,9 @@ $isUnverified = ($accountStatus !== 'active' && $verificationRequired);
     <div class="glass-card" style="padding: var(--space-xl); margin-bottom: var(--space-lg); border: 2px solid var(--accent-primary); text-align: center;">
         <p class="text-secondary text-sm">Je saldo</p>
         <p style="font-size: 48px; font-weight: 700; color: var(--accent-primary);">&euro; <?= number_format($balanceCents / 100, 2, ',', '.') ?></p>
+        <?php if ($pointsEnabled): ?>
         <p class="text-secondary text-sm" style="margin-top: var(--space-xs);"><?= number_format($pointsCents / 100, 0) ?> punten</p>
+        <?php endif; ?>
         <?php if (!$isUnverified): ?>
         <a href="<?= BASE_URL ?>/wallet" class="btn btn-primary" style="margin-top: var(--space-md);">Opwaarderen</a>
         <?php endif; ?>
@@ -73,6 +78,18 @@ $isUnverified = ($accountStatus !== 'active' && $verificationRequired);
         </p>
         <button id="pwa-ios-dismiss" class="btn btn-secondary btn-sm" style="margin-top: 0.5rem;">Begrepen</button>
     </div>
+
+    <?php if (!$hasFcmToken): ?>
+    <!-- Push Notificaties Activeren (iOS PWA + alle browsers) -->
+    <div id="push-enable-banner" class="glass-card" style="padding: var(--space-lg); margin-bottom: var(--space-lg); border: 2px solid rgba(76,175,80,0.4); background: rgba(76,175,80,0.06); text-align: center; display: none;">
+        <p style="font-size: 18px; font-weight: 600; margin-bottom: 0.5rem;">🔔 Notificaties aanzetten</p>
+        <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 1rem;">
+            Mis geen acties meer! Ontvang push berichten over je saldo, betalingen en aanbiedingen.
+        </p>
+        <button id="push-enable-btn" class="btn btn-primary" style="margin-right: 8px;">Notificaties aanzetten</button>
+        <button id="push-enable-dismiss" class="btn btn-secondary btn-sm">Liever niet</button>
+    </div>
+    <?php endif; ?>
 
     <!-- Quick Actions -->
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-md); margin-bottom: var(--space-xl);">
@@ -177,6 +194,64 @@ fetch((window.__BASE_URL || '') + '/api/notification/check', {
         }
     }
 }).catch(function() {});
+</script>
+
+<!-- Push Enable Banner — NA push.js zodat iOS Notification API beschikbaar is -->
+<script>
+(function() {
+    // Wacht even zodat iOS de Notification API beschikbaar maakt in PWA mode
+    setTimeout(function() {
+        var banner = document.getElementById('push-enable-banner');
+        if (!banner) return;
+
+        // Geen Notification support? Dan ook niet tonen
+        if (typeof Notification === 'undefined') return;
+        // Al geaccepteerd? Verbergen
+        if (Notification.permission === 'granted') return;
+        // Geblokkeerd? Verbergen
+        if (Notification.permission === 'denied') return;
+
+        // Permanent dismissed? (localStorage — persisteert over sessies heen)
+        try { if (localStorage.getItem('push_banner_dismissed') === '1') return; } catch(_) {}
+
+        banner.style.display = 'block';
+
+        var btn = document.getElementById('push-enable-btn');
+        var dismissBtn = document.getElementById('push-enable-dismiss');
+
+        if (btn) btn.addEventListener('click', function() {
+            // Use FCMHandler.subscribe() → permission + FCM token + DB
+            if (window.FCMHandler && window.FCMHandler.subscribe) {
+                window.FCMHandler.subscribe().then(function(result) {
+                    if (result.granted) {
+                        banner.style.display = 'none';
+                    } else {
+                        banner.style.display = 'none';
+                        try { localStorage.setItem('push_banner_dismissed', '1'); } catch(_) {}
+                        if (result.reason === 'denied') {
+                            try { localStorage.setItem('push_disabled', '1'); } catch(_) {}
+                        }
+                    }
+                });
+            } else {
+                // Fallback: direct permission request
+                Notification.requestPermission().then(function(permission) {
+                    banner.style.display = 'none';
+                    if (permission !== 'granted') {
+                        try { localStorage.setItem('push_banner_dismissed', '1'); } catch(_) {}
+                    }
+                });
+            }
+        });
+
+        if (dismissBtn) dismissBtn.addEventListener('click', function() {
+            banner.style.display = 'none';
+            try { localStorage.setItem('push_banner_dismissed', '1'); } catch(_) {}
+            // Also set push_disabled so push.js doesn't auto-subscribe later
+            try { localStorage.setItem('push_disabled', '1'); } catch(_) {}
+        });
+    }, 1000);
+})();
 </script>
 
 <?php require VIEWS_PATH . 'shared/footer.php'; ?>

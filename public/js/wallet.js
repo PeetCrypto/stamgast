@@ -144,10 +144,15 @@
 
         container.innerHTML = '<div class="deposit-options">' + packages.map(function(pkg) {
             const amount = (pkg.topup_amount_cents / 100).toFixed(0);
+            const isBonus = (pkg.model_type === 'bonus');
 
-            // Build discount info lines
+            // Build perk info lines
             var perks = [];
-            if (pkg.alcohol_discount_perc > 0) {
+            if (isBonus && pkg.bonus_percentage > 0) {
+                const totalEur = (pkg.topup_amount_cents * (1 + pkg.bonus_percentage / 100) / 100).toFixed(0);
+                perks.push('€' + totalEur + ' tegoed');
+            }
+            if (!isBonus && pkg.alcohol_discount_perc > 0) {
                 perks.push(pkg.alcohol_discount_perc + '% dranken korting');
             }
             if (pkg.food_discount_perc > 0) {
@@ -162,9 +167,13 @@
                 perksHtml = '<span class="deposit-option__perks">' + perks.join(' &bull; ') + '</span>';
             }
 
+            var bonusBadge = isBonus
+                ? '<span style="font-size:0.65rem;background:rgba(76,175,80,0.2);color:#4CAF50;padding:2px 6px;border-radius:6px;">Bonus</span> '
+                : '';
+
             return '<button class="btn btn-deposit-option" data-amount="' + pkg.topup_amount_cents + '">' +
                 '<span class="deposit-option__amount">&euro;' + amount + '</span>' +
-                '<span class="deposit-option__name">' + pkg.name + '</span>' +
+                '<span class="deposit-option__name">' + bonusBadge + pkg.name + '</span>' +
                 perksHtml +
             '</button>';
         }).join('') + '</div>';

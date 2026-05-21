@@ -56,7 +56,7 @@ INSERT INTO `wallets` (`user_id`, `tenant_id`, `balance_cents`, `points_cents`) 
 -- 4. LOYALTY TIERS (Packages)
 -- -------------------------------------------------------------------------
 INSERT INTO `loyalty_tiers` (`tenant_id`, `name`, `min_deposit_cents`, `topup_amount_cents`, `alcohol_discount_perc`, `food_discount_perc`, `points_multiplier`, `is_active`, `sort_order`) VALUES
-(1, 'Bronze',    0,       5000,   0.00,  0.00, 1.00, 1, 1),
+(1, 'Bronze',    0,       10000,  0.00,  0.00, 1.00, 1, 1),
 (1, 'Silver',   10000,  10000,   5.00,  5.00, 1.25, 1, 2),
 (1, 'Gold',     50000,  25000,  10.00, 10.00, 1.50, 1, 3),
 (1, 'Platinum', 200000, 50000,  20.00, 15.00, 2.00, 1, 4);

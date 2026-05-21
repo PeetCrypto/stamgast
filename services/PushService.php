@@ -70,6 +70,17 @@ class PushService
         ]);
     }
 
+    /**
+     * Remove FCM token for user (guest disables push notifications)
+     */
+    public function removeFcmToken(int $userId): bool
+    {
+        $stmt = $this->db->prepare("UPDATE users SET fcm_token = NULL WHERE id = :user_id");
+        return $stmt->execute([
+            ':user_id' => $userId
+        ]);
+    }
+
     // ── Send to individual user ─────────────────────────────────────
 
     /**

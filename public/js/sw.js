@@ -13,7 +13,7 @@
 importScripts('https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js');
 importScripts('https://www.gstatic.com/firebasejs/8.10.1/firebase-messaging.js');
 
-const CACHE_VERSION = 'regulr-shell-v4';
+const CACHE_VERSION = 'regulr-shell-v7';
 
 // ============================================
 // FIREBASE INITIALIZATION (v8 style)

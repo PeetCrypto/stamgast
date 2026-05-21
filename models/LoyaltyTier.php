@@ -18,6 +18,13 @@ class LoyaltyTier
     /** Minimum top-up amount in cents (€100) */
     public const MIN_TOPUP_CENTS = 10000;
 
+    /** Model type constants */
+    public const MODEL_DISCOUNT = 'discount';
+    public const MODEL_BONUS    = 'bonus';
+
+    /** Maximum bonus percentage */
+    public const BONUS_MAX = 100;
+
     public function __construct(PDO $db)
     {
         $this->db = $db;
@@ -80,10 +87,12 @@ class LoyaltyTier
         $stmt = $this->db->prepare(
             'INSERT INTO `loyalty_tiers`
              (`tenant_id`, `name`, `min_deposit_cents`, `topup_amount_cents`,
+              `model_type`, `bonus_percentage`,
               `alcohol_discount_perc`, `food_discount_perc`, `points_multiplier`,
               `is_active`, `sort_order`)
              VALUES
              (:tenant_id, :name, :min_deposit_cents, :topup_amount_cents,
+              :model_type, :bonus_percentage,
               :alcohol_discount_perc, :food_discount_perc, :points_multiplier,
               :is_active, :sort_order)'
         );
@@ -93,6 +102,8 @@ class LoyaltyTier
             ':name'                  => $data['name'],
             ':min_deposit_cents'     => $data['min_deposit_cents'] ?? 0,
             ':topup_amount_cents'    => $data['topup_amount_cents'] ?? self::MIN_TOPUP_CENTS,
+            ':model_type'            => $data['model_type'] ?? self::MODEL_DISCOUNT,
+            ':bonus_percentage'      => $data['bonus_percentage'] ?? 0,
             ':alcohol_discount_perc' => $data['alcohol_discount_perc'] ?? 0,
             ':food_discount_perc'    => $data['food_discount_perc'] ?? 0,
             ':points_multiplier'     => $data['points_multiplier'] ?? 1.00,
@@ -113,6 +124,7 @@ class LoyaltyTier
 
         $allowedFields = [
             'name', 'min_deposit_cents', 'topup_amount_cents',
+            'model_type', 'bonus_percentage',
             'alcohol_discount_perc', 'food_discount_perc', 'points_multiplier',
             'is_active', 'sort_order',
         ];
@@ -158,28 +170,37 @@ class LoyaltyTier
     /**
      * Determine the active tier for a user based on their total deposits
      *
-     * Returns the highest tier where min_deposit_cents <= totalDeposits.
-     * If no tiers are configured, returns a default tier with no discounts.
+     * Returns the highest ACTIVE tier where min_deposit_cents <= totalDeposits.
+     * If no tiers are configured OR no tier qualifies, returns a default tier
+     * with no discounts (0% alcohol, 0% food, 1x multiplier).
+     *
+     * Only considers tiers where is_active = 1. Inactive tiers are ignored
+     * so that admin deactivation takes immediate effect on discounts.
      */
     public function determineTier(int $tenantId, int $totalDepositCents): array
     {
-        $tiers = $this->getByTenant($tenantId);
+        // Default tier: no discounts, 1x multiplier — used as fallback
+        $defaultTier = [
+            'id'                    => 0,
+            'name'                  => 'Standaard',
+            'min_deposit_cents'     => 0,
+            'topup_amount_cents'    => self::MIN_TOPUP_CENTS,
+            'model_type'            => self::MODEL_DISCOUNT,
+            'bonus_percentage'      => 0.00,
+            'alcohol_discount_perc' => 0.00,
+            'food_discount_perc'    => 0.00,
+            'points_multiplier'     => 1.00,
+        ];
+
+        // Only use ACTIVE tiers — inactive tiers should not grant discounts
+        $tiers = $this->getActiveByTenant($tenantId);
 
         if (empty($tiers)) {
-            // Default tier: no discounts, 1x multiplier
-            return [
-                'id'                    => 0,
-                'name'                  => 'Standaard',
-                'min_deposit_cents'     => 0,
-                'topup_amount_cents'    => self::MIN_TOPUP_CENTS,
-                'alcohol_discount_perc' => 0.00,
-                'food_discount_perc'    => 0.00,
-                'points_multiplier'     => 1.00,
-            ];
+            return $defaultTier;
         }
 
-        // Find highest qualifying tier
-        $activeTier = $tiers[0]; // lowest tier as fallback
+        // Find highest qualifying tier, starting from default (no discount)
+        $activeTier = $defaultTier;
         foreach ($tiers as $tier) {
             if ($totalDepositCents >= (int) $tier['min_deposit_cents']) {
                 $activeTier = $tier;

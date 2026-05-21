@@ -58,7 +58,7 @@ define('FIREBASE_PUBLIC_KEY', VAPID_PUBLIC_KEY);
 define('FIREBASE_SERVER_KEY', getenv('FIREBASE_SERVER_KEY') ?: '3D96caBCj6aoJoQIvgVELAnYL7GHps7xkyX70hn5Bks');
 
 // --- WALLET LIMITS ---
-define('DEPOSIT_MIN_CENTS', 500);    // 5 euro minimum
+define('DEPOSIT_MIN_CENTS', 10000);  // €100 minimum (consistent met LoyaltyTier::MIN_TOPUP_CENTS)
 define('DEPOSIT_MAX_CENTS', 50000);  // 500 euro maximum
 
 // --- DISCOUNT LIMITS ---

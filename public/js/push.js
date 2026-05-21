@@ -2,15 +2,14 @@
  * REGULR.vip — Push Notification System
  *
  * Combineert Firebase Cloud Messaging (real-time push) met
- * polling fallback ( elke 30s /api/notification/check).
+ * polling fallback (elke 30s /api/notification/check).
  *
  * Flow:
  * 1. Registreer service worker (/sw.js)
- * 2. Vraag notification permission aan
- * 3. Genereer FCM token via firebase.messaging().getToken()
- * 4. POST token naar /api/push/subscribe
- * 5. Luister naar foreground messages via onMessage()
- * 6. Polling als fallback voor non-push browsers
+ * 2. Als permission al granted → direct FCM token ophalen
+ * 3. Luister naar foreground messages via onMessage()
+ * 4. Polling als fallback voor non-push browsers
+ * 5. FCMHandler.subscribe() — toggle kan dit aanroepen om permission + token te regelen
  */
 
 (function() {
@@ -21,32 +20,71 @@
     var POLL_URL = (window.__BASE_URL || '') + '/api/notification/check';
     var SUBSCRIBE_URL = (window.__BASE_URL || '') + '/api/push/subscribe';
     var CONFIG_URL = (window.__BASE_URL || '') + '/api/push/config';
-    
-    // Default fallback VAPID key (will be overwritten by API config)
-    var VAPID_KEY = '';
 
+    var VAPID_KEY = '';
     var lastUnreadCount = 0;
     var lastSeenIds = {};
     var polling = false;
     var pollTimer = null;
     var fcmTokenSent = false;
-    var fcmInitialized = false;
+    var onMessageSetup = false;
+    var swRegistration = null;
+
+    // Load previously seen notification IDs from localStorage to prevent
+    // re-showing the same notification on every page navigation
+    try {
+        var stored = localStorage.getItem('push_seen_ids');
+        if (stored) lastSeenIds = JSON.parse(stored);
+    } catch(_) {}
+
+    function saveSeenIds() {
+        try {
+            // Prune: keep max 200 entries to prevent localStorage bloat
+            var keys = Object.keys(lastSeenIds);
+            if (keys.length > 200) {
+                var keep = keys.slice(-100);
+                var pruned = {};
+                for (var i = 0; i < keep.length; i++) {
+                    pruned[keep[i]] = true;
+                }
+                lastSeenIds = pruned;
+            }
+            localStorage.setItem('push_seen_ids', JSON.stringify(lastSeenIds));
+        } catch(_) {}
+    }
 
     console.log('[Push] System loaded');
 
-    // Fetch config and then init
+    // ════════════════════════════════════════════════════════════
+    // CONFIG FETCH
+    // ════════════════════════════════════════════════════════════
+
     fetch(CONFIG_URL)
-        .then(r => r.json())
-        .then(config => {
+        .then(function(r) { return r.json(); })
+        .then(function(config) {
             if (config.success && config.data.vapid_key) {
                 VAPID_KEY = config.data.vapid_key;
                 console.log('[Push] VAPID key loaded from server');
             }
-            initFCM();
+    // Auto-init: if permission already granted AND user hasn't disabled, get token
+    if (Notification.permission === 'granted') {
+        var pushDisabled = false;
+        try { pushDisabled = localStorage.getItem('push_disabled') === '1'; } catch(_) {}
+        if (!pushDisabled) {
+            ensureSWAndGetToken();
+        } else {
+            console.log('[Push] User disabled notifications — skipping auto-subscribe');
+        }
+    }
         })
-        .catch(err => {
-            console.warn('[Push] Could not fetch FCM config, using default VAPID');
-            initFCM();
+        .catch(function() {
+            if (Notification.permission === 'granted') {
+                var pushDisabled = false;
+                try { pushDisabled = localStorage.getItem('push_disabled') === '1'; } catch(_) {}
+                if (!pushDisabled) {
+                    ensureSWAndGetToken();
+                }
+            }
         });
 
     // ════════════════════════════════════════════════════════════
@@ -54,130 +92,91 @@
     // ════════════════════════════════════════════════════════════
 
     function registerServiceWorker() {
-        var swUrl = (window.__BASE_URL || '') + '/sw.js';
+        if (swRegistration) return Promise.resolve(swRegistration);
 
-
-        // Als er al een controller is, return ready promise
-        if (navigator.serviceWorker.controller) {
-            return navigator.serviceWorker.ready;
-        }
-
-        // Registreer de service worker
-        return navigator.serviceWorker.register(swUrl, { scope: '/' })
-            .then(function(reg) {
-                console.log('[Push] SW registered, scope:', reg.scope);
-                return navigator.serviceWorker.ready;
-            });
-    }
-
-    // ════════════════════════════════════════════════════════════
-    // FCM — Firebase Cloud Messaging
-    // ════════════════════════════════════════════════════════════
-
-    function initFCM() {
-        // Guard against double init (called from both config fetch and init())
-        if (fcmInitialized) return;
-        fcmInitialized = true;
-
-        // Check of Firebase beschikbaar is
-        if (typeof firebase === 'undefined' || !firebase.messaging) {
-            console.warn('[Push] Firebase SDK niet geladen, polling only');
-            return;
-        }
-
-        // Check browser support
         if (!('serviceWorker' in navigator)) {
             console.warn('[Push] Geen Service Worker support');
-            return;
+            return Promise.reject(new Error('No SW support'));
         }
 
-        if (!('PushManager' in window)) {
-            console.warn('[Push] Geen Push API support');
-            return;
-        }
+        var swUrl = (window.__BASE_URL || '') + '/sw.js';
 
-        // Stap 1: Zorg dat service worker geregistreerd is
-        registerServiceWorker().then(function(registration) {
-            console.log('[Push] Service worker ready');
-            
-            // Firebase v10 compat: geen useServiceWorker() nodig
-            // Geef registration mee aan getToken() via serviceWorkerRegistration optie
-            return requestPermissionAndgetToken(registration);
-        }).catch(function(err) {
-            console.warn('[Push] Service worker setup failed:', err.message);
+        return navigator.serviceWorker.ready.then(function(reg) {
+            swRegistration = reg;
+            console.log('[Push] SW already ready, scope:', reg.scope);
+            return reg;
+        }).catch(function() {
+            return navigator.serviceWorker.register(swUrl, { scope: '/' })
+                .then(function(reg) {
+                    swRegistration = reg;
+                    console.log('[Push] SW registered, scope:', reg.scope);
+                    return navigator.serviceWorker.ready;
+                });
+        }).then(function(reg) {
+            swRegistration = reg;
+            return reg;
         });
     }
 
-    function requestPermissionAndgetToken(registration) {
-        const messaging = firebase.messaging();
+    // ════════════════════════════════════════════════════════════
+    // FCM TOKEN
+    // ════════════════════════════════════════════════════════════
 
-        // Stap 5: Luister naar foreground messages (als app open is)
-        // Deze listener moet vroeg gezet worden, ongeacht permission status
+    function setupOnMessageListener() {
+        if (onMessageSetup) return;
+        if (typeof firebase === 'undefined' || !firebase.messaging) return;
+        onMessageSetup = true;
+
+        var messaging = firebase.messaging();
         messaging.onMessage(function(payload) {
             console.log('[Push] Foreground message:', payload);
 
-            var title = 'REGULR.vip';
-            var body = '';
-            var url = (window.__BASE_URL || '') + '/inbox';
-
-            if (payload.notification) {
-                title = payload.notification.title || title;
-                body = payload.notification.body || '';
-            }
-            if (payload.data) {
-                if (payload.data.title) title = payload.data.title;
-                if (payload.data.body) body = payload.data.body;
-                if (payload.data.url) url = payload.data.url;
-            }
-
-            showBrowserNotification(title, body, '/icons/favicon.png', 'fcm-' + Date.now(), url);
+            // Don't show browser notification — the service worker (firebase-messaging-sw.js)
+            // already handles background/foreground display for notification payloads.
+            // Just refresh the badge count so the user sees the new unread count.
+            checkNotifications();
         });
-
-        // Stap 2: Vraag permission aan (indien nog niet gevraagd)
-        if (Notification.permission === 'default') {
-            console.log('[Push] Requesting notification permission...');
-            Notification.requestPermission().then(function(permission) {
-                console.log('[Push] Permission:', permission);
-                if (permission === 'granted') {
-                    getTokenAndSend(messaging, registration);
-                }
-            }).catch(function(err) {
-                console.warn('[Push] Permission request failed:', err);
-            });
-        } else if (Notification.permission === 'granted') {
-            // Al toegestaan — direct token ophalen
-            getTokenAndSend(messaging, registration);
-        } else {
-            console.log('[Push] Notification permission denied');
-        }
     }
 
-    function getTokenAndSend(messaging, registration) {
-        // Stap 3: Genereer FCM token
-        console.log('[Push] Requesting FCM token with VAPID key...');
-        
-        messaging.getToken({
-            vapidKey: VAPID_KEY
-        }).then(function(token) {
+    function ensureSWAndGetToken() {
+        setupOnMessageListener();
+
+        if (typeof firebase === 'undefined' || !firebase.messaging) {
+            console.warn('[Push] Firebase SDK niet geladen');
+            return;
+        }
+
+        registerServiceWorker().then(function() {
+            getFCMToken();
+        }).catch(function(err) {
+            console.warn('[Push] SW setup failed:', err.message);
+        });
+    }
+
+    function getFCMToken() {
+        if (!VAPID_KEY) {
+            console.warn('[Push] Geen VAPID key beschikbaar');
+            return;
+        }
+
+        var messaging = firebase.messaging();
+        console.log('[Push] Requesting FCM token...');
+
+        messaging.getToken({ vapidKey: VAPID_KEY }).then(function(token) {
             if (token) {
                 console.log('[Push] ✅ FCM token ontvangen:', token.substring(0, 30) + '...');
-                // Stap 4: Stuur token naar server
                 sendTokenToServer(token);
             } else {
                 console.warn('[Push] Geen FCM token ontvangen (null)');
             }
         }).catch(function(err) {
-            // err can be undefined — guard against property access on undefined
-            var errMsg = (err && err.message) ? err.message : 'unknown error';
-            var errCode = (err && err.code) ? err.code : 'UNKNOWN';
-            console.warn('[Push] getToken failed:', errCode, errMsg);
-            // Token will be retried on next page load; no point retrying with same params
+            var msg = (err && err.message) ? err.message : 'unknown';
+            console.warn('[Push] getToken failed:', msg);
         });
     }
 
     function sendTokenToServer(token) {
-        if (fcmTokenSent) return;
-
+        // Always send — even if sent before, token might have changed
         fetch(SUBSCRIBE_URL, {
             method: 'POST',
             credentials: 'same-origin',
@@ -193,7 +192,7 @@
         })
         .then(function(result) {
             if (result.success) {
-                console.log('[Push] Token opgeslagen op server');
+                console.log('[Push] ✅ Token opgeslagen op server');
                 fcmTokenSent = true;
             } else {
                 console.warn('[Push] Token opslaan faalde:', result.error || 'unknown');
@@ -210,33 +209,36 @@
     }
 
     // ════════════════════════════════════════════════════════════
-    // BROWSER NOTIFICATIONS
+    // SHOW NOTIFICATION (browser + toast fallback)
     // ════════════════════════════════════════════════════════════
 
-    function showBrowserNotification(title, body, icon, tag, url) {
-        if (typeof Notification === 'undefined') return;
-        if (Notification.permission !== 'granted') return;
+    function showNotification(title, body, icon, tag, url) {
+        // Try browser notification first
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+            try {
+                var notif = new Notification(title, {
+                    body: body,
+                    icon: icon || '/icons/favicon.png',
+                    badge: '/icons/favicon.png',
+                    tag: tag || 'regulr-notification',
+                    renotify: true,
+                    vibrate: [100, 50, 100],
+                    data: { url: url || (window.__BASE_URL || '') + '/inbox' }
+                });
 
-        try {
-            var notif = new Notification(title, {
-                body: body,
-                icon: icon || '/icons/favicon.png',
-                badge: '/icons/favicon.png',
-                tag: tag || 'regulr-notification',
-                renotify: true,
-                vibrate: [100, 50, 100],
-                data: { url: url || (window.__BASE_URL || '') + '/inbox' }
-            });
-
-            notif.onclick = function() {
-                window.focus();
-                window.location.href = notif.data.url;
-                notif.close();
-            };
-        } catch (e) {
-            console.warn('[Push] Browser notification failed:', e.message);
-            showInAppToast(title, body);
+                notif.onclick = function() {
+                    window.focus();
+                    window.location.href = notif.data.url;
+                    notif.close();
+                };
+                return; // Success — no need for toast
+            } catch (e) {
+                console.warn('[Push] Browser notification failed:', e.message);
+            }
         }
+
+        // Fallback: always show in-app toast
+        showInAppToast(title, body);
     }
 
     // ════════════════════════════════════════════════════════════
@@ -259,27 +261,21 @@
             var unreadCount = data.unread_count || 0;
             var notifications = data.notifications || [];
 
+            // Always update badge count
             updateBadge(unreadCount);
 
-            var newNotifs = [];
+            // Track seen IDs so we don't re-process (persisted in localStorage)
+            var hadNew = false;
             for (var i = 0; i < notifications.length; i++) {
                 var id = notifications[i].id;
                 if (!lastSeenIds[id]) {
-                    newNotifs.push(notifications[i]);
                     lastSeenIds[id] = true;
+                    hadNew = true;
                 }
             }
-
-            if (newNotifs.length > 0) {
-                console.log('[Push] ' + newNotifs.length + ' new notification(s) via poll');
-                var n = newNotifs[0];
-                var title = n.title || 'Nieuwe notificatie';
-                var body = n.body || '';
-                var extraCount = newNotifs.length - 1;
-                if (extraCount > 0) {
-                    body += ' (nog ' + extraCount + ' meer)';
-                }
-                showBrowserNotification(title, body, '/icons/favicon.png', 'poll-' + n.id);
+            if (hadNew) {
+                saveSeenIds();
+                console.log('[Push] Badge updated, ' + unreadCount + ' unread');
             }
 
             lastUnreadCount = unreadCount;
@@ -306,7 +302,7 @@
     }
 
     // ════════════════════════════════════════════════════════════
-    // IN-APP TOAST
+    // IN-APP TOAST (fallback when browser notifications unavailable)
     // ════════════════════════════════════════════════════════════
 
     function showInAppToast(title, body) {
@@ -385,7 +381,6 @@
 
         if (isPublic || isJoin) return;
 
-        // Only start polling here; FCM init is handled by the config fetch above
         startPolling();
     }
 
@@ -395,12 +390,54 @@
         init();
     }
 
-    // Public API
+    // ════════════════════════════════════════════════════════════
+    // PUBLIC API — gebruikt door profile toggle & dashboard banner
+    // ════════════════════════════════════════════════════════════
+
     window.FCMHandler = {
         isPolling: true,
         check: checkNotifications,
         start: startPolling,
         stop: stopPolling,
-        initFCM: initFCM
+
+        /**
+         * subscribe() — Request permission, get FCM token, store in DB
+         * Called by profile toggle (enable) and dashboard banner
+         * Returns a Promise that resolves with { granted: true/false }
+         */
+        subscribe: function() {
+            return new Promise(function(resolve) {
+                if (typeof Notification === 'undefined') {
+                    resolve({ granted: false, reason: 'unsupported' });
+                    return;
+                }
+
+                console.log('[Push] subscribe() — requesting permission...');
+                Notification.requestPermission().then(function(permission) {
+                    console.log('[Push] Permission result:', permission);
+
+                    if (permission === 'granted') {
+                        // Clear disabled flag so auto-subscribe works again
+                        try { localStorage.removeItem('push_disabled'); } catch(_) {}
+                        setupOnMessageListener();
+                        ensureSWAndGetToken();
+                        resolve({ granted: true });
+                    } else {
+                        resolve({ granted: false, reason: permission });
+                    }
+                }).catch(function(err) {
+                    console.warn('[Push] Permission request error:', err);
+                    resolve({ granted: false, reason: 'error' });
+                });
+            });
+        },
+
+        /**
+         * getPermissionStatus() — Check current browser permission
+         */
+        getPermissionStatus: function() {
+            if (typeof Notification === 'undefined') return 'unsupported';
+            return Notification.permission;
+        }
     };
 })();

@@ -89,13 +89,17 @@ class WalletService
         $tierModel = new LoyaltyTier($this->db);
         $tier = $tierModel->determineTier($tenantId, $totalDeposits);
 
+        // Check if points are enabled for this tenant
+        $tenant = $this->tenantModel->findById($tenantId);
+        $pointsEnabled = (bool) ($tenant['points_enabled'] ?? true);
+
         return [
             'balance_cents' => (int) $wallet['balance_cents'],
-            'points_cents'  => (int) $wallet['points_cents'],
-            'tier'          => [
+            'points_cents'  => $pointsEnabled ? (int) $wallet['points_cents'] : 0,
+            'tier'          => $pointsEnabled ? [
                 'name'              => $tier['name'],
                 'points_multiplier' => (float) $tier['points_multiplier'],
-            ],
+            ] : null,
         ];
     }
 
@@ -217,6 +221,7 @@ class WalletService
         // ═══════════════════════════════════════════════════════════════
         if ($isMock) {
             $this->processDeposit($payment['payment_id'], $amountCents);
+            // Note: processDeposit() already sends notification to guest — no duplicate needed
 
             // Audit log
             $audit = new Audit($this->db);
@@ -232,18 +237,6 @@ class WalletService
                     'mollie_payment_id' => $payment['payment_id'],
                 ]
             );
-
-            // Send notification + email to guest (non-critical)
-            try {
-                require_once __DIR__ . '/NotificationService.php';
-                $notifService = new NotificationService($this->db);
-                $notifService->notifyTransaction(
-                    $userId, $tenantId, $transactionId, 'deposit', $amountCents,
-                    ['description' => 'Opwaardering wallet']
-                );
-            } catch (\Throwable $e) {
-                error_log('Notification after deposit failed: ' . $e->getMessage());
-            }
 
             return [
                 'checkout_url'   => null,
@@ -284,6 +277,9 @@ class WalletService
      * Process a completed deposit (called by webhook)
      * Credits the wallet for a confirmed Mollie payment
      *
+     * BONUS MODEL: If the user's active tier is a bonus model,
+     * the bonus percentage is added to the credited amount.
+     *
      * @return bool True if deposit was processed, false if already processed
      * @throws \RuntimeException on DB error
      */
@@ -313,12 +309,49 @@ class WalletService
             throw new \RuntimeException('Platform fee record niet gevonden voor transaction ID: ' . $transactionId);
         }
 
-        // Atomic: credit wallet balance (GROSS amount — guest gets full value)
+        // ── BONUS CALCULATION ──────────────────────────────────────
+        // If the user's tier is a bonus model, add the bonus to the deposit.
+        $bonusCents = 0;
+        $creditAmount = $amountCents;
+
+        try {
+            $totalDeposits = $this->transactionModel->getTotalDeposits($userId, $tenantId);
+            $tierModel = new LoyaltyTier($this->db);
+            $tier = $tierModel->determineTier($tenantId, $totalDeposits);
+
+            if (($tier['model_type'] ?? LoyaltyTier::MODEL_DISCOUNT) === LoyaltyTier::MODEL_BONUS
+                && ($tier['bonus_percentage'] ?? 0) > 0
+            ) {
+                $bonusCents = (int) floor($amountCents * (float) $tier['bonus_percentage'] / 100);
+                $creditAmount = $amountCents + $bonusCents;
+            }
+        } catch (\Throwable $e) {
+            // Non-critical: if tier lookup fails, just credit the base amount
+            error_log('Bonus calculation failed, crediting base amount: ' . $e->getMessage());
+        }
+
+        // Atomic: credit wallet balance
         try {
             $this->db->beginTransaction();
 
-            // Credit wallet
+            // Credit wallet (base amount)
             $this->walletModel->updateBalance($userId, $amountCents, 0);
+
+            // Credit bonus separately (if applicable)
+            if ($bonusCents > 0) {
+                $this->walletModel->updateBalance($userId, $bonusCents, 0);
+
+                // Create a separate bonus transaction record for transparency
+                $this->transactionModel->create([
+                    'tenant_id'          => $tenantId,
+                    'user_id'            => $userId,
+                    'bartender_id'       => null,
+                    'type'               => 'bonus',
+                    'final_total_cents'  => $bonusCents,
+                    'ip_address'         => getClientIP(),
+                    'description'        => 'Opwaardeerbonus (' . $tier['bonus_percentage'] . '% op €' . centsToEuro($amountCents) . ')',
+                ]);
+            }
 
             // Mark platform fee as deposit processed (idempotency guard)
             $stmt = $this->db->prepare('UPDATE `platform_fees` SET `deposit_processed_at` = NOW() WHERE `id` = :id');
@@ -332,7 +365,7 @@ class WalletService
                 $notifService = new NotificationService($this->db);
                 $notifService->notifyTransaction(
                     $userId, $tenantId, $transactionId, 'deposit', $amountCents,
-                    ['description' => 'Opwaardering wallet']
+                    ['description' => 'Opwaardering wallet' . ($bonusCents > 0 ? ' (incl. €' . centsToEuro($bonusCents) . ' bonus)' : '')]
                 );
             } catch (\Throwable $e) {
                 error_log('Notification after deposit failed: ' . $e->getMessage());
