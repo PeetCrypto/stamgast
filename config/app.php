@@ -48,6 +48,9 @@ define('WEBAUTHN_USER_VERIFICATION', 'required');   // Forceer FaceID/fingerprin
 define('QR_EXPIRY_SECONDS', 60);
 define('QR_NONCE_LENGTH', 8); // bytes for random_bytes()
 
+// --- POS PAYMENT SESSION ---
+define('POS_SESSION_EXPIRY_SECONDS', 300); // 5 minuten geldig
+
 // --- MOLLIE CONNECT (Platform-level) ---
 // ⚠️ SECURITY: Platform API key ONLY in server environment, NEVER in database
 // Tenant Mollie keys are DEPRECATED — all payments go through Mollie Connect
@@ -77,6 +80,10 @@ define('FIREBASE_SERVER_KEY', getenv('FIREBASE_SERVER_KEY') ?: '3D96caBCj6aoJoQI
 // --- WALLET LIMITS ---
 define('DEPOSIT_MIN_CENTS', 10000);  // €100 minimum (consistent met LoyaltyTier::MIN_TOPUP_CENTS)
 define('DEPOSIT_MAX_CENTS', 50000);  // 500 euro maximum
+
+// --- BTW TARIEVEN (NL 2025) ---
+define('BTW_ALCOHOL_PERCENTAGE', 21); // Alcoholische dranken
+define('BTW_FOOD_PERCENTAGE', 9);     // Voeding
 
 // --- DISCOUNT LIMITS ---
 define('ALCOHOL_DISCOUNT_MAX', 25);  // 25% hard cap (Dutch law)

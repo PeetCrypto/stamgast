@@ -31,10 +31,13 @@ $db = Database::getInstance()->getConnection();
 $pushService = new PushService($db);
 
 try {
-    // Store FCM token for user
+    // Store FCM token for user AND set push_enabled = 1
     $success = $pushService->storeFcmToken($userId, $fcmToken);
-
     if ($success) {
+        // Also set push_enabled in users table
+        $stmt = $db->prepare("UPDATE users SET push_enabled = 1 WHERE id = :user_id");
+        $stmt->execute([':user_id' => $userId]);
+        
         (new Audit($db))->log(
             $tenantId,
             $userId,
@@ -44,7 +47,8 @@ try {
         );
 
         Response::success([
-            'message' => 'FCM token stored successfully'
+            'message' => 'FCM token stored successfully',
+            'push_enabled' => 1,
         ]);
     } else {
         Response::error('Failed to store FCM token', 'DB_ERROR', 500);

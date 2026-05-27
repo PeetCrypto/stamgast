@@ -28,19 +28,24 @@ class Response
 
     /**
      * Send an error JSON response
+     * @param array|null $data Optional extra data (e.g. tenant_slug hint for redirects)
      */
-    public static function error(string $message, string $code = 'ERROR', int $statusCode = 400): void
+    public static function error(string $message, string $code = 'ERROR', int $statusCode = 400, ?array $data = null): void
     {
         while (ob_get_level() > 0) {
             ob_end_clean();
         }
         http_response_code($statusCode);
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode([
+        $response = [
             'success' => false,
             'error'   => $message,
             'code'    => $code,
-        ], JSON_THROW_ON_ERROR);
+        ];
+        if ($data !== null) {
+            $response['data'] = $data;
+        }
+        echo json_encode($response, JSON_THROW_ON_ERROR);
         exit;
     }
 

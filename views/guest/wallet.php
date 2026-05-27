@@ -90,12 +90,12 @@ require __DIR__ . '/../shared/header.php';
         <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 1rem;">
             Hoi! Om je wallet te activeren en saldo te storten, moet je eenmalig je ID laten zien bij de bar. Zo houden we het veilig en legaal.
         </p>
-        <a href="<?= BASE_URL ?>/qr" class="btn btn-outline" style="border-color: #FFC107; color: #FFC107;">
+        <a href="<?= BASE_URL ?>/pay" class="btn btn-outline" style="border-color: #FFC107; color: #FFC107;">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px;">
-                <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-                <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="3" height="3"/>
+                <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+                <polyline points="9 22 9 12 15 12 15 22"/>
             </svg>
-            Laat je QR zien aan de bar
+            Ga naar de bar
         </a>
     </div>
     <?php endif; ?>
@@ -126,18 +126,12 @@ require __DIR__ . '/../shared/header.php';
 
     <!-- Quick Actions -->
     <div class="quick-actions">
-        <a href="<?= BASE_URL ?>/qr" class="btn btn-outline">
+        <a href="<?= BASE_URL ?>/pay" class="btn btn-outline">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="3" width="7" height="7"/>
-                <rect x="14" y="3" width="7" height="7"/>
-                <rect x="3" y="14" width="7" height="7"/>
-                <rect x="14" y="14" width="3" height="3"/>
-                <line x1="21" y1="14" x2="21" y2="14.01"/>
-                <line x1="21" y1="21" x2="21" y2="21.01"/>
-                <line x1="17" y1="21" x2="17" y2="21.01"/>
-                <line x1="21" y1="17" x2="21" y2="17.01"/>
+                <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+                <polyline points="9 22 9 12 15 12 15 22"/>
             </svg>
-            QR Code
+            Betaal
         </a>
         <a href="<?= BASE_URL ?>/dashboard" class="btn btn-outline">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -152,6 +146,6 @@ require __DIR__ . '/../shared/header.php';
 <div class="alerts-container"></div>
 
 <script src="<?= BASE_URL ?>/public/js/app.js?v=<?= filemtime(PUBLIC_PATH . 'js/app.js') ?>"></script>
-<script src="<?= BASE_URL ?>/public/js/wallet.js"></script>
+<script src="<?= BASE_URL ?>/public/js/wallet.js?v=<?= filemtime(PUBLIC_PATH . 'js/wallet.js') ?>"></script>
 
 <?php require __DIR__ . '/../shared/footer.php'; ?>

@@ -101,4 +101,4 @@ register_shutdown_function(function() {
 });
 
 // ── 7. Run the migrations ────────────────────────────────────────────────────
-require __DIR__ . '/migrate.php';
+require __DIR__ . '/migrate_new.php';

@@ -226,8 +226,9 @@ if (str_starts_with($joinRoute, 'stamgast/')) {
 if (str_starts_with($joinRoute, 'j/')) {
     $slugPart = substr($joinRoute, 2);
 
-    // Determine if this is /j/{slug}/register, /j/{slug}/forgot-password, /j/{slug}/reset-password, or just /j/{slug}
+    // Determine if this is /j/{slug}/register, /j/{slug}/verify, /j/{slug}/forgot-password, /j/{slug}/reset-password, or just /j/{slug}
     $isRegister = false;
+    $isVerify = false;
     $isForgotPassword = false;
     $isResetPassword = false;
     $slug = $slugPart;
@@ -235,6 +236,9 @@ if (str_starts_with($joinRoute, 'j/')) {
     if (str_ends_with($slugPart, '/register')) {
         $isRegister = true;
         $slug = substr($slugPart, 0, -9);
+    } elseif (str_ends_with($slugPart, '/verify')) {
+        $isVerify = true;
+        $slug = substr($slugPart, 0, -7);
     } elseif (str_ends_with($slugPart, '/forgot-password')) {
         $isForgotPassword = true;
         $slug = substr($slugPart, 0, -16);
@@ -261,16 +265,21 @@ if (str_starts_with($joinRoute, 'j/')) {
     }
 
     // Already logged in at this tenant → go to dashboard
-    if (isLoggedIn() && currentTenantId() === (int) $tenant['id']) {
+    // EXCEPTION: skip redirect for /verify route (email verification page)
+    // to avoid redirect loop when dashboard redirects unverified users to /verify
+    if (!$isVerify && isLoggedIn() && currentTenantId() === (int) $tenant['id']) {
         redirect('/dashboard');
     }
 
     // /j/{slug}/register        → registration page (join.php)
+    // /j/{slug}/verify           → email verification page (verify-email.php)
     // /j/{slug}/forgot-password  → forgot password page
     // /j/{slug}/reset-password   → reset password page
     // /j/{slug}                  → login page (guest/login.php)
     if ($isRegister) {
         require VIEWS_PATH . 'guest/join.php';
+    } elseif ($isVerify) {
+        require VIEWS_PATH . 'guest/verify-email.php';
     } elseif ($isForgotPassword || $isResetPassword) {
         $viewFile = $isForgotPassword ? 'shared/forgot-password.php' : 'shared/reset-password.php';
         require VIEWS_PATH . $viewFile;
@@ -324,6 +333,12 @@ function handleApiRoute(string $route, string $method): void
                     break;
                 case 'register':
                     require __DIR__ . '/api/auth/register.php';
+                    break;
+                case 'verify-email':
+                    require __DIR__ . '/api/auth/verify-email.php';
+                    break;
+                case 'resend-verification':
+                    require __DIR__ . '/api/auth/resend-verification.php';
                     break;
                 case 'logout':
                     require __DIR__ . '/api/auth/logout.php';
@@ -402,6 +417,15 @@ function handleApiRoute(string $route, string $method): void
                 case 'verify':
                     require __DIR__ . '/api/pos/verify.php';
                     break;
+                case 'create_session':
+                    require __DIR__ . '/api/pos/create_session.php';
+                    break;
+                case 'session_status':
+                    require __DIR__ . '/api/pos/session_status.php';
+                    break;
+                case 'qr_png':
+                    require __DIR__ . '/api/pos/qr_png.php';
+                    break;
                 default:
                     Response::notFound('POS endpoint not found');
             }
@@ -418,6 +442,26 @@ function handleApiRoute(string $route, string $method): void
                     break;
                 default:
                     Response::notFound('QR endpoint not found');
+            }
+            break;
+
+        // --- GUEST (payment flow: scan, confirm, cancel) ---
+        case 'guest':
+            require_once __DIR__ . '/middleware/auth_check.php';
+            require_once __DIR__ . '/middleware/role_check.php';
+            requireAuthenticated();
+            switch ($action) {
+                case 'scan_payment':
+                    require __DIR__ . '/api/guest/scan_payment.php';
+                    break;
+                case 'confirm_payment':
+                    require __DIR__ . '/api/guest/confirm_payment.php';
+                    break;
+                case 'cancel_payment':
+                    require __DIR__ . '/api/guest/cancel_payment.php';
+                    break;
+                default:
+                    Response::notFound('Guest endpoint not found');
             }
             break;
 
@@ -461,6 +505,15 @@ function handleApiRoute(string $route, string $method): void
                     break;
                 case 'suspend_user':
                     require __DIR__ . '/api/admin/suspend_user.php';
+                    break;
+                case 'cleanup':
+                    require __DIR__ . '/api/admin/cleanup.php';
+                    break;
+                case 'push_history':
+                    require __DIR__ . '/api/admin/push_history.php';
+                    break;
+                case 'reports':
+                    require __DIR__ . '/api/admin/reports.php';
                     break;
                 default:
             }
@@ -523,6 +576,11 @@ function handleApiRoute(string $route, string $method): void
                     require_once __DIR__ . '/middleware/role_check.php';
                     requireAuthenticated();
                     require __DIR__ . '/api/push/unsubscribe.php';
+                    break;
+                case 'save-preference':
+                    require_once __DIR__ . '/middleware/role_check.php';
+                    requireAuthenticated();
+                    require __DIR__ . '/api/push/save-preference.php';
                     break;
                 case 'config':
                     require __DIR__ . '/api/push/config.php';
@@ -653,6 +711,7 @@ function handleViewRoute(string $route, string $method): void
         'dashboard' => 'guest/dashboard.php',
         'wallet'    => 'guest/wallet.php',
         'qr'        => 'guest/qr.php',
+        'pay'       => 'guest/scan.php',
         'inbox'     => 'guest/inbox.php',
         'profile'   => 'guest/profile/index.php',
         'pin-setup' => 'guest/pin-setup.php',
@@ -664,6 +723,7 @@ function handleViewRoute(string $route, string $method): void
 
         // Admin
         'admin'             => 'admin/dashboard.php',
+        'admin/reports'     => 'admin/reports.php',
         'admin/users'       => 'admin/users.php',
         'admin/tiers'       => 'admin/tiers.php',
         'admin/settings'    => 'admin/settings.php',
@@ -704,8 +764,9 @@ function handleViewRoute(string $route, string $method): void
         if ($returnUrl && preg_match('#^/j/[a-z0-9][a-z0-9-]{0,98}[a-z0-9](/|$)#', $returnUrl)) {
             $logoutRedirect = $returnUrl;
         }
-        // 2. For guests: redirect to branded login /j/{slug}
-        elseif (isLoggedIn() && ($_SESSION['role'] ?? '') === 'guest') {
+        // 2. For tenant users (guest, admin, bartender): redirect to branded login /j/{slug}
+        //    Only superadmins go to /login (no tenant context)
+        elseif (isLoggedIn() && ($_SESSION['role'] ?? '') !== 'superadmin') {
             if (isset($_SESSION['tenant']['slug'])) {
                 $logoutRedirect = '/j/' . $_SESSION['tenant']['slug'];
             } elseif (isset($_SESSION['tenant_id'])) {
@@ -757,10 +818,53 @@ function handleViewRoute(string $route, string $method): void
         redirect(getGuestLoginUrl());
     }
 
+    // Enforce email verification for guest views
+    // Only active if the migration has been run (email_verified_at column exists)
+    // Any guest with unverified email is blocked, regardless of verification_code state
+    if (isLoggedIn() && ($role === 'guest')) {
+        $guestViewsRequiringVerification = [
+            'guest/dashboard.php',
+            'guest/wallet.php',
+            'guest/qr.php',
+            'guest/scan.php',
+            'guest/inbox.php',
+            'guest/profile/index.php',
+            'guest/pin-setup.php',
+        ];
+
+        if (in_array($viewFile, $guestViewsRequiringVerification)) {
+            require_once __DIR__ . '/models/User.php';
+            $db = Database::getInstance()->getConnection();
+            $userModel = new User($db);
+            $user = $userModel->findById(currentUserId());
+
+            // Only enforce if:
+            // 1. The email_verified_at column exists (migration has been run)
+            // 2. The user has NOT verified their email yet
+            // Pre-existing users (column doesn't exist) are NOT blocked
+            $needsVerification = (
+                $user
+                && array_key_exists('email_verified_at', $user)
+                && empty($user['email_verified_at'])
+            );
+
+            if ($needsVerification) {
+                // Redirect to email verification page
+                $tenantSlug = $_SESSION['tenant']['slug'] ?? '';
+                if (!empty($tenantSlug)) {
+                    redirect('/j/' . $tenantSlug . '/verify');
+                } else {
+                    // Fallback: logout and redirect to login
+                    redirect('/logout');
+                }
+            }
+        }
+    }
+
     // Enforce role-based access
     $roleViews = [
         'superadmin' => ['superadmin/dashboard.php', 'superadmin/tenants.php', 'superadmin/tenant_detail.php', 'superadmin/fees.php', 'superadmin/invoices.php', 'superadmin/settings.php', 'superadmin/migrate.php'],
-        'admin'      => ['admin/dashboard.php', 'admin/users.php', 'admin/tiers.php', 'admin/settings.php', 'admin/marketing.php', 'admin/push.php'],
+        'admin'      => ['admin/dashboard.php', 'admin/reports.php', 'admin/users.php', 'admin/tiers.php', 'admin/settings.php', 'admin/marketing.php', 'admin/push.php'],
         'bartender'  => ['bartender/scanner.php', 'bartender/payment.php'],
     ];
 

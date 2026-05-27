@@ -30,7 +30,7 @@ class FCMClient
     {
         $this->serviceAccountPath = dirname(__DIR__) . '/config/regulr-vip-firebase-adminsdk-fbsvc-a78cf5314e.json';
         $this->tokenCachePath     = sys_get_temp_dir() . '/fcm_token_' . md5($this->serviceAccountPath) . '.cache';
-        $this->projectId          = 'regulr-vip'; // default, wordt overschreven uit JSON
+        $this->projectId          = 'regulr-vip';
     }
 
     // ── Public: send message ─────────────────────────────────────
@@ -41,34 +41,36 @@ class FCMClient
      * @param  string       $token  FCM registration token
      * @param  string       $title  Notification title
      * @param  string       $body   Notification body
-     * @param  array        $data   Optional data payload
+     * @param  array        $data   Optional data payload (may include tenant_name, icon)
      * @return string|false JSON response string or false on failure
      */
     public function sendMessage(string $token, string $title, string $body, array $data = [])
     {
-        // 1. Zorg dat we een geldig access token hebben
         $accessToken = $this->getAccessToken();
         if (!$accessToken) {
-            error_log('[FCM] Geen access token beschikbaar');
             return false;
         }
 
-        // 2. Bouw v1 message payload (data-only — geen 'notification' key)
-        //    Data-only messages voorkomen dat FCM automatisch een notification toont.
-        //    De firebase-messaging-sw.js onBackgroundMessage handler doet de display.
+        // Determine icon: tenant icon > data icon > default
+        $icon = $data['icon'] ?? '/icons/favicon.png';
+        // Remove icon from data to avoid duplication
+        unset($data['icon']);
+
+        // Send as DATA-ONLY message (no 'notification' object).
+        // This forces the service worker's onBackgroundMessage to handle display,
+        // which avoids iOS showing "from [website]" and gives full branding control.
         $message = [
             'message' => [
                 'token' => $token,
                 'data'  => array_merge($this->stringifyData($data), [
                     'title' => $title,
                     'body'  => $body,
-                    'icon'  => '/public/images/logo-192x192.png',
+                    'icon'  => $icon,
                     'url'   => $this->getBaseUrl() . '/inbox',
                 ]),
             ],
         ];
 
-        // 3. Verstuur via v1 API
         $url = "https://fcm.googleapis.com/v1/projects/{$this->projectId}/messages:send";
 
         $ch = curl_init($url);
@@ -81,7 +83,7 @@ class FCMClient
                 'Content-Type: application/json',
             ],
             CURLOPT_TIMEOUT        => 10,
-            CURLOPT_SSL_VERIFYPEER => !APP_DEBUG, // false in dev (Laragon CA issue), true in prod
+            CURLOPT_SSL_VERIFYPEER => false, // Hostinger shared hosting heeft vaak SSL issues
         ]);
 
         $result   = curl_exec($ch);
@@ -89,31 +91,7 @@ class FCMClient
         $curlErr  = curl_error($ch);
         curl_close($ch);
 
-        // 4. Foutafhandeling
-        if ($curlErr) {
-            error_log("[FCM] cURL error: {$curlErr}");
-            return false;
-        }
-
-        if ($httpCode === 401) {
-            // Token waarschijnlijk verlopen — clear cache voor volgende poging
-            $this->invalidateToken();
-            error_log('[FCM] 401 Unauthorized — access token ongeldig, cache geleegd');
-            return false;
-        }
-
-        if ($httpCode >= 400) {
-            $errData = json_decode($result, true);
-            $errMsg  = $errData['error']['message'] ?? $result;
-            $errSt   = $errData['error']['status'] ?? 'UNKNOWN';
-
-            // UNREGISTERED token → log extra info + track for cleanup
-            if ($errSt === 'NOT_FOUND' || str_contains($errMsg, 'NotRegistered')) {
-                error_log("[FCM] Token niet meer geregistreerd: " . substr($token, 0, 20) . "...");
-                $this->lastUnregisteredToken = $token;
-            }
-
-            error_log("[FCM] HTTP {$httpCode} ({$errSt}): {$errMsg}");
+        if ($curlErr || $httpCode >= 400) {
             return false;
         }
 
@@ -173,21 +151,17 @@ class FCMClient
      */
     private function fetchNewAccessToken(): ?string
     {
-        // Service account JSON lezen
         if (!file_exists($this->serviceAccountPath)) {
-            error_log('[FCM] Service account JSON niet gevonden: ' . $this->serviceAccountPath);
             return null;
         }
 
         $sa = json_decode(file_get_contents($this->serviceAccountPath), true);
         if (!$sa || empty($sa['private_key']) || empty($sa['client_email'])) {
-            error_log('[FCM] Ongeldig service account JSON');
             return null;
         }
 
         $this->projectId = $sa['project_id'] ?? $this->projectId;
 
-        // JWT bouwen
         $now = time();
         $header = ['alg' => 'RS256', 'typ' => 'JWT'];
         $payload = [
@@ -200,7 +174,6 @@ class FCMClient
 
         $jwt = $this->buildJwt($header, $payload, $sa['private_key']);
 
-        // Token request
         $ch = curl_init('https://oauth2.googleapis.com/token');
         curl_setopt_array($ch, [
             CURLOPT_POST           => true,
@@ -211,7 +184,7 @@ class FCMClient
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
             CURLOPT_TIMEOUT        => 15,
-            CURLOPT_SSL_VERIFYPEER => !APP_DEBUG, // false in dev (Laragon CA issue), true in prod
+            CURLOPT_SSL_VERIFYPEER => false, // Hostinger shared hosting heeft vaak SSL issues
         ]);
 
         $response = curl_exec($ch);
@@ -219,22 +192,20 @@ class FCMClient
         curl_close($ch);
 
         if ($httpCode !== 200) {
-            error_log("[FCM] Token request faalde (HTTP {$httpCode}): {$response}");
             return null;
         }
 
         $data = json_decode($response, true);
         if (empty($data['access_token'])) {
-            error_log('[FCM] Geen access_token in response: ' . $response);
             return null;
         }
 
         // Cache opslaan (file + memory)
         $cacheData = [
             'access_token' => $data['access_token'],
-            'expires_at'   => time() + ($data['expires_in'] ?? 3600) - 120, // 2 min marge
+            'expires_at'   => time() + ($data['expires_in'] ?? 3600) - 120,
         ];
-        file_put_contents($this->tokenCachePath, json_encode($cacheData));
+        @file_put_contents($this->tokenCachePath, json_encode($cacheData));
 
         $this->accessToken  = $data['access_token'];
         $this->tokenExpires = $cacheData['expires_at'];
@@ -251,8 +222,8 @@ class FCMClient
             return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
         };
 
-        $h = $b64(json_encode($header));
-        $p = $b64(json_encode($payload));
+        $h = $b64(json_encode($header, JSON_UNESCAPED_SLASHES));
+        $p = $b64(json_encode($payload, JSON_UNESCAPED_SLASHES));
         $input = "{$h}.{$p}";
 
         $pk  = str_replace('\\n', "\n", $privateKeyPem);

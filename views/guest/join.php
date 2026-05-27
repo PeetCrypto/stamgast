@@ -452,7 +452,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Flag PWA install prompt for dashboard
                 try { localStorage.setItem('show_pwa_prompt', '1'); } catch (_) {}
 
-                // Redirect to dashboard
+                // Redirect to verification page (or dashboard as fallback)
                 window.location.href = data.data.redirect || ((window.__BASE_URL || '') + '/dashboard');
             } else {
                 showError(data.error || 'Registratie mislukt.');

@@ -59,8 +59,17 @@ switch ($method) {
             case 'change_email':
                 handleChangeEmail($userModel, $input, $db);
                 break;
+            case 'purge_guests':
+                handlePurgeGuests($tenantModel, $input, $db);
+                break;
+            case 'purge_packages':
+                handlePurgePackages($tenantModel, $input, $db);
+                break;
+            case 'reset_guest_balances':
+                handleResetGuestBalances($tenantModel, $input, $db);
+                break;
             default:
-                Response::error('Invalid action. Use: create, update, delete, update_role, change_password', 'INVALID_ACTION', 400);
+                Response::error('Invalid action. Use: create, update, delete, update_role, change_password, change_email, purge_guests, purge_packages, reset_guest_balances', 'INVALID_ACTION', 400);
         }
         break;
 
@@ -591,4 +600,88 @@ function handleChangeEmail(User $userModel, array $input, PDO $db): void
     );
 
     Response::success(['user_id' => $userId, 'message' => 'E-mailadres succesvol gewijzigd']);
+}
+
+function handlePurgeGuests(Tenant $model, array $input, PDO $db): void
+{
+    $tenantId = (int) ($input['tenant_id'] ?? 0);
+    if ($tenantId <= 0) {
+        Response::error('tenant_id is required', 'MISSING_FIELD', 400);
+    }
+
+    $existing = $model->findById($tenantId);
+    if (!$existing) {
+        Response::notFound('Tenant niet gevonden');
+    }
+    if (empty($existing['is_test'])) {
+        Response::error('Deze actie is alleen beschikbaar voor test-tenants', 'NOT_TEST_TENANT', 403);
+    }
+
+    try {
+        $result = $model->purgeGuests($tenantId);
+
+        $audit = new Audit($db);
+        $audit->log(0, currentUserId(), 'tenant.purge_guests', 'tenant', $tenantId, $result);
+
+        Response::success($result);
+    } catch (\Throwable $e) {
+        error_log('purgeGuests failed: ' . $e->getMessage());
+        Response::error('Fout bij verwijderen gasten: ' . $e->getMessage(), 'PURGE_FAILED', 500);
+    }
+}
+
+function handlePurgePackages(Tenant $model, array $input, PDO $db): void
+{
+    $tenantId = (int) ($input['tenant_id'] ?? 0);
+    if ($tenantId <= 0) {
+        Response::error('tenant_id is required', 'MISSING_FIELD', 400);
+    }
+
+    $existing = $model->findById($tenantId);
+    if (!$existing) {
+        Response::notFound('Tenant niet gevonden');
+    }
+    if (empty($existing['is_test'])) {
+        Response::error('Deze actie is alleen beschikbaar voor test-tenants', 'NOT_TEST_TENANT', 403);
+    }
+
+    try {
+        $count = $model->purgePackages($tenantId);
+
+        $audit = new Audit($db);
+        $audit->log(0, currentUserId(), 'tenant.purge_packages', 'tenant', $tenantId, ['purged_packages' => $count]);
+
+        Response::success(['purged_packages' => $count]);
+    } catch (\Throwable $e) {
+        error_log('purgePackages failed: ' . $e->getMessage());
+        Response::error('Fout bij verwijderen pakketten: ' . $e->getMessage(), 'PURGE_FAILED', 500);
+    }
+}
+
+function handleResetGuestBalances(Tenant $model, array $input, PDO $db): void
+{
+    $tenantId = (int) ($input['tenant_id'] ?? 0);
+    if ($tenantId <= 0) {
+        Response::error('tenant_id is required', 'MISSING_FIELD', 400);
+    }
+
+    $existing = $model->findById($tenantId);
+    if (!$existing) {
+        Response::notFound('Tenant niet gevonden');
+    }
+    if (empty($existing['is_test'])) {
+        Response::error('Deze actie is alleen beschikbaar voor test-tenants', 'NOT_TEST_TENANT', 403);
+    }
+
+    try {
+        $count = $model->resetGuestBalances($tenantId);
+
+        $audit = new Audit($db);
+        $audit->log(0, currentUserId(), 'tenant.reset_guest_balances', 'tenant', $tenantId, ['wallets_reset' => $count]);
+
+        Response::success(['wallets_reset' => $count]);
+    } catch (\Throwable $e) {
+        error_log('resetGuestBalances failed: ' . $e->getMessage());
+        Response::error('Fout bij resetten saldo: ' . $e->getMessage(), 'RESET_FAILED', 500);
+    }
 }

@@ -278,7 +278,7 @@ document.getElementById('create-tenant-form')?.addEventListener('submit', async 
             alert('Fout: ' + data.error);
         }
     } catch (err) {
-        alert('Netwerkfout: ' + err.message);
+        alert('Er is een netwerkfout opgetreden');
     } finally {
         submitBtn.disabled = false;
         submitBtn.textContent = origBtnText;
@@ -381,10 +381,10 @@ document.querySelectorAll('.toggle-tenant-btn').forEach(btn => {
                 this.style.background = newActive ? 'rgba(244,67,54,0.15)' : 'rgba(76,175,80,0.15)';
                 this.style.color = newActive ? '#f44336' : '#4CAF50';
             } else {
-                alert('Fout: ' + (result.error || 'Onbekend'));
+                alert('Actie mislukt. Probeer het opnieuw.');
             }
         } catch (err) {
-            alert('Netwerkfout: ' + err.message);
+            alert('Er is een netwerkfout opgetreden');
         }
     });
 });

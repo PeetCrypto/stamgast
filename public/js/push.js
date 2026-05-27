@@ -1,26 +1,20 @@
 /**
  * REGULR.vip — Push Notification System
- *
+ * 
  * Combineert Firebase Cloud Messaging (real-time push) met
  * polling fallback (elke 30s /api/notification/check).
- *
- * Flow:
- * 1. Registreer service worker (/sw.js)
- * 2. Als permission al granted → direct FCM token ophalen
- * 3. Luister naar foreground messages via onMessage()
- * 4. Polling als fallback voor non-push browsers
- * 5. FCMHandler.subscribe() — dashboard overlay & profile pagina gebruiken dit
  */
 
 (function() {
     'use strict';
 
-    var POLL_INTERVAL = 30000; // 30 seconds
-    var TOAST_DURATION = 6000; // 6 seconds
+    var POLL_INTERVAL = 30000;
+    var TOAST_DURATION = 6000;
     var POLL_URL = (window.__BASE_URL || '') + '/api/notification/check';
     var SUBSCRIBE_URL = (window.__BASE_URL || '') + '/api/push/subscribe';
     var CONFIG_URL = (window.__BASE_URL || '') + '/api/push/config';
 
+    // DEFINIEER ALLE VARIABLES EERST
     var VAPID_KEY = '';
     var lastUnreadCount = 0;
     var lastSeenIds = {};
@@ -30,8 +24,17 @@
     var onMessageSetup = false;
     var swRegistration = null;
 
-    // Load previously seen notification IDs from localStorage to prevent
-    // re-showing the same notification on every page navigation
+    // Tenant branding (from meta tags)
+    var tenantName = '';
+    var tenantIcon = '';
+    try {
+        var tnMeta = document.querySelector('meta[name="tenant-name"]');
+        if (tnMeta && tnMeta.content) tenantName = tnMeta.content;
+        var tiMeta = document.querySelector('meta[name="tenant-icon"]');
+        if (tiMeta && tiMeta.content) tenantIcon = tiMeta.content;
+    } catch(_) {}
+
+    // Load previously seen notification IDs
     try {
         var stored = localStorage.getItem('push_seen_ids');
         if (stored) lastSeenIds = JSON.parse(stored);
@@ -39,7 +42,6 @@
 
     function saveSeenIds() {
         try {
-            // Prune: keep max 200 entries to prevent localStorage bloat
             var keys = Object.keys(lastSeenIds);
             if (keys.length > 200) {
                 var keep = keys.slice(-100);
@@ -56,27 +58,40 @@
     console.log('[Push] System loaded');
 
     // ════════════════════════════════════════════════════════════
-    // CONFIG FETCH
+    // CONFIG FETCH - VAPID key ophalen
     // ════════════════════════════════════════════════════════════
-
-    fetch(CONFIG_URL)
-        .then(function(r) { return r.json(); })
-        .then(function(config) {
-            if (config.success && config.data.vapid_key) {
-                VAPID_KEY = config.data.vapid_key;
-                console.log('[Push] VAPID key loaded from server');
-            }
-    // Auto-init: if permission already granted → always get token (push is mandatory)
-    if (Notification.permission === 'granted') {
-        ensureSWAndGetToken();
-    }
-        })
-        .catch(function(err) {
-            console.warn('[Push] Failed to load config:', err.message);
+    
+    function initPush() {
+        // Try to get VAPID key from meta tag first
+        var vapidMeta = document.querySelector('meta[name="firebase-vapid-key"]');
+        if (vapidMeta && vapidMeta.content) {
+            VAPID_KEY = vapidMeta.content;
+            console.log('[Push] VAPID key from meta tag:', VAPID_KEY.substring(0, 20) + '...');
+            // Auto-init if permission already granted
             if (Notification.permission === 'granted') {
                 ensureSWAndGetToken();
             }
-        });
+        } else {
+            // Fallback: fetch from server
+            fetch(CONFIG_URL)
+                .then(function(r) { return r.json(); })
+                .then(function(config) {
+                    if (config.success && config.data.vapid_key) {
+                        VAPID_KEY = config.data.vapid_key;
+                        console.log('[Push] VAPID key loaded from server');
+                    }
+                    if (Notification.permission === 'granted') {
+                        ensureSWAndGetToken();
+                    }
+                })
+                .catch(function(err) {
+                    console.warn('[Push] Failed to load config:', err.message);
+                    if (Notification.permission === 'granted') {
+                        ensureSWAndGetToken();
+                    }
+                });
+        }
+    }
 
     // ════════════════════════════════════════════════════════════
     // SERVICE WORKER REGISTRATION
@@ -90,23 +105,21 @@
             return Promise.reject(new Error('No SW support'));
         }
 
+        // IMPORTANT: Use /sw.js (PHP route) NOT /js/sw.js (static file)
+        // The PHP route injects Firebase config into the service worker
         var swUrl = (window.__BASE_URL || '') + '/sw.js';
 
-        return navigator.serviceWorker.ready.then(function(reg) {
-            swRegistration = reg;
-            console.log('[Push] SW already ready, scope:', reg.scope);
-            return reg;
-        }).catch(function() {
-            return navigator.serviceWorker.register(swUrl, { scope: '/' })
-                .then(function(reg) {
-                    swRegistration = reg;
-                    console.log('[Push] SW registered, scope:', reg.scope);
-                    return navigator.serviceWorker.ready;
-                });
-        }).then(function(reg) {
-            swRegistration = reg;
-            return reg;
-        });
+        return navigator.serviceWorker.register(swUrl, { scope: '/' })
+            .then(function(reg) {
+                swRegistration = reg;
+                console.log('[Push] SW registered, scope:', reg.scope);
+                return navigator.serviceWorker.ready;
+            })
+            .then(function(reg) {
+                swRegistration = reg;
+                console.log('[Push] SW ready');
+                return reg;
+            });
     }
 
     // ════════════════════════════════════════════════════════════
@@ -121,10 +134,11 @@
         var messaging = firebase.messaging();
         messaging.onMessage(function(payload) {
             console.log('[Push] Foreground message:', payload);
-
-            // Don't show browser notification — the service worker (firebase-messaging-sw.js)
-            // already handles background/foreground display for notification payloads.
-            // Just refresh the badge count so the user sees the new unread count.
+            // Show notification with tenant branding
+            var notifTitle = payload.notification?.title || payload.data?.title || tenantName || 'REGULR.vip';
+            var notifBody = payload.notification?.body || payload.data?.body || '';
+            var notifIcon = payload.data?.icon || payload.notification?.icon || tenantIcon || '/icons/favicon.png';
+            showNotification(notifTitle, notifBody, notifIcon);
             checkNotifications();
         });
     }
@@ -134,41 +148,43 @@
 
         if (typeof firebase === 'undefined' || !firebase.messaging) {
             console.warn('[Push] Firebase SDK niet geladen');
-            return;
+            return Promise.reject(new Error('Firebase SDK niet geladen'));
         }
 
-        registerServiceWorker().then(function() {
-            getFCMToken();
+        return registerServiceWorker().then(function() {
+            return getFCMToken();
         }).catch(function(err) {
             console.warn('[Push] SW setup failed:', err.message);
+            return Promise.reject(err);
         });
     }
 
     function getFCMToken() {
         if (!VAPID_KEY) {
             console.warn('[Push] Geen VAPID key beschikbaar');
-            return;
+            return Promise.reject(new Error('Geen VAPID key'));
         }
 
         var messaging = firebase.messaging();
         console.log('[Push] Requesting FCM token...');
 
-        messaging.getToken({ vapidKey: VAPID_KEY }).then(function(token) {
+        return messaging.getToken({ vapidKey: VAPID_KEY }).then(function(token) {
             if (token) {
                 console.log('[Push] ✅ FCM token ontvangen:', token.substring(0, 30) + '...');
-                sendTokenToServer(token);
+                return sendTokenToServer(token).then(function() { return token; });
             } else {
                 console.warn('[Push] Geen FCM token ontvangen (null)');
+                return Promise.reject(new Error('Geen FCM token ontvangen'));
             }
         }).catch(function(err) {
             var msg = (err && err.message) ? err.message : 'unknown';
             console.warn('[Push] getToken failed:', msg);
+            return Promise.reject(err);
         });
     }
 
     function sendTokenToServer(token) {
-        // Always send — even if sent before, token might have changed
-        fetch(SUBSCRIBE_URL, {
+        return fetch(SUBSCRIBE_URL, {
             method: 'POST',
             credentials: 'same-origin',
             headers: {
@@ -185,12 +201,15 @@
             if (result.success) {
                 console.log('[Push] ✅ Token opgeslagen op server');
                 fcmTokenSent = true;
+                return true;
             } else {
                 console.warn('[Push] Token opslaan faalde:', result.error || 'unknown');
+                throw new Error(result.error || 'Token opslaan mislukt');
             }
         })
         .catch(function(err) {
             console.warn('[Push] Token submit error:', err.message);
+            throw err;
         });
     }
 
@@ -204,16 +223,17 @@
     // ════════════════════════════════════════════════════════════
 
     function showNotification(title, body, icon, tag, url) {
-        // Try browser notification first
+        // Use tenant branding for icon
+        var notifIcon = icon || tenantIcon || '/icons/favicon.png';
+
         if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
             try {
                 var notif = new Notification(title, {
                     body: body,
-                    icon: icon || '/icons/favicon.png',
-                    badge: '/icons/favicon.png',
+                    icon: notifIcon,
+                    badge: notifIcon,
                     tag: tag || 'regulr-notification',
                     renotify: true,
-                    vibrate: [100, 50, 100],
                     data: { url: url || (window.__BASE_URL || '') + '/inbox' }
                 });
 
@@ -222,13 +242,11 @@
                     window.location.href = notif.data.url;
                     notif.close();
                 };
-                return; // Success — no need for toast
+                return;
             } catch (e) {
                 console.warn('[Push] Browser notification failed:', e.message);
             }
         }
-
-        // Fallback: always show in-app toast
         showInAppToast(title, body);
     }
 
@@ -252,10 +270,8 @@
             var unreadCount = data.unread_count || 0;
             var notifications = data.notifications || [];
 
-            // Always update badge count
             updateBadge(unreadCount);
 
-            // Track seen IDs so we don't re-process (persisted in localStorage)
             var hadNew = false;
             for (var i = 0; i < notifications.length; i++) {
                 var id = notifications[i].id;
@@ -271,9 +287,7 @@
 
             lastUnreadCount = unreadCount;
         })
-        .catch(function() {
-            // Silent
-        });
+        .catch(function() {});
     }
 
     // ════════════════════════════════════════════════════════════
@@ -293,7 +307,7 @@
     }
 
     // ════════════════════════════════════════════════════════════
-    // IN-APP TOAST (fallback when browser notifications unavailable)
+    // IN-APP TOAST
     // ════════════════════════════════════════════════════════════
 
     function showInAppToast(title, body) {
@@ -372,6 +386,14 @@
 
         if (isPublic || isJoin) return;
 
+        // Log current permission state for debugging
+        if (typeof Notification !== 'undefined') {
+            console.log('[Push] Current permission:', Notification.permission);
+        } else {
+            console.warn('[Push] Notification API not available');
+        }
+
+        initPush();
         startPolling();
     }
 
@@ -382,7 +404,7 @@
     }
 
     // ════════════════════════════════════════════════════════════
-    // PUBLIC API — gebruikt door profile toggle & dashboard banner
+    // PUBLIC API
     // ════════════════════════════════════════════════════════════
 
     window.FCMHandler = {
@@ -392,10 +414,55 @@
         stop: stopPolling,
 
         /**
-         * subscribe() — Request permission, get FCM token, store in DB
-         * Called by profile toggle (enable) and dashboard banner
-         * Returns a Promise that resolves with { granted: true/false }
+         * Detect platform for UI guidance
+         * Returns: 'ios_pwa', 'ios_browser', 'android', 'desktop'
          */
+        detectPlatform: function() {
+            var ua = navigator.userAgent;
+            var isStandalone = false;
+            try {
+                isStandalone = window.matchMedia('(display-mode: standalone)').matches
+                    || window.navigator.standalone === true
+                    || document.referrer.includes('android-app://');
+            } catch(_) {}
+
+            var isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+            var isAndroid = /Android/.test(ua);
+
+            if (isIOS) {
+                return isStandalone ? 'ios_pwa' : 'ios_browser';
+            }
+            if (isAndroid) {
+                return 'android';
+            }
+            return 'desktop';
+        },
+
+        /**
+         * Check if push is possible on this platform
+         */
+        canPush: function() {
+            var platform = this.detectPlatform();
+
+            // iOS browser (non-PWA) does NOT support push at all
+            if (platform === 'ios_browser') {
+                return { possible: false, reason: 'ios_install_required', platform: platform };
+            }
+
+            // All other platforms need Notification API + Service Worker
+            if (typeof Notification === 'undefined') {
+                return { possible: false, reason: 'unsupported', platform: platform };
+            }
+            if (!('serviceWorker' in navigator)) {
+                return { possible: false, reason: 'no_sw', platform: platform };
+            }
+            if (!('PushManager' in window)) {
+                return { possible: false, reason: 'no_push_api', platform: platform };
+            }
+
+            return { possible: true, platform: platform };
+        },
+
         subscribe: function() {
             return new Promise(function(resolve) {
                 if (typeof Notification === 'undefined') {
@@ -403,29 +470,100 @@
                     return;
                 }
 
+                // If already granted, skip permission dialog and go straight to token
+                if (Notification.permission === 'granted') {
+                    try { localStorage.removeItem('push_disabled'); } catch(_) {}
+                    setupOnMessageListener();
+                    ensureSWAndGetToken().then(function(token) {
+                        if (token) {
+                            resolve({ granted: true });
+                        } else {
+                            resolve({ granted: false, reason: 'no_token' });
+                        }
+                    }).catch(function(err) {
+                        var msg = (err && err.message) ? err.message : 'unknown';
+                        resolve({ granted: false, reason: 'token_error', message: msg });
+                    });
+                    return;
+                }
+
+                // If already denied, don't bother requesting
+                if (Notification.permission === 'denied') {
+                    console.warn('[Push] subscribe() — permission already denied');
+                    resolve({ granted: false, reason: 'denied' });
+                    return;
+                }
+
+                // permission === 'default' — need to ask
                 console.log('[Push] subscribe() — requesting permission...');
+
+                // Notify UI that we're waiting for the browser dialog
+                if (typeof window.__pushPermissionCallback === 'function') {
+                    window.__pushPermissionCallback('waiting_for_dialog');
+                }
+
+                // Timeout: if the user ignores the dialog for 20s, resolve with timeout
+                var resolved = false;
+                var timeoutId = setTimeout(function() {
+                    if (!resolved) {
+                        resolved = true;
+                        console.warn('[Push] subscribe() — permission dialog timed out');
+                        resolve({ granted: false, reason: 'timeout', message: 'De toestemmingsdialoog is niet beantwoord. Probeer het opnieuw.' });
+                    }
+                }, 20000);
+
                 Notification.requestPermission().then(function(permission) {
+                    clearTimeout(timeoutId);
+                    if (resolved) return; // already timed out
+                    resolved = true;
+
                     console.log('[Push] Permission result:', permission);
 
                     if (permission === 'granted') {
-                        // Clear disabled flag so auto-subscribe works again
                         try { localStorage.removeItem('push_disabled'); } catch(_) {}
                         setupOnMessageListener();
-                        ensureSWAndGetToken();
-                        resolve({ granted: true });
+
+                        // Notify UI that we're getting the token
+                        if (typeof window.__pushPermissionCallback === 'function') {
+                            window.__pushPermissionCallback('getting_token');
+                        }
+
+                        // Wait for actual FCM token — this catches incognito failures
+                        ensureSWAndGetToken().then(function(token) {
+                            if (token) {
+                                console.log('[Push] subscribe() — token obtained, push fully active');
+                                resolve({ granted: true });
+                            } else {
+                                console.warn('[Push] subscribe() — no token received');
+                                resolve({ granted: false, reason: 'no_token' });
+                            }
+                        }).catch(function(err) {
+                            var msg = (err && err.message) ? err.message : 'unknown';
+                            console.warn('[Push] subscribe() — token failed:', msg);
+
+                            // Detect incognito / push-not-supported scenarios
+                            if (msg.indexOf('permission denied') !== -1 || msg.indexOf('Registration failed') !== -1) {
+                                resolve({ granted: false, reason: 'push_unavailable', message: 'Push is niet beschikbaar in deze browser-sessie (bijv. incognito). Probeer het in een normaal venster.' });
+                            } else {
+                                resolve({ granted: false, reason: 'token_error', message: msg });
+                            }
+                        });
+                    } else if (permission === 'denied') {
+                        resolve({ granted: false, reason: 'denied' });
                     } else {
-                        resolve({ granted: false, reason: permission });
+                        // 'default' — user dismissed the dialog without choosing
+                        resolve({ granted: false, reason: 'dismissed' });
                     }
                 }).catch(function(err) {
+                    clearTimeout(timeoutId);
+                    if (resolved) return;
+                    resolved = true;
                     console.warn('[Push] Permission request error:', err);
                     resolve({ granted: false, reason: 'error' });
                 });
             });
         },
 
-        /**
-         * getPermissionStatus() — Check current browser permission
-         */
         getPermissionStatus: function() {
             if (typeof Notification === 'undefined') return 'unsupported';
             return Notification.permission;

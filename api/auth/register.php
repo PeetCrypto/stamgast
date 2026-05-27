@@ -12,6 +12,7 @@ require_once __DIR__ . '/../../models/Tenant.php';
 require_once __DIR__ . '/../../utils/validator.php';
 require_once __DIR__ . '/../../services/AuthService.php';
 require_once __DIR__ . '/../../utils/audit.php';
+require_once __DIR__ . '/../../services/Email/email_helpers.php';
 
 // Only allow POST
 $method = $_SERVER['REQUEST_METHOD'];
@@ -103,20 +104,37 @@ $audit->log(
     $result['user_id']
 );
 
+// Generate and store email verification code
+$verificationCode = strtoupper(substr(bin2hex(random_bytes(4)), 0, 8));
+
+try {
+    // Store code in user record
+    $stmt = $db->prepare('UPDATE `users` SET `email_verification_code` = :code WHERE `id` = :id');
+    $stmt->execute([':code' => $verificationCode, ':id' => $result['user_id']]);
+} catch (\Throwable $e) {
+    error_log('Failed to store verification code: ' . $e->getMessage());
+}
+
 // Send guest confirmation email (non-blocking — failure does not affect registration)
 try {
     $tenantModel = new Tenant($db);
     $tenant      = $tenantModel->findById($tenantId);
     $tenantName  = $tenant ? $tenant['name'] : 'REGULR.vip';
+    $tenantSlug  = $tenant ? $tenant['slug'] : '';
+    $guestName = trim($firstName . ' ' . $lastName);
 
-    $verificationCode = strtoupper(substr(bin2hex(random_bytes(4)), 0, 8));
-
-    sendGuestConfirmationEmail($db, $email, $tenantName, $verificationCode, $tenantId);
+    sendGuestConfirmationEmail($db, $email, $tenantName, $verificationCode, $tenantId, $guestName);
 } catch (\Throwable $e) {
     error_log('Guest confirmation email failed: ' . $e->getMessage());
 }
 
+// Redirect to email verification page instead of dashboard
+$verifyRedirect = '/dashboard';
+if (!empty($tenantSlug)) {
+    $verifyRedirect = '/j/' . $tenantSlug . '/verify';
+}
+
 Response::success([
     'user_id'  => $result['user_id'],
-    'redirect' => '/dashboard',
+    'redirect' => $verifyRedirect,
 ], 201);

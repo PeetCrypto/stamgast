@@ -691,7 +691,7 @@ function editTemplate(id, type, subject, language) {
             }
         })
         .catch(function(err) {
-            alert('Fout bij laden template: ' + err.message);
+            alert('Kon template niet laden');
             closeModal();
         });
 
@@ -820,13 +820,13 @@ function createSuperadmin() {
         if (data.success) {
             location.reload();
         } else {
-            errEl.textContent = data.error || 'Onbekende fout bij aanmaken.';
+            errEl.textContent = 'Aanmaken mislukt. Probeer het opnieuw.';
             errEl.style.display = 'block';
             document.getElementById('sa-create-btn').disabled = false;
         }
     })
     .catch(function(err) {
-        errEl.textContent = 'Netwerkfout: ' + err.message;
+        errEl.textContent = 'Er is een netwerkfout opgetreden';
         errEl.style.display = 'block';
         document.getElementById('sa-create-btn').disabled = false;
     });
@@ -882,13 +882,13 @@ function savePassword() {
             closeSaPasswordModal();
             alert('Wachtwoord succesvol gewijzigd.');
         } else {
-            errEl.textContent = data.error || 'Onbekende fout.';
+            errEl.textContent = 'Opslaan mislukt. Probeer het opnieuw.';
             errEl.style.display = 'block';
             document.getElementById('sa-password-btn').disabled = false;
         }
     })
     .catch(function(err) {
-        errEl.textContent = 'Netwerkfout: ' + err.message;
+        errEl.textContent = 'Er is een netwerkfout opgetreden';
         errEl.style.display = 'block';
         document.getElementById('sa-password-btn').disabled = false;
     });
@@ -913,11 +913,11 @@ function deleteSuperadmin(userId, email) {
         if (data.success) {
             location.reload();
         } else {
-            alert(data.error || 'Fout bij verwijderen.');
+            alert('Kon template niet verwijderen');
         }
     })
     .catch(function(err) {
-        alert('Netwerkfout: ' + err.message);
+        alert('Er is een netwerkfout opgetreden');
     });
 }
 

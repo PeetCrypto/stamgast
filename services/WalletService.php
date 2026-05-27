@@ -116,7 +116,7 @@ class WalletService
      * @throws \RuntimeException on Mollie/DB error
      * @return array{checkout_url: string, payment_id: string, transaction_id: int, fee_cents: int, status?: string}
      */
-    public function createDeposit(int $userId, int $tenantId, int $amountCents): array
+    public function createDeposit(int $userId, int $tenantId, int $amountCents, ?int $tierId = null): array
     {
         // Validate amount
         if ($amountCents < DEPOSIT_MIN_CENTS) {
@@ -199,7 +199,7 @@ class WalletService
             'final_total_cents'  => $amountCents,
             'ip_address'         => getClientIP(),
             'mollie_payment_id'  => $payment['payment_id'],
-            'description'        => 'Opwaardering wallet',
+            'description'        => json_encode(['label' => 'Opwaardering wallet', 'tier_id' => $tierId]),
         ]);
 
         // Create PlatformFee record
@@ -310,20 +310,33 @@ class WalletService
         }
 
         // ── BONUS CALCULATION ──────────────────────────────────────
-        // If the user's tier is a bonus model, add the bonus to the deposit.
+        // Use package-specific bonus (tier_id from deposit description)
+        // Falls back to determineTier() for legacy transactions without tier_id.
         $bonusCents = 0;
-        $creditAmount = $amountCents;
 
         try {
-            $totalDeposits = $this->transactionModel->getTotalDeposits($userId, $tenantId);
             $tierModel = new LoyaltyTier($this->db);
-            $tier = $tierModel->determineTier($tenantId, $totalDeposits);
+            $tier = null;
 
-            if (($tier['model_type'] ?? LoyaltyTier::MODEL_DISCOUNT) === LoyaltyTier::MODEL_BONUS
-                && ($tier['bonus_percentage'] ?? 0) > 0
-            ) {
-                $bonusCents = (int) floor($amountCents * (float) $tier['bonus_percentage'] / 100);
-                $creditAmount = $amountCents + $bonusCents;
+            // Try to get the specific package from the transaction description
+            $desc = json_decode($transaction['description'], true);
+            if ($desc && !empty($desc['tier_id'])) {
+                $tier = $tierModel->findById((int) $desc['tier_id'], $tenantId);
+            }
+
+            // Fallback: legacy transactions without tier_id in description
+            if (!$tier) {
+                $totalDeposits = $this->transactionModel->getTotalDeposits($userId, $tenantId);
+                $tier = $tierModel->determineTier($tenantId, $totalDeposits);
+            }
+
+            if (($tier['model_type'] ?? LoyaltyTier::MODEL_DISCOUNT) === LoyaltyTier::MODEL_BONUS) {
+                // Use fixed bonus amount (bonus_cents) if set, otherwise fall back to percentage
+                if (!empty($tier['bonus_cents']) && (int) $tier['bonus_cents'] > 0) {
+                    $bonusCents = (int) $tier['bonus_cents'];
+                } elseif (($tier['bonus_percentage'] ?? 0) > 0) {
+                    $bonusCents = (int) floor($amountCents * (float) $tier['bonus_percentage'] / 100);
+                }
             }
         } catch (\Throwable $e) {
             // Non-critical: if tier lookup fails, just credit the base amount
@@ -349,7 +362,7 @@ class WalletService
                     'type'               => 'bonus',
                     'final_total_cents'  => $bonusCents,
                     'ip_address'         => getClientIP(),
-                    'description'        => 'Opwaardeerbonus (' . $tier['bonus_percentage'] . '% op €' . centsToEuro($amountCents) . ')',
+                    'description'        => 'Opwaardeerbonus (€' . centsToEuro($bonusCents) . ' op €' . centsToEuro($amountCents) . ')',
                 ]);
             }
 

@@ -211,6 +211,25 @@ if (!$tenant) {
             </div>
         </div>
 
+        <!-- Data Beheer -->
+        <div style="margin-bottom: var(--space-xl);">
+            <h2 style="margin-bottom: var(--space-md); color: var(--accent-primary);">Data Beheer</h2>
+            <p class="text-sm" style="color: var(--text-secondary); margin-bottom: var(--space-md);">
+                Verwijder oude push geschiedenis, verzonden marketing e-mails en systeem notificaties ouder dan 30 dagen.
+                Transacties en financiële gegevens worden <strong>nooit</strong> verwijderd.
+            </p>
+            <div style="display: flex; align-items: center; gap: var(--space-md); padding: var(--space-md); border-radius: 12px; background: rgba(255,193,7,0.04); border: 1px solid rgba(255,193,7,0.15);">
+                <div style="flex: 1;">
+                    <strong>Oude data opruimen</strong>
+                    <p class="text-sm" style="color: var(--text-secondary); margin-top: 2px;">
+                        Verwijdert: push logs, verzonden/mislukte e-mails, systeem notificaties ouder dan 30 dagen
+                    </p>
+                    <div id="cleanup-result" style="display:none; margin-top: var(--space-sm); padding: var(--space-sm) var(--space-md); border-radius: 8px; font-size: 13px;"></div>
+                </div>
+                <button type="button" class="btn btn-secondary" id="cleanup-btn">Opruimen</button>
+            </div>
+        </div>
+
         <!-- Actions -->
         <div style="text-align: center;">
             <button type="submit" class="btn btn-primary btn-lg">Opslaan</button>
@@ -254,7 +273,7 @@ function printQR() {
 </script>
 
 <script src="<?= BASE_URL ?>/public/js/app.js?v=<?= filemtime(PUBLIC_PATH . 'js/app.js') ?>"></script>
-<script src="<?= BASE_URL ?>/public/js/admin.js"></script>
+<script src="<?= BASE_URL ?>/public/js/admin.js?v=<?= filemtime(PUBLIC_PATH . 'js/admin.js') ?>"></script>
 
 <!-- Points toggle confirmation + instant save (MUST load after app.js for REGULR.api) -->
 <script>
@@ -351,6 +370,65 @@ function printQR() {
                 return;
             }
             doSave(enabling);
+        });
+    });
+})();
+
+// Cleanup handler
+(function() {
+    var btn = document.getElementById('cleanup-btn');
+    if (!btn) return;
+
+    btn.addEventListener('click', function() {
+        if (!confirm('Weet je zeker dat je data ouder dan 30 dagen wilt opruimen?\n\nDit verwijdert:\n• Push verzendgeschiedenis ouder dan 30 dagen\n• Verzonden/mislukte marketing e-mails ouder dan 30 dagen\n• Systeem notificaties ouder dan 30 dagen\n\nTransacties blijven altijd behouden.')) {
+            return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Bezig...';
+
+        var resultEl = document.getElementById('cleanup-result');
+        if (resultEl) { resultEl.style.display = 'none'; }
+
+        window.REGULR.api('/admin/cleanup', {
+            method: 'POST',
+            body: { days: 30 }
+        })
+        .then(function(result) {
+            if (result.success) {
+                var d = result.data;
+                var total = d.total || 0;
+                btn.textContent = 'Opruimen';
+
+                if (resultEl) {
+                    if (total === 0) {
+                        resultEl.style.display = 'block';
+                        resultEl.style.background = 'rgba(76,175,80,0.1)';
+                        resultEl.style.color = '#4CAF50';
+                        resultEl.textContent = '✓ Geen oude data gevonden. Alles is al schoon!';
+                    } else {
+                        resultEl.style.display = 'block';
+                        resultEl.style.background = 'rgba(76,175,80,0.1)';
+                        resultEl.style.color = '#4CAF50';
+                        var parts = [];
+                        if (d.deleted.audit_log_push > 0) parts.push(d.deleted.audit_log_push + ' push logs');
+                        if (d.deleted.email_queue_sent_failed > 0) parts.push(d.deleted.email_queue_sent_failed + ' e-mails');
+                        if (d.deleted.notifications_system > 0) parts.push(d.deleted.notifications_system + ' notificaties');
+                        if (d.deleted.notifications_soft_deleted > 0) parts.push(d.deleted.notifications_soft_deleted + ' verwijderde notificaties');
+                        resultEl.textContent = '✓ ' + total + ' records opgeruimd: ' + parts.join(', ');
+                    }
+                }
+                window.REGULR.showSuccess('Opruiming voltooid: ' + total + ' records verwijderd');
+            } else {
+                throw new Error(result.error || 'Onbekende fout');
+            }
+        })
+        .catch(function(err) {
+            btn.textContent = 'Opruimen';
+            window.REGULR.showError('Opruimen mislukt: ' + (err.message || 'Onbekende fout'));
+        })
+        .finally(function() {
+            btn.disabled = false;
         });
     });
 })();

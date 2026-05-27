@@ -11,7 +11,7 @@ declare(strict_types=1);
  *
  * Auth: guest+ (any authenticated user)
  *
- * Request:  { amount_cents: int }
+ * Request:  { amount_cents: int, tier_id?: int }
  * Response: { checkout_url: string, payment_id: string, transaction_id: int }
  */
 
@@ -24,6 +24,7 @@ if ($method !== 'POST') {
 
 $input = getJsonInput();
 $amountCents = (int) ($input['amount_cents'] ?? 0);
+$tierId    = !empty($input['tier_id']) ? (int) $input['tier_id'] : null;
 
 if ($amountCents <= 0) {
     Response::error('Bedrag moet groter zijn dan 0', 'VALIDATION_ERROR', 422);
@@ -52,7 +53,7 @@ if ($user && $user['role'] === 'guest' && ($user['account_status'] ?? 'unverifie
 try {
     $walletService = new WalletService($db);
 
-    $result = $walletService->createDeposit($userId, $tenantId, $amountCents);
+    $result = $walletService->createDeposit($userId, $tenantId, $amountCents, $tierId);
 
     // Log the deposit initiation
     $audit = new Audit($db);

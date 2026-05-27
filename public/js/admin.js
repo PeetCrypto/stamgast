@@ -158,6 +158,12 @@
                 <td style="text-align: center;">${window.REGULR.formatCurrency(user.balance_cents)}</td>
                 <td style="text-align: center;">${formatDate(user.last_activity)}</td>
                 <td>
+                    ${user.role === 'guest' && user.account_status === 'unverified' 
+                        ? '<button class="btn btn-sm btn-activate-inline" data-id="' + user.id + '" style="background:rgba(76,175,80,0.15);color:#4CAF50;margin-right:4px;">Activeer</button>' 
+                        : ''}
+                    ${user.role === 'guest' 
+                        ? '<button class="btn btn-sm btn-credit-wallet" data-id="' + user.id + '" style="background:rgba(255,193,7,0.15);color:#FFC107;margin-right:4px;">Saldo +</button>' 
+                        : ''}
                     <button class="btn btn-sm btn-edit" data-id="${user.id}">Bewerk</button>
                 </td>
             </tr>`;
@@ -166,6 +172,12 @@
         // Add click handlers
         tbody.querySelectorAll('.btn-edit').forEach(btn => {
             btn.addEventListener('click', () => openUserModal(parseInt(btn.dataset.id)));
+        });
+        tbody.querySelectorAll('.btn-activate-inline').forEach(btn => {
+            btn.addEventListener('click', () => activateUserInline(parseInt(btn.dataset.id)));
+        });
+        tbody.querySelectorAll('.btn-credit-wallet').forEach(btn => {
+            btn.addEventListener('click', () => openCreditWalletModal(parseInt(btn.dataset.id)));
         });
     }
 
@@ -190,13 +202,43 @@
         document.getElementById('password-reset-section').style.display = 'block';
         document.getElementById('reset-password-input').value = '';
 
-        // Show block or unblock based on current status
-        if (user.is_blocked) {
-            document.getElementById('block-user-btn').style.display = 'none';
-            document.getElementById('unblock-user-btn').style.display = 'inline-block';
+        // ── Account Status Section ──
+        var statusSection = document.getElementById('account-status-section');
+        var statusInfo    = document.getElementById('account-status-info');
+        var activateBtn   = document.getElementById('activate-user-btn');
+        var blockBtn      = document.getElementById('block-user-btn');
+        var unblockBtn    = document.getElementById('unblock-user-btn');
+
+        // Only show for guests
+        if (user.role === 'guest') {
+            statusSection.style.display = 'block';
+            var accStatus = user.account_status || 'unverified';
+
+            // Status description
+            var statusDescriptions = {
+                unverified: 'Deze gast heeft het account nog niet laten activeren. De gast kan geen saldo storten of betalen.',
+                active: 'Account is actief. De gast kan volledig gebruik maken van de wallet.',
+                suspended: 'Account is geblokkeerd door een admin.'
+            };
+            statusInfo.textContent = statusDescriptions[accStatus] || '';
+
+            // Activate button: only for unverified
+            activateBtn.style.display = (accStatus === 'unverified') ? 'inline-block' : 'none';
+
+            // Block/unblock based on is_blocked (photo_status)
+            if (user.is_blocked) {
+                blockBtn.style.display = 'none';
+                unblockBtn.style.display = 'inline-block';
+            } else {
+                blockBtn.style.display = 'inline-block';
+                unblockBtn.style.display = 'none';
+            }
         } else {
-            document.getElementById('block-user-btn').style.display = 'inline-block';
-            document.getElementById('unblock-user-btn').style.display = 'none';
+            // Staff roles: hide account status section
+            statusSection.style.display = 'none';
+            activateBtn.style.display = 'none';
+            blockBtn.style.display = 'none';
+            unblockBtn.style.display = 'none';
         }
 
         document.getElementById('user-modal-overlay').classList.add('modal-overlay--open');
@@ -249,7 +291,7 @@
                 throw new Error(response.error);
             }
         } catch (error) {
-            window.REGULR.showError(error.message);
+            window.REGULR.showError('Kon gebruiker niet opslaan');
         }
     }
 
@@ -275,7 +317,7 @@
                 throw new Error(response.error);
             }
         } catch (error) {
-            window.REGULR.showError(error.message);
+            window.REGULR.showError('Kon gebruiker niet blokkeren');
         }
     }
 
@@ -301,7 +343,57 @@
                 throw new Error(response.error);
             }
         } catch (error) {
-            window.REGULR.showError(error.message);
+            window.REGULR.showError('Kon gebruiker niet deblokkeren');
+        }
+    }
+
+    async function activateUser() {
+        var userId = parseInt(document.getElementById('user-id').value);
+        if (!userId || userId <= 0) return;
+
+        if (!confirm('Weet je zeker dat je dit gast-account wilt activeren? De gast kan daarna saldo storten en betalen.')) {
+            return;
+        }
+
+        try {
+            var response = await window.REGULR.api('/admin/users', {
+                method: 'POST',
+                body: { action: 'activate', user_id: userId }
+            });
+
+            if (response.success) {
+                window.REGULR.showSuccess('Gast geactiveerd');
+                closeModal();
+                loadUsers(currentPage);
+            } else {
+                throw new Error(response.error);
+            }
+        } catch (error) {
+            window.REGULR.showError('Kon gast niet activeren');
+        }
+    }
+
+    async function activateUserInline(userId) {
+        if (!userId || userId <= 0) return;
+
+        if (!confirm('Weet je zeker dat je dit gast-account wilt activeren? De gast kan daarna saldo storten en betalen.')) {
+            return;
+        }
+
+        try {
+            var response = await window.REGULR.api('/admin/users', {
+                method: 'POST',
+                body: { action: 'activate', user_id: userId }
+            });
+
+            if (response.success) {
+                window.REGULR.showSuccess('Gast geactiveerd');
+                loadUsers(currentPage);
+            } else {
+                throw new Error(response.error);
+            }
+        } catch (error) {
+            window.REGULR.showError('Kon gast niet activeren');
         }
     }
 
@@ -336,7 +428,99 @@
                 throw new Error(response.error);
             }
         } catch (error) {
-            window.REGULR.showError(error.message);
+            window.REGULR.showError('Kon wachtwoord niet wijzigen');
+        }
+    }
+
+    // ============================================
+    // WALLET CREDIT (admin manual top-up)
+    // ============================================
+    function openCreditWalletModal(userId) {
+        const user = usersData.find(u => u.id === userId);
+        if (!user) return;
+
+        document.getElementById('credit-user-id').value = user.id;
+        document.getElementById('credit-guest-name').textContent = user.first_name + ' ' + user.last_name;
+        document.getElementById('credit-guest-email').textContent = user.email;
+        document.getElementById('credit-current-balance').textContent = window.REGULR.formatCurrency(user.balance_cents);
+        document.getElementById('credit-amount').value = '';
+        document.getElementById('credit-reason').value = '';
+        document.getElementById('credit-new-balance-preview').style.display = 'none';
+
+        document.getElementById('credit-wallet-modal-overlay').classList.add('modal-overlay--open');
+        document.getElementById('credit-wallet-modal').classList.add('show');
+    }
+
+    function closeCreditWalletModal() {
+        document.getElementById('credit-wallet-modal-overlay')?.classList.remove('modal-overlay--open');
+        document.getElementById('credit-wallet-modal')?.classList.remove('show');
+    }
+
+    function updateCreditPreview() {
+        const amountEur = parseFloat(document.getElementById('credit-amount')?.value);
+        const previewEl = document.getElementById('credit-new-balance-preview');
+        const valueEl = document.getElementById('credit-new-balance-value');
+        const currentBalanceText = document.getElementById('credit-current-balance')?.textContent;
+
+        if (!previewEl || !valueEl) return;
+
+        if (!amountEur || amountEur <= 0) {
+            previewEl.style.display = 'none';
+            return;
+        }
+
+        // Parse current balance from formatted text back to cents
+        const currentCents = parseInt(currentBalanceText.replace(/[^0-9-]/g, '')) || 0;
+        const addCents = Math.round(amountEur * 100);
+        const newCents = currentCents + addCents;
+
+        previewEl.style.display = 'block';
+        valueEl.textContent = window.REGULR.formatCurrency(newCents);
+    }
+
+    async function creditWallet(e) {
+        if (e) e.preventDefault();
+
+        const userId = parseInt(document.getElementById('credit-user-id').value);
+        const amountEur = parseFloat(document.getElementById('credit-amount').value);
+        const reason = document.getElementById('credit-reason').value.trim();
+
+        if (!amountEur || amountEur <= 0) {
+            window.REGULR.showError('Voer een geldig bedrag in (groter dan €0)');
+            return;
+        }
+        if (!reason || reason.length < 3) {
+            window.REGULR.showError('Reden is verplicht (minimaal 3 tekens)');
+            return;
+        }
+
+        const amountCents = Math.round(amountEur * 100);
+        const currentBalanceText = document.getElementById('credit-current-balance').textContent;
+
+        if (!confirm('Weet je zeker dat je €' + amountEur.toFixed(2) + ' wilt toevoegen aan het saldo van deze gast?\n\nHuidig saldo: ' + currentBalanceText + '\nOpwaardering: €' + amountEur.toFixed(2))) {
+            return;
+        }
+
+        const submitBtn = document.getElementById('submit-credit-btn');
+        if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Bezig...'; }
+
+        try {
+            const response = await window.REGULR.api('/admin/users', {
+                method: 'POST',
+                body: { action: 'credit_wallet', user_id: userId, amount_cents: amountCents, reason: reason }
+            });
+
+            if (response.success) {
+                window.REGULR.showSuccess('€' + amountEur.toFixed(2) + ' succesvol toegevoegd. Nieuw saldo: ' + window.REGULR.formatCurrency(response.data.balance_after));
+                closeCreditWalletModal();
+                loadUsers(currentPage);
+            } else {
+                throw new Error(response.error);
+            }
+        } catch (error) {
+            window.REGULR.showError('Kon saldo niet toevoegen');
+        } finally {
+            if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Saldo toevoegen'; }
         }
     }
 
@@ -349,6 +533,8 @@
 // ============================================
 // TIERS / PACKAGES MANAGEMENT
 // ============================================
+let tiersLockedModel = null; // Set from API response — null = not chosen yet
+
 async function loadTiers() {
     const grid = document.getElementById('packages-grid');
     try {
@@ -356,6 +542,27 @@ async function loadTiers() {
         
         if (response.success) {
             tiersData = response.data.tiers;
+            tiersLockedModel = response.data.tier_model_type || null;
+
+            // Client-side self-heal: if tiers exist but model not locked, infer from first tier
+            // and replace the model selector UI with the locked banner + add button
+            if (!tiersLockedModel && response.data.tiers && response.data.tiers.length > 0) {
+                tiersLockedModel = response.data.tiers[0].model_type || 'discount';
+                var healLabel = tiersLockedModel === 'bonus' ? 'Opwaardeerbonus' : 'Kortingsmodel';
+                var healSection = document.getElementById('model-selector-section');
+                if (healSection && healSection.querySelector('.model-selector')) {
+                    healSection.innerHTML =
+                        '<div class="glass-card" style="padding: var(--space-md); margin-bottom: var(--space-lg); border: 1px solid rgba(255,193,7,0.3);"><p style="margin:0;"><strong>🔒 Actief model:</strong> ' + healLabel + '</p></div>' +
+                        '<div style="margin-bottom: var(--space-lg);">' +
+                        '<button class="btn btn-primary" id="add-tier-btn"><span style="margin-right: var(--space-sm);">+</span> Nieuw Pakket</button>' +
+                        '</div>';
+                    var healAddBtn = document.getElementById('add-tier-btn');
+                    if (healAddBtn) {
+                        healAddBtn.addEventListener('click', function() { openTierModal(0); });
+                    }
+                }
+            }
+
             renderPackagesGrid(response.data.tiers);
         } else {
             // API returned success=false — show error state
@@ -374,7 +581,7 @@ async function loadTiers() {
             grid.innerHTML = `
                 <div class="empty-packages" style="grid-column: 1 / -1;">
                     <p style="color: var(--error, #f44336);">Kan pakketten niet laden</p>
-                    <p style="font-size:0.8rem; opacity:0.6;">${error.message || 'Netwerkfout'}</p>
+                    <p style="font-size:0.8rem; opacity:0.6;">Controleer je verbinding en probeer opnieuw</p>
                     <button class="btn btn-secondary" onclick="window.REGULR.admin.loadTiers()" style="margin-top: var(--space-md);">Opnieuw proberen</button>
                 </div>`;
         }
@@ -405,48 +612,28 @@ function renderPackagesGrid(tiers) {
         const isBonus = tier.model_type === 'bonus';
 
         let discountHtml = '';
+        const perks = [];
         if (isBonus) {
-            // Bonus model: show bonus percentage + optional food discount
-            const bonusEur = (tier.topup_amount_cents * tier.bonus_percentage / 100 / 100).toFixed(0);
-            const totalEur = (tier.topup_amount_cents / 100 * (1 + tier.bonus_percentage / 100)).toFixed(0);
-            discountHtml = `
-                <div class="package-card__discount-row">
-                    <span class="package-card__discount-label">Stort</span>
-                    <span class="package-card__discount-value">€${topupEur}</span>
-                </div>
-                <div class="package-card__discount-row">
-                    <span class="package-card__discount-label">Tegoed</span>
-                    <span class="package-card__discount-value" style="color:var(--brand-color,#FFC107);">€${totalEur} <small style="opacity:0.7;">(+${bonusEur})</small></span>
-                </div>
-                ${tier.food_discount_perc > 0 ? `
-                <div class="package-card__discount-row">
-                    <span class="package-card__discount-label">Eten korting</span>
-                    <span class="package-card__discount-value">${tier.food_discount_perc}%</span>
-                </div>` : ''}
-                <div class="package-card__discount-row">
-                    <span class="package-card__discount-label">Punten</span>
-                    <span class="package-card__discount-value">${tier.points_multiplier}x</span>
-                </div>`;
-        } else {
-            // Discount model: show alcohol + food discounts
-            discountHtml = `
-                <div class="package-card__discount-row">
-                    <span class="package-card__discount-label">Dranken korting</span>
-                    <span class="package-card__discount-value">${tier.alcohol_discount_perc}%</span>
-                </div>
-                <div class="package-card__discount-row">
-                    <span class="package-card__discount-label">Eten korting</span>
-                    <span class="package-card__discount-value">${tier.food_discount_perc}%</span>
-                </div>
-                <div class="package-card__discount-row">
-                    <span class="package-card__discount-label">Punten</span>
-                    <span class="package-card__discount-value">${tier.points_multiplier}x</span>
-                </div>`;
+            // Bonus model: show fixed bonus amount + optional food discount
+            const bonusCents = tier.bonus_cents > 0 ? tier.bonus_cents : Math.floor(tier.topup_amount_cents * tier.bonus_percentage / 100);
+            const totalEur = ((tier.topup_amount_cents + bonusCents) / 100).toFixed(0);
+            perks.push('€' + totalEur + ' tegoed');
+        }
+        if (!isBonus && tier.alcohol_discount_perc > 0) {
+            perks.push('-' + tier.alcohol_discount_perc + '% alcohol');
+        }
+        if (tier.food_discount_perc > 0) {
+            perks.push('-' + tier.food_discount_perc + '% non-alcohol');
+        }
+        if (tier.points_multiplier > 1) {
+            perks.push(tier.points_multiplier + 'x punten');
         }
 
         const modelBadge = isBonus
             ? '<span style="font-size:0.7rem;background:rgba(76,175,80,0.15);color:#4CAF50;padding:2px 8px;border-radius:8px;">Bonus</span>'
             : '<span style="font-size:0.7rem;background:rgba(255,193,7,0.15);color:#FFC107;padding:2px 8px;border-radius:8px;">Korting</span>';
+
+        discountHtml = perks.map(perk => `<span>${perk}</span>`).join(' · ');
 
         return `
         <div class="package-card ${isActive ? '' : 'is-inactive'}" data-tier-id="${tier.id}">
@@ -488,37 +675,59 @@ function renderPackagesGrid(tiers) {
 }
 
 function openTierModal(tierId) {
-    const tier = tiersData.find(t => t.id === tierId);
+    const tier = tierId ? tiersData.find(t => t.id === tierId) : null;
     const isEdit = !!tier;
-    const modelType = tier?.model_type || 'discount';
+    const modelType = tiersLockedModel || (tier?.model_type || 'discount');
 
-    document.getElementById('tier-modal-title').textContent = isEdit ? `Bewerk: ${tier.name}` : 'Nieuw Pakket';
-    document.getElementById('tier-id').value = tier?.id || '';
-    document.getElementById('tier-name').value = tier?.name || '';
-    document.getElementById('tier-topup-amount').value = tier ? tier.topup_amount_cents / 100 : 100;
-    document.getElementById('tier-min-deposit').value = tier ? tier.min_deposit_cents / 100 : 0;
-    document.getElementById('tier-multiplier').value = tier?.points_multiplier || 1;
-    document.getElementById('tier-sort-order').value = tier?.sort_order ?? 0;
-    document.getElementById('tier-is-active').checked = tier ? tier.is_active === 1 : true;
-    document.getElementById('delete-tier-btn').style.display = isEdit ? 'inline-block' : 'none';
+    var el;
 
-    // Set model type radio
-    document.getElementById('model-discount').checked = (modelType === 'discount');
-    document.getElementById('model-bonus').checked = (modelType === 'bonus');
+    el = document.getElementById('tier-modal-title');
+    if (el) el.textContent = isEdit ? 'Bewerk: ' + tier.name : 'Nieuw Pakket';
+
+    el = document.getElementById('tier-id');
+    if (el) el.value = tier?.id || '';
+
+    el = document.getElementById('tier-name');
+    if (el) el.value = tier?.name || '';
+
+    el = document.getElementById('tier-topup-amount');
+    if (el) el.value = tier ? tier.topup_amount_cents / 100 : 100;
+
+    el = document.getElementById('tier-min-deposit');
+    if (el) el.value = tier ? tier.min_deposit_cents / 100 : 0;
+
+    el = document.getElementById('tier-multiplier');
+    if (el) el.value = tier?.points_multiplier || 1;
+
+    el = document.getElementById('tier-sort-order');
+    if (el) el.value = tier?.sort_order ?? 0;
+
+    el = document.getElementById('tier-is-active');
+    if (el) el.checked = tier ? tier.is_active === 1 : true;
+
+    el = document.getElementById('delete-tier-btn');
+    if (el) el.style.display = isEdit ? 'inline-block' : 'none';
+
+    // Show correct fields based on locked model type
     toggleModelFields(modelType);
 
     // Set model-specific values
     if (modelType === 'bonus') {
-        document.getElementById('tier-bonus-percentage').value = tier?.bonus_percentage || 10;
-        document.getElementById('tier-food-discount').value = tier?.food_discount_perc || 0;
+        var bonusEur = tier ? (tier.bonus_cents || 0) / 100 : 10;
+        el = document.getElementById('tier-bonus-cents');
+        if (el) el.value = bonusEur;
+        el = document.getElementById('tier-food-discount');
+        if (el) el.value = tier?.food_discount_perc || 0;
     } else {
-        document.getElementById('tier-alc-discount').value = tier?.alcohol_discount_perc || 0;
-        document.getElementById('tier-food-discount-d').value = tier?.food_discount_perc || 0;
+        el = document.getElementById('tier-alc-discount');
+        if (el) el.value = tier?.alcohol_discount_perc || 0;
+        el = document.getElementById('tier-food-discount-d');
+        if (el) el.value = tier?.food_discount_perc || 0;
     }
 
     // Open modal overlay and modal
-    document.getElementById('tier-modal-overlay').classList.add('modal-overlay--open');
-    document.getElementById('tier-modal').classList.add('show');
+    document.getElementById('tier-modal-overlay')?.classList.add('modal-overlay--open');
+    document.getElementById('tier-modal')?.classList.add('show');
 }
 
 function toggleModelFields(modelType) {
@@ -528,13 +737,71 @@ function toggleModelFields(modelType) {
 }
 
 function getSelectedModelType() {
-    return document.getElementById('model-bonus').checked ? 'bonus' : 'discount';
+    // Model type is always determined by the tenant-level lock (set via model selector cards)
+    return tiersLockedModel || 'discount';
 }
+
+    function selectModelType(modelType) {
+        console.log('[REGULR] selectModelType called with:', modelType, 'lockedModel:', tiersLockedModel);
+        if (tiersLockedModel) {
+            console.log('[REGULR] Model already locked, ignoring click');
+            return;
+        }
+
+        // Visual feedback — highlight selected card
+        document.querySelectorAll('.model-selector-card').forEach(c => c.classList.remove('model-selector-card--selected'));
+        var selectedCard = document.querySelector('[data-model="' + modelType + '"]');
+        if (selectedCard) selectedCard.classList.add('model-selector-card--selected');
+
+        // Set locked model locally (will be persisted server-side on first package create)
+        tiersLockedModel = modelType;
+        console.log('[REGULR] tiersLockedModel set to:', tiersLockedModel);
+
+        // Update modal fields visibility
+        toggleModelFields(modelType);
+
+        // Replace model selector with locked banner + Stap 2 button
+        var label = modelType === 'bonus' ? 'Opwaardeerbonus' : 'Kortingsmodel';
+        var selectorSection = document.getElementById('model-selector-section');
+        console.log('[REGULR] selectorSection element:', selectorSection);
+        if (selectorSection) {
+            selectorSection.innerHTML = 
+                '<div class="glass-card" style="padding: var(--space-md); margin-bottom: var(--space-lg); border: 1px solid rgba(255,193,7,0.3);"><p style="margin:0;"><strong>🔒 Actief model:</strong> ' + label + '</p></div>' +
+                '<div style="margin-bottom: var(--space-lg);">' +
+                '<button class="btn btn-primary" id="add-tier-btn"><span style="margin-right: var(--space-sm);">+</span> Nieuw Pakket</button>' +
+                '</div>';
+        }
+
+        // Re-attach click handler for the dynamically created button
+        var addBtn = document.getElementById('add-tier-btn');
+        if (addBtn) {
+            addBtn.addEventListener('click', function() { openTierModal(0); });
+        }
+
+        if (window.REGULR && window.REGULR.showSuccess) {
+            window.REGULR.showSuccess(label + ' geselecteerd');
+        }
+        console.log('[REGULR] selectModelType completed successfully');
+    }
 
 async function saveTier() {
     const topupEur = parseFloat(document.getElementById('tier-topup-amount').value);
+    const tierName = (document.getElementById('tier-name').value || '').trim();
+    const currentTierId = parseInt(document.getElementById('tier-id').value) || 0;
 
     // Client-side validation
+    if (!tierName) {
+        window.REGULR.showError('Pakketnaam is verplicht');
+        return;
+    }
+    // Duplicate name check (case-insensitive, exclude current tier being edited)
+    var nameExists = (tiersData || []).some(function(t) {
+        return t.id !== currentTierId && (t.name || '').toLowerCase() === tierName.toLowerCase();
+    });
+    if (nameExists) {
+        window.REGULR.showError('Er bestaat al een pakket met de naam "' + tierName + '"');
+        return;
+    }
     if (!topupEur || topupEur < 100) {
         window.REGULR.showError('Opwaardeerbedrag moet minimaal €100 zijn');
         return;
@@ -544,7 +811,7 @@ async function saveTier() {
         return;
     }
 
-    const modelType = getSelectedModelType();
+    const modelType = tiersLockedModel || getSelectedModelType();
 
     const data = {
         tier_id: document.getElementById('tier-id').value,
@@ -558,9 +825,11 @@ async function saveTier() {
     };
 
     if (modelType === 'bonus') {
-        data.bonus_percentage = parseFloat(document.getElementById('tier-bonus-percentage').value) || 0;
+        var bonusEur = parseFloat(document.getElementById('tier-bonus-cents').value) || 0;
+        data.bonus_cents = Math.round(bonusEur * 100);
+        data.bonus_percentage = 0; // legacy field
         data.food_discount_perc = parseFloat(document.getElementById('tier-food-discount').value) || 0;
-        data.alcohol_discount_perc = 0; // Not allowed in bonus model
+        // Don't send alcohol_discount_perc for bonus model — API blocks it
     } else {
         data.alcohol_discount_perc = parseFloat(document.getElementById('tier-alc-discount').value) || 0;
         data.food_discount_perc = parseFloat(document.getElementById('tier-food-discount-d').value) || 0;
@@ -579,7 +848,7 @@ async function saveTier() {
             loadTiers();
         }
     } catch (error) {
-        window.REGULR.showError(error.message);
+        window.REGULR.showError('Kon pakket niet opslaan');
     }
 }
 
@@ -595,7 +864,7 @@ async function toggleTier(tierId, active) {
             loadTiers();
         }
     } catch (error) {
-        window.REGULR.showError(error.message);
+        window.REGULR.showError('Kon pakket niet wijzigen');
     }
 }
 
@@ -615,7 +884,7 @@ async function deleteTier(tierId) {
             loadTiers();
         }
     } catch (error) {
-        window.REGULR.showError(error.message);
+        window.REGULR.showError('Kon pakket niet verwijderen');
     }
 }
 
@@ -712,7 +981,7 @@ async function deleteTier(tierId) {
                 if (logoRemove) logoRemove.checked = false;
 
             } catch (error) {
-                window.REGULR.showError('Logo upload mislukt: ' + error.message);
+                window.REGULR.showError('Logo upload mislukt');
                 return;
             }
         } else if (logoRemove && logoRemove.checked) {
@@ -738,7 +1007,7 @@ async function deleteTier(tierId) {
                 if (removeField) removeField.style.display = 'none';
 
             } catch (error) {
-                window.REGULR.showError('Logo verwijderen mislukt: ' + error.message);
+                window.REGULR.showError('Logo verwijderen mislukt');
                 return;
             }
         }
@@ -771,10 +1040,10 @@ async function deleteTier(tierId) {
                 window.location.reload();
             }
         } catch (error) {
-            window.REGULR.showError(error.message);
+            window.REGULR.showError('Instellingen konden niet worden opgeslagen');
         }
     }
-
+    
     /**
      * Update the header logo across all roles.
      * @param {string|null} logoUrl - New logo URL, or null to remove (shows tenant name)
@@ -908,7 +1177,7 @@ async function deleteTier(tierId) {
                 throw new Error(response.error || 'Segmentatie mislukt');
             }
         } catch (error) {
-            window.REGULR.showError('Segmentatie fout: ' + error.message);
+            window.REGULR.showError('Kon gasten niet filteren');
         }
     }
 
@@ -1000,7 +1269,7 @@ async function deleteTier(tierId) {
                 throw new Error(response.error || 'Verzenden mislukt');
             }
         } catch (error) {
-            window.REGULR.showError('Verzendfout: ' + error.message);
+            window.REGULR.showError('E-mails konden niet worden verzonden');
         } finally {
             if (sendBtn) {
                 sendBtn.disabled = false;
@@ -1014,7 +1283,7 @@ async function deleteTier(tierId) {
         if (filter !== undefined) queueFilter = filter;
 
         try {
-            const params = new URLSearchParams({ page: queuePage, per_page: 20, status: queueFilter });
+            const params = new URLSearchParams({ page: queuePage, per_page: 10, status: queueFilter });
             const response = await window.REGULR.api('/marketing/queue?' + params.toString());
 
             if (response.success) {
@@ -1111,7 +1380,7 @@ async function deleteTier(tierId) {
                 throw new Error(response.error || 'Verwerken mislukt');
             }
         } catch (error) {
-            window.REGULR.showError('Wachtrij fout: ' + error.message);
+            window.REGULR.showError('Wachtrij kon niet worden verwerkt');
         } finally {
             btn.disabled = false;
             btn.textContent = 'Verstuur wachtrij';
@@ -1145,6 +1414,7 @@ async function deleteTier(tierId) {
     let pushMode = 'broadcast';
     let selectedUserId = null;
     let pushSearchTimeout = null;
+    let pushHistoryPage = 1;
 
     function loadPushPage() {
         // Tab switching
@@ -1169,7 +1439,7 @@ async function deleteTier(tierId) {
         });
 
         // History refresh
-        document.getElementById('refresh-history-btn')?.addEventListener('click', loadPushHistory);
+        document.getElementById('refresh-history-btn')?.addEventListener('click', () => { pushHistoryPage = 1; loadPushHistory(); });
 
         // Initial load
         loadPushHistory();
@@ -1323,7 +1593,7 @@ async function deleteTier(tierId) {
                 throw new Error(response.error || 'Verzenden mislukt');
             }
         } catch (error) {
-            window.REGULR.showError('Fout: ' + error.message);
+            window.REGULR.showError('Notificatie kon niet worden verzonden');
         } finally {
             if (sendBtn) {
                 sendBtn.disabled = false;
@@ -1332,28 +1602,36 @@ async function deleteTier(tierId) {
         }
     }
 
-    async function loadPushHistory() {
+    async function loadPushHistory(page) {
+        if (page !== undefined) pushHistoryPage = page;
         const container = document.getElementById('push-history');
         if (!container) return;
 
         container.innerHTML = '<p style="color:var(--text-secondary);font-size:14px;text-align:center;padding:var(--space-md);">Geschiedenis ophalen...</p>';
 
         try {
-            const response = await window.REGULR.api('/admin/dashboard');
+            const params = new URLSearchParams({ page: pushHistoryPage, per_page: 10 });
+            const response = await window.REGULR.api('/admin/push_history?' + params.toString());
             if (response.success) {
+                const data = response.data;
+
                 // Update stats counters
-                if (response.data.push_stats) {
+                if (data.push_stats) {
                     const statSent = document.getElementById('stat-sent');
                     const statFailed = document.getElementById('stat-failed');
-                    if (statSent) statSent.textContent = response.data.push_stats.sent_7d || 0;
-                    if (statFailed) statFailed.textContent = response.data.push_stats.failed_7d || 0;
+                    if (statSent) statSent.textContent = data.push_stats.sent_7d || 0;
+                    if (statFailed) statFailed.textContent = data.push_stats.failed_7d || 0;
                 }
 
-                if (response.data.recent_push && response.data.recent_push.length > 0) {
-                    renderPushHistory(response.data.recent_push);
+                const items = data.items || [];
+                if (items.length > 0) {
+                    renderPushHistory(items);
                 } else {
                     container.innerHTML = '<p style="color:var(--text-secondary);font-size:14px;text-align:center;padding:var(--space-md);">Nog geen verzonden notificaties</p>';
                 }
+
+                // Render pagination
+                renderPushHistoryPagination(data.pagination || {});
             } else {
                 container.innerHTML = '<p style="color:var(--text-secondary);font-size:14px;text-align:center;padding:var(--space-md);">Nog geen verzonden notificaties</p>';
             }
@@ -1390,6 +1668,35 @@ async function deleteTier(tierId) {
                 </div>
             `;
         }).join('');
+    }
+
+    function renderPushHistoryPagination(pagination) {
+        const pagEl = document.getElementById('push-history-pagination');
+        if (!pagEl) return;
+        const totalPages = pagination.total_pages || 1;
+        if (totalPages <= 1) { pagEl.innerHTML = ''; return; }
+
+        const current = pagination.page || 1;
+        let html = '<button class="queue-page-btn" onclick="loadPushHistory(' + (current - 1) + ')"' + (current <= 1 ? ' disabled' : '') + '>&laquo;</button>';
+
+        let startPage = Math.max(1, current - 3);
+        let endPage = Math.min(totalPages, startPage + 6);
+        if (endPage - startPage < 6) startPage = Math.max(1, endPage - 6);
+
+        if (startPage > 1) {
+            html += '<button class="queue-page-btn" onclick="loadPushHistory(1)">1</button>';
+            if (startPage > 2) html += '<span style="color:var(--text-secondary);padding:4px;">...</span>';
+        }
+        for (let p = startPage; p <= endPage; p++) {
+            html += '<button class="queue-page-btn' + (p === current ? ' active' : '') + '" onclick="loadPushHistory(' + p + ')">' + p + '</button>';
+        }
+        if (endPage < totalPages) {
+            if (endPage < totalPages - 1) html += '<span style="color:var(--text-secondary);padding:4px;">...</span>';
+            html += '<button class="queue-page-btn" onclick="loadPushHistory(' + totalPages + ')">' + totalPages + '</button>';
+        }
+
+        html += '<button class="queue-page-btn" onclick="loadPushHistory(' + (current + 1) + ')"' + (current >= totalPages ? ' disabled' : '') + '>&raquo;</button>';
+        pagEl.innerHTML = html;
     }
 
     // ============================================
@@ -1443,14 +1750,24 @@ async function deleteTier(tierId) {
          });
          
          document.getElementById('block-user-btn')?.addEventListener('click', blockUser);
-         document.getElementById('unblock-user-btn')?.addEventListener('click', unblockUser);
-         document.getElementById('reset-password-btn')?.addEventListener('click', resetPassword);
-         document.getElementById('toggle-password-visibility')?.addEventListener('click', () => {
-             const input = document.getElementById('reset-password-input');
-             input.type = input.type === 'password' ? 'text' : 'password';
+          document.getElementById('unblock-user-btn')?.addEventListener('click', unblockUser);
+          document.getElementById('activate-user-btn')?.addEventListener('click', activateUser);
+          document.getElementById('reset-password-btn')?.addEventListener('click', resetPassword);
+          document.getElementById('toggle-password-visibility')?.addEventListener('click', () => {
+              const input = document.getElementById('reset-password-input');
+              input.type = input.type === 'password' ? 'text' : 'password';
+          });
+         
+         // Credit wallet modal event handlers
+         document.getElementById('close-credit-modal')?.addEventListener('click', closeCreditWalletModal);
+         document.getElementById('cancel-credit-modal')?.addEventListener('click', closeCreditWalletModal);
+         document.getElementById('credit-wallet-form')?.addEventListener('submit', creditWallet);
+         document.getElementById('credit-wallet-modal-overlay')?.addEventListener('click', (e) => {
+             if (e.target.id === 'credit-wallet-modal-overlay') closeCreditWalletModal();
          });
-        
-        document.getElementById('tier-form')?.addEventListener('submit', (e) => {
+         document.getElementById('credit-amount')?.addEventListener('input', updateCreditPreview);
+         
+         document.getElementById('tier-form')?.addEventListener('submit', (e) => {
             e.preventDefault(); saveTier();
         });
         
@@ -1476,9 +1793,9 @@ async function deleteTier(tierId) {
             if (tierId) deleteTier(tierId);
         });
 
-        // Model type radio toggle
-        document.getElementById('model-discount')?.addEventListener('change', () => toggleModelFields('discount'));
-        document.getElementById('model-bonus')?.addEventListener('change', () => toggleModelFields('bonus'));
+        // Model selector card click handlers (aparte sectie boven grid)
+        document.getElementById('select-discount-model')?.addEventListener('click', () => selectModelType('discount'));
+        document.getElementById('select-bonus-model')?.addEventListener('click', () => selectModelType('bonus'));
         
         console.log('Admin initialized');
     }
@@ -1504,6 +1821,10 @@ async function deleteTier(tierId) {
         document.getElementById('block-user-btn').style.display = 'none';
         document.getElementById('unblock-user-btn').style.display = 'none';
 
+        // Hide account status section (not applicable for new users)
+        document.getElementById('account-status-section').style.display = 'none';
+        document.getElementById('activate-user-btn').style.display = 'none';
+
         document.getElementById('user-modal-overlay').classList.add('modal-overlay--open');
         document.getElementById('user-modal').classList.add('show');
     }
@@ -1520,7 +1841,8 @@ async function deleteTier(tierId) {
         loadUsers,
         loadTiers,
         loadSettings,
-        loadMarketing
+        loadMarketing,
+        activateUserInline
     };
 
     if (document.readyState === 'loading') {
@@ -1528,5 +1850,9 @@ async function deleteTier(tierId) {
     } else if (window.location.pathname.includes('/admin')) {
         initAdmin();
     }
+
+    // Expose pagination handlers globally for inline onclick
+    window.loadPushHistory = loadPushHistory;
+    window.loadQueueStatus = loadQueueStatus;
 
 })();

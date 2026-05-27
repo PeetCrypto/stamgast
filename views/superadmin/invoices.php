@@ -190,7 +190,7 @@ document.getElementById('btn-generate')?.addEventListener('click', async () => {
             statusEl.style.color = '#f44336';
         }
     } catch (err) {
-        statusEl.textContent = 'Netwerkfout: ' + err.message;
+        statusEl.textContent = 'Netwerkfout opgetreden';
         statusEl.style.color = '#f44336';
     }
 });
@@ -224,7 +224,7 @@ document.getElementById('btn-generate-all')?.addEventListener('click', async () 
             statusEl.style.color = '#f44336';
         }
     } catch (err) {
-        statusEl.textContent = 'Netwerkfout: ' + err.message;
+        statusEl.textContent = 'Netwerkfout opgetreden';
         statusEl.style.color = '#f44336';
     }
 });
@@ -249,7 +249,7 @@ document.querySelectorAll('.inv-status-btn').forEach(btn => {
                 alert(result.error || 'Status wijziging mislukt');
             }
         } catch (err) {
-            alert('Netwerkfout: ' + err.message);
+            alert('Er is een netwerkfout opgetreden');
         }
     });
 });

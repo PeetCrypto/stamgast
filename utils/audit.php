@@ -27,21 +27,26 @@ class Audit
         ?int $entityId = null,
         ?array $metadata = null
     ): void {
-        $stmt = $this->db->prepare(
-            'INSERT INTO `audit_log` (`tenant_id`, `user_id`, `action`, `entity_type`, `entity_id`, `ip_address`, `user_agent`, `metadata`)
-             VALUES (:tenant_id, :user_id, :action, :entity_type, :entity_id, :ip_address, :user_agent, :metadata)'
-        );
+        try {
+            $stmt = $this->db->prepare(
+                'INSERT INTO `audit_log` (`tenant_id`, `user_id`, `action`, `entity_type`, `entity_id`, `ip_address`, `user_agent`, `metadata`)
+                 VALUES (:tenant_id, :user_id, :action, :entity_type, :entity_id, :ip_address, :user_agent, :metadata)'
+            );
 
-        $stmt->execute([
-            ':tenant_id'    => $tenantId,
-            ':user_id'      => $userId,
-            ':action'       => $action,
-            ':entity_type'  => $entityType,
-            ':entity_id'    => $entityId,
-            ':ip_address'   => getClientIP(),
-            ':user_agent'   => $_SERVER['HTTP_USER_AGENT'] ?? null,
-            ':metadata'     => $metadata !== null ? json_encode($metadata, JSON_THROW_ON_ERROR) : null,
-        ]);
+            $stmt->execute([
+                ':tenant_id'    => $tenantId,
+                ':user_id'      => $userId,
+                ':action'       => $action,
+                ':entity_type'  => $entityType,
+                ':entity_id'    => $entityId,
+                ':ip_address'   => getClientIP(),
+                ':user_agent'   => $_SERVER['HTTP_USER_AGENT'] ?? null,
+                ':metadata'     => $metadata !== null ? json_encode($metadata, JSON_THROW_ON_ERROR) : null,
+            ]);
+        } catch (\Throwable $e) {
+            // Silently log — audit failure must never crash the operation
+            error_log('[audit] Failed to log action "' . $action . '": ' . $e->getMessage());
+        }
     }
 
     /**

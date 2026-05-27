@@ -142,7 +142,7 @@ class NotificationService
 
             // Get tenant name
             $tenant = $this->tenantModel->findById($tenantId);
-            $tenantName = $tenant !== null ? $tenant['name'] : 'REGULR.vip';
+            $tenantName = $tenant !== null ? $tenant['name'] : 'REGULR';
 
             $emailService = new EmailService($this->db);
 
@@ -157,7 +157,8 @@ class NotificationService
                 strip_tags($body),
                 'guest_confirmation',
                 $tenantId,
-                $userId
+                $userId,
+                $tenantName
             );
         } catch (\Throwable $e) {
             // Non-critical: log and continue
@@ -191,12 +192,12 @@ class NotificationService
                 <p style="margin:0 0 8px;font-size:16px;">Hallo {$userName},</p>
                 <h3 style="margin:0 0 12px;font-size:18px;color:#FFC107;">{$title}</h3>
                 <p style="margin:0 0 16px;font-size:15px;color:#cccccc;">{$body}</p>
-                <p style="margin:0;font-size:13px;color:#888888;">Bekijk meer in je REGULR.vip inbox</p>
+                <p style="margin:0;font-size:13px;color:#888888;">Bekijk meer in je {$tenantName} inbox</p>
             </td>
         </tr>
         <tr>
             <td style="text-align:center;padding-top:24px;font-size:12px;color:#666666;">
-                &copy; {$year} REGULR.vip — {$tenantName}
+                &copy; {$year} {$tenantName}
             </td>
         </tr>
     </table>

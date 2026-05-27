@@ -70,23 +70,18 @@
     // ============================================
     // DEPOSIT FLOW
     // ============================================
-    async function initDeposit(amountCents) {
+    async function initDeposit(amountCents, tierId) {
         if (depositProcessing) return;
-        
-        // Auth gate: require FaceID/PIN voordat storten toegestaan is
-        if (window.REGULR?.appLock?.verify) {
-            var authorized = await window.REGULR.appLock.verify();
-            if (!authorized) return;
-        }
         
         depositProcessing = true;
         
         try {
+            var body = { amount_cents: amountCents };
+            if (tierId > 0) { body.tier_id = tierId; }
+
             const response = await window.REGULR.api('/wallet/deposit', {
                 method: 'POST',
-                body: {
-                    amount_cents: amountCents
-                }
+                body: body
             });
 
             if (response.success && response.data.status === 'mock') {
@@ -149,38 +144,54 @@
         if (!container) return;
 
         container.innerHTML = '<div class="deposit-options">' + packages.map(function(pkg) {
-            const amount = (pkg.topup_amount_cents / 100).toFixed(0);
-            const isBonus = (pkg.model_type === 'bonus');
+            var topupEur = (pkg.topup_amount_cents / 100).toFixed(0);
+            var isBonus = (pkg.model_type === 'bonus');
 
-            // Build perk info lines
-            var perks = [];
-            if (isBonus && pkg.bonus_percentage > 0) {
-                const totalEur = (pkg.topup_amount_cents * (1 + pkg.bonus_percentage / 100) / 100).toFixed(0);
-                perks.push('€' + totalEur + ' tegoed');
+            // Calculate bonus and total for bonus packages
+            var bonusCents = 0;
+            var totalCents = pkg.topup_amount_cents;
+            if (isBonus) {
+                bonusCents = pkg.bonus_cents > 0
+                    ? pkg.bonus_cents
+                    : Math.floor(pkg.topup_amount_cents * (pkg.bonus_percentage || 0) / 100);
+                totalCents = pkg.topup_amount_cents + bonusCents;
             }
+            var totalEur = (totalCents / 100).toFixed(0);
+            var bonusEur = (bonusCents / 100).toFixed(0);
+
+            // Build the card
+            var html = '';
+
+            // Package name
+            html += '<span class="deposit-option__name">' + pkg.name + '</span>';
+
+            if (isBonus && bonusCents > 0) {
+                // Bonus package: show pay/receive breakdown
+                html += '<span class="deposit-option__stort">Betaal &euro;' + topupEur + '</span>';
+                html += '<span class="deposit-option__total">Ontvang &euro;' + totalEur + ' tegoed</span>';
+                html += '<span class="deposit-option__bonus-line">&euro;' + bonusEur + ' gratis</span>';
+            } else {
+                // Discount / simple package: show deposit amount
+                html += '<span class="deposit-option__amount">&euro;' + topupEur + '</span>';
+            }
+
+            // Extras: discounts and points (both models)
+            var extras = [];
             if (!isBonus && pkg.alcohol_discount_perc > 0) {
-                perks.push(pkg.alcohol_discount_perc + '% dranken korting');
+                extras.push('-' + pkg.alcohol_discount_perc + '% alcohol');
             }
             if (pkg.food_discount_perc > 0) {
-                perks.push(pkg.food_discount_perc + '% eten korting');
+                extras.push('-' + pkg.food_discount_perc + '% non-alcohol');
             }
             if (pkg.points_multiplier > 1) {
-                perks.push(pkg.points_multiplier + 'x punten');
+                extras.push(pkg.points_multiplier + 'x punten');
+            }
+            if (extras.length > 0) {
+                html += '<span class="deposit-option__extras">' + extras.join(' &middot; ') + '</span>';
             }
 
-            var perksHtml = '';
-            if (perks.length > 0) {
-                perksHtml = '<span class="deposit-option__perks">' + perks.join(' &bull; ') + '</span>';
-            }
-
-            var bonusBadge = isBonus
-                ? '<span style="font-size:0.65rem;background:rgba(76,175,80,0.2);color:#4CAF50;padding:2px 6px;border-radius:6px;">Bonus</span> '
-                : '';
-
-            return '<button class="btn btn-deposit-option" data-amount="' + pkg.topup_amount_cents + '">' +
-                '<span class="deposit-option__amount">&euro;' + amount + '</span>' +
-                '<span class="deposit-option__name">' + bonusBadge + pkg.name + '</span>' +
-                perksHtml +
+            return '<button class="btn btn-deposit-option' + (isBonus && bonusCents > 0 ? ' btn-deposit-option--bonus' : '') + '" data-amount="' + pkg.topup_amount_cents + '" data-tier-id="' + (pkg.id || '') + '">' +
+                html +
             '</button>';
         }).join('') + '</div>';
 
@@ -188,7 +199,8 @@
         container.querySelectorAll('.btn-deposit-option').forEach(function(btn) {
             btn.addEventListener('click', function() {
                 var amount = parseInt(btn.dataset.amount, 10);
-                initDeposit(amount);
+                var tierId = btn.dataset.tierId ? parseInt(btn.dataset.tierId, 10) : 0;
+                initDeposit(amount, tierId);
             });
         });
     }

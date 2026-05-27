@@ -1,8 +1,11 @@
 <?php
 declare(strict_types=1);
 /**
- * Login Page - Midnight Lounge Design
+ * Login Page — Platform Admin Only (Superadmin)
  * REGULR.vip Loyalty Platform
+ *
+ * Tenant users (admin, bartender, guest) MUST login via /j/{slug}
+ * This page is ONLY for platform-level superadmin access.
  */
 
 // Redirect if already logged in
@@ -17,8 +20,8 @@ if (isLoggedIn()) {
     redirect($dashboardMap[$role] ?? '/dashboard');
 }
 
-$tenantName = $_SESSION['tenant_name'] ?? APP_NAME;
-$brandColor = $_SESSION['brand_color'] ?? '#FFC107';
+$tenantName = APP_NAME;
+$brandColor = '#FFC107';
 $csrfToken  = generateCSRFToken();
 ?>
 <!DOCTYPE html>
@@ -28,7 +31,7 @@ $csrfToken  = generateCSRFToken();
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#0f0f0f">
     <meta name="csrf-token" content="<?= $csrfToken ?>">
-    <title>Inloggen - <?= sanitize($tenantName) ?></title>
+    <title>Platform Beheer - REGULR.vip</title>
 
     <!-- Favicon -->
     <link rel="icon" type="image/png" sizes="32x32" href="<?= BASE_URL ?>/icons/favicon.png">
@@ -45,17 +48,13 @@ $csrfToken  = generateCSRFToken();
     <link rel="stylesheet" href="<?= BASE_URL ?>/css/components.css">
     <link rel="stylesheet" href="<?= BASE_URL ?>/css/views.css">
 
-    <!-- Tenant branding -->
     <style>
         :root {
-            --accent-primary: <?= sanitize($brandColor) ?>;
+            --accent-primary: #FFC107;
             --accent-secondary: #FF9800;
-            --accent-gradient: linear-gradient(135deg, <?= sanitize($brandColor) ?> 0%, #FF9800 100%);
+            --accent-gradient: linear-gradient(135deg, #FFC107 0%, #FF9800 100%);
         }
-    </style>
 
-    <!-- Auth-specific styles -->
-    <style>
         .auth-page {
             min-height: 100vh;
             display: flex;
@@ -73,17 +72,6 @@ $csrfToken  = generateCSRFToken();
         .auth-logo {
             text-align: center;
             margin-bottom: var(--space-sm);
-        }
-
-        .auth-logo svg {
-            display: inline-block;
-        }
-
-        .auth-subtitle {
-            text-align: center;
-            color: var(--text-secondary);
-            margin-bottom: var(--space-xl);
-            font-size: 14px;
         }
 
         .auth-header {
@@ -111,9 +99,17 @@ $csrfToken  = generateCSRFToken();
             color: var(--accent-primary);
         }
 
-        .auth-tenant-info {
-            margin-top: var(--space-xl);
-            font-size: 12px;
+        .platform-badge {
+            display: inline-block;
+            background: rgba(255,193,7,0.15);
+            color: #FFC107;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 3px 10px;
+            border-radius: 12px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            margin-bottom: var(--space-sm);
         }
     </style>
 </head>
@@ -138,8 +134,9 @@ $csrfToken  = generateCSRFToken();
                     </defs>
                 </svg>
             </div>
-            <h1>Welkom terug</h1>
-            <p class="text-secondary text-sm">Log in op je REGULR.vip account</p>
+            <div class="platform-badge">Platform Beheer</div>
+            <h1>REGULR.vip</h1>
+            <p class="text-secondary text-sm">Alleen voor platform beheerders</p>
         </div>
 
         <!-- Error/Success Alerts -->
@@ -167,7 +164,7 @@ $csrfToken  = generateCSRFToken();
                     id="email"
                     name="email"
                     class="form-input"
-                    placeholder="jouw@email.nl"
+                    placeholder="admin@regulr.vip"
                     required
                     autocomplete="email"
                     autofocus
@@ -196,19 +193,22 @@ $csrfToken  = generateCSRFToken();
             </button>
         </form>
 
-        <!-- Footer Links -->
+        <!-- Footer -->
         <div class="auth-footer">
-            <p class="text-secondary text-sm">
+            <p class="text-secondary text-sm" style="margin-bottom: 0.5rem;">
                 <a href="<?= BASE_URL ?>/forgot-password">Wachtwoord vergeten?</a>
+            </p>
+            <p class="text-muted text-xs" style="margin-top: 1rem;">
+                Werk je bij een locatie? Vraag de URL aan je beheerder.
             </p>
         </div>
 
     </div>
 
-    <!-- Tenant Info -->
-    <div class="auth-tenant-info text-center">
+    <!-- Platform Info -->
+    <div style="text-align:center; margin-top: var(--space-xl); font-size: 12px;">
         <p class="text-muted text-xs">
-            <span id="tenant-name"><?= sanitize($tenantName) ?></span> &middot; Loyaliteitsplatform
+            REGULR.vip &middot; Loyaliteitsplatform
         </p>
     </div>
 
@@ -232,19 +232,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const email = document.getElementById('email').value.trim();
         const password = document.getElementById('password').value;
 
-        // Client-side validation
         if (!email || !password) {
             showError('Vul alle velden in.');
             return;
         }
 
-        // Set loading state
         btn.disabled = true;
         loginText.textContent = 'Bezig...';
         loginIcon.style.display = 'block';
 
         try {
-            console.log('[LOGIN] Attempt:', { email, csrfToken: csrfToken ? 'present' : 'MISSING' });
             const response = await fetch(BASE_URL + '/api/auth/login', {
                 method: 'POST',
                 credentials: 'same-origin',
@@ -258,41 +255,36 @@ document.addEventListener('DOMContentLoaded', () => {
                 })
             });
 
-            console.log('[LOGIN] Response status:', response.status, response.statusText);
-
-            // Get raw text first to debug HTML errors
-            const rawText = await response.text();
-            console.log('[LOGIN] Raw response (first 500 chars):', rawText.substring(0, 500));
-
             let data;
             try {
-                data = JSON.parse(rawText);
+                data = await response.json();
             } catch (parseErr) {
-                console.error('[LOGIN] JSON parse failed. Server returned non-JSON:', rawText.substring(0, 200));
-                showError('Server fout - geen JSON ontvangen. Check PHP error log.');
+                showError('Server fout. Probeer opnieuw.');
                 resetButton();
                 return;
             }
 
-            console.log('[LOGIN] Parsed data:', data);
-
             if (response.ok && data.success) {
-                // Redirect to dashboard
-                window.location.href = data.data.redirect || '/dashboard';
+                // Superadmin login success — redirect to platform dashboard
+                window.location.href = data.data.redirect || '/superadmin';
             } else {
-                console.error('[LOGIN] Failed:', data.error, data.code);
-                showError(data.error || 'Inloggen mislukt. Code: ' + (data.code || 'UNKNOWN'));
+                // Check if the error includes a tenant_slug hint
+                // → redirect the user to their venue's login page
+                if (data.code === 'TENANT_LOGIN_REQUIRED' && data.data && data.data.tenant_slug) {
+                    window.location.href = BASE_URL + '/j/' + data.data.tenant_slug;
+                    return;
+                }
+
+                showError(data.error || 'Inloggen mislukt.');
                 resetButton();
             }
         } catch (err) {
-            console.error('[LOGIN] Fetch error:', err);
             showError('Netwerkfout: ' + err.message);
             resetButton();
         }
     });
 
     function showError(message) {
-        // Remove existing error
         const existing = document.querySelector('.alert-error');
         if (existing) existing.remove();
 
@@ -302,7 +294,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         form.insertBefore(alert, form.firstChild);
 
-        // Auto-remove after 5 seconds
         setTimeout(() => {
             alert.remove();
         }, 5000);

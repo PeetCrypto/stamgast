@@ -199,12 +199,79 @@ $tiersList = $tierModel->getByTenant($tenantId);
                     </button>
                 </div>
 
-                <div class="form-actions" style="display: flex; justify-content: space-between; margin-top: var(--space-lg);">
-                    <div id="block-actions">
+                <!-- Account Status Actions -->
+                <div id="account-status-section" style="display: none; background: rgba(255,193,7,0.06); border: 1px solid rgba(255,193,7,0.2); border-radius: 8px; padding: var(--space-md); margin-top: var(--space-md);">
+                    <h4 style="margin: 0 0 var(--space-sm) 0; font-size: 14px; color: var(--text-secondary);">Account Status</h4>
+                    <p id="account-status-info" style="font-size: 13px; color: var(--text-secondary); margin: 0 0 var(--space-sm) 0;"></p>
+                    <div style="display: flex; gap: var(--space-sm); flex-wrap: wrap;">
+                        <button type="button" class="btn" id="activate-user-btn" style="background: rgba(76,175,80,0.15); color: #4CAF50; display: none;">
+                            Activeer Account
+                        </button>
                         <button type="button" class="btn btn-danger" id="block-user-btn">Blokkeren</button>
                         <button type="button" class="btn" id="unblock-user-btn" style="display: none; background: rgba(76,175,80,0.15); color: var(--success, #4CAF50);">Deblokkeren</button>
                     </div>
+                </div>
+
+                <div class="form-actions" style="display: flex; justify-content: flex-end; margin-top: var(--space-lg);">
                     <button type="submit" class="btn btn-primary" id="save-user-btn">Opslaan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Credit Wallet Modal -->
+<div class="modal-overlay" id="credit-wallet-modal-overlay">
+    <div class="modal" id="credit-wallet-modal" style="max-width: 460px;">
+        <div class="modal-header">
+            <h2 id="credit-modal-title">Saldo toevoegen</h2>
+            <button class="btn-close" id="close-credit-modal">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="credit-wallet-form">
+                <input type="hidden" id="credit-user-id">
+
+                <!-- Guest info (read-only) -->
+                <div style="background:rgba(255,193,7,0.06);border:1px solid rgba(255,193,7,0.2);border-radius:8px;padding:var(--space-md);margin-bottom:var(--space-md);">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <div>
+                            <div id="credit-guest-name" style="font-weight:600;font-size:15px;"></div>
+                            <div id="credit-guest-email" style="font-size:13px;color:var(--text-secondary);"></div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div style="font-size:12px;color:var(--text-secondary);">Huidig saldo</div>
+                            <div id="credit-current-balance" style="font-size:20px;font-weight:700;color:var(--brand-color,#FFC107);"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Amount input -->
+                <div class="form-group">
+                    <label for="credit-amount">Bedrag <small>(EUR)</small></label>
+                    <div style="position:relative;">
+                        <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-secondary);font-weight:600;">€</span>
+                        <input type="number" id="credit-amount" class="form-input" style="padding-left:28px;" step="0.01" min="0.01" max="10000" placeholder="0.00" required>
+                    </div>
+                    <small style="color:var(--text-secondary);font-size:12px;">Alleen positieve bedragen. Saldo verlagen is niet mogelijk.</small>
+                </div>
+
+                <!-- New balance preview -->
+                <div id="credit-new-balance-preview" style="background:rgba(76,175,80,0.06);border:1px solid rgba(76,175,80,0.2);border-radius:8px;padding:var(--space-sm) var(--space-md);margin-bottom:var(--space-md);display:none;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <span style="font-size:13px;color:var(--text-secondary);">Nieuw saldo</span>
+                        <span id="credit-new-balance-value" style="font-size:18px;font-weight:700;color:#4CAF50;"></span>
+                    </div>
+                </div>
+
+                <!-- Reason (required) -->
+                <div class="form-group">
+                    <label for="credit-reason">Reden <small>(verplicht)</small></label>
+                    <textarea id="credit-reason" class="form-input" rows="3" placeholder="Bijv. Contant geld ontvangen aan de bar" required minlength="3" maxlength="500" style="resize:vertical;"></textarea>
+                </div>
+
+                <div class="form-actions" style="display:flex;justify-content:flex-end;gap:var(--space-sm);margin-top:var(--space-lg);">
+                    <button type="button" class="btn btn-secondary" id="cancel-credit-modal">Annuleren</button>
+                    <button type="submit" class="btn btn-primary" id="submit-credit-btn" style="background:#4CAF50;">Saldo toevoegen</button>
                 </div>
             </form>
         </div>
@@ -215,6 +282,6 @@ $tiersList = $tierModel->getByTenant($tenantId);
 <div class="alerts-container"></div>
 
 <script src="<?= BASE_URL ?>/public/js/app.js?v=<?= filemtime(PUBLIC_PATH . 'js/app.js') ?>"></script>
-<script src="<?= BASE_URL ?>/public/js/admin.js"></script>
+<script src="<?= BASE_URL ?>/public/js/admin.js?v=<?= filemtime(PUBLIC_PATH . 'js/admin.js') ?>"></script>
 
 <?php require VIEWS_PATH . 'shared/footer.php'; ?>

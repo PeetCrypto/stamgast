@@ -8,6 +8,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/../../services/AuthService.php';
+require_once __DIR__ . '/../../services/Email/email_helpers.php';
 
 // Only allow POST
 $method = $_SERVER['REQUEST_METHOD'];
@@ -76,7 +77,12 @@ if (!empty($resetSlug)) {
     $resetLink = FULL_BASE_URL . '/reset-password?token=' . $token;
 }
 
-// Send reset email
-sendGuestPasswordResetEmail($db, $email, $tenant['name'], $resetLink, $tenantId);
+// Send reset email (non-blocking — failure does not affect response to prevent info leakage)
+try {
+    $guestName = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));
+    sendGuestPasswordResetEmail($db, $email, $tenant['name'], $resetLink, $tenantId, $guestName);
+} catch (\Throwable $e) {
+    error_log('Password reset email failed: ' . $e->getMessage());
+}
 
 Response::success(['message' => 'Als dit e-mailadres bij ons bekend is, ontvang je een reset-link.']);

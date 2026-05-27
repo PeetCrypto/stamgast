@@ -4,8 +4,11 @@ declare(strict_types=1);
 /**
  * POST /api/auth/login
  * Authenticates a user with email and password
- * Superadmins: no tenant_id required (platform-level login)
- * Tenant users: tenant_id required, defaults to session or 1
+ *
+ * TENANT ISOLATION:
+ * - Superadmins: login via /login (no tenant context needed)
+ * - Tenant users (admin, bartender, guest): login via /j/{slug} ONLY
+ *   The tenant_slug is required — without it, only superadmins can login.
  */
 
 // Load services
@@ -25,7 +28,7 @@ $email = trim($input['email'] ?? '');
 $password = $input['password'] ?? '';
 $tenantId = isset($input['tenant_id']) ? (int) $input['tenant_id'] : null;
 
-// Resolve tenant_slug to tenant_id (guest login via /j/{slug})
+// Resolve tenant_slug to tenant_id (login via /j/{slug})
 $tenantSlug = trim($input['tenant_slug'] ?? '');
 if (!empty($tenantSlug) && $tenantId === null) {
     require_once __DIR__ . '/../../models/Tenant.php';
@@ -41,37 +44,53 @@ if (empty($email) || empty($password)) {
     Response::error('E-mail en wachtwoord zijn verplicht', 'MISSING_FIELDS', 400);
 }
 
-// Determine tenant_id for tenant users
-// Strategy: look up the user's actual tenant_id from the database first.
-// This ensures correct tenant isolation — a user from tenant 2 cannot
-// accidentally be validated against tenant 1.
-// Superadmins have tenant_id = NULL — AuthService handles this separately.
-if ($tenantId === null) {
-    // Try session first (in case tenant context is already known)
-    $sessionTenant = currentTenantId();
-    if ($sessionTenant !== null) {
-        $tenantId = $sessionTenant;
-    } else {
-        // No session context — look up the user to find their tenant_id
-        // This is the critical fix: without this, login defaults to tenant 1
-        // and rejects users belonging to other tenants.
-        require_once __DIR__ . '/../../models/User.php';
-        $db = Database::getInstance()->getConnection();
-        $userLookup = (new User($db))->findByEmailGlobal($email);
-        if ($userLookup && $userLookup['tenant_id'] !== null) {
-            $tenantId = (int) $userLookup['tenant_id'];
-        } else {
-            // Superadmin or user not found — use fallback
-            // AuthService will handle superadmin (no tenant check)
-            // and unknown users (will fail password check)
-            $tenantId = 1;
-        }
-    }
-}
-
 // Validate email format
 if (!isValidEmail($email)) {
     Response::error('Ongeldig e-mailadres', 'INVALID_EMAIL', 400);
+}
+
+// ─────────────────────────────────────────────────────────────
+// TENANT ISOLATION ENFORCEMENT
+// ─────────────────────────────────────────────────────────────
+// When NO tenant context is provided (login via /login, no slug),
+// this is a PLATFORM-LEVEL login attempt — ONLY superadmins allowed.
+// Tenant users (admin, bartender, guest) MUST login via /j/{slug}.
+if ($tenantId === null) {
+    // No tenant context — check if this is a superadmin
+    require_once __DIR__ . '/../../models/User.php';
+    $db = Database::getInstance()->getConnection();
+    $userLookup = (new User($db))->findByEmailGlobal($email);
+
+    if ($userLookup === null || $userLookup['role'] !== 'superadmin') {
+        // Not a superadmin — tenant users must login via /j/{slug}
+        // If the user exists, tell them which slug to use
+        $hintSlug = null;
+        if ($userLookup && $userLookup['tenant_id'] !== null) {
+            require_once __DIR__ . '/../../models/Tenant.php';
+            $tenantModel = new Tenant($db);
+            $tenantData = $tenantModel->findById((int) $userLookup['tenant_id']);
+            if ($tenantData && !empty($tenantData['slug'])) {
+                $hintSlug = $tenantData['slug'];
+            }
+        }
+
+        $audit = new Audit($db);
+        $audit->log(null, null, 'auth.login_failed_no_tenant', 'user', null, ['email' => $email]);
+
+        if ($hintSlug) {
+            Response::error(
+                'Log in via de pagina van je locatie.',
+                'TENANT_LOGIN_REQUIRED',
+                403,
+                ['tenant_slug' => $hintSlug]
+            );
+        } else {
+            Response::error('Ongeldig e-mailadres of wachtwoord', 'INVALID_CREDENTIALS', 401);
+        }
+    }
+
+    // It's a superadmin — proceed without tenant context
+    $tenantId = null;
 }
 
 // Load dependencies
@@ -82,7 +101,7 @@ $authService = new AuthService($db);
 $user = $authService->login($email, $password, $tenantId);
 
 if ($user === null) {
-    // Log failed attempt (use provided tenant_id, or null if unavailable)
+    // Log failed attempt
     $audit = new Audit($db);
     $audit->log(
         $tenantId,
@@ -123,6 +142,30 @@ $redirect = BASE_URL . ($dashboardMap[$user['role']] ?? '/dashboard');
 $accountStatus = ($user['role'] !== 'guest')
     ? 'active'
     : ($user['account_status'] ?? 'unverified');
+
+// For guests: check if email is verified — if not, redirect to verification page
+// Only enforce if the migration has been run (email_verified_at column exists)
+$needsEmailVerification = (
+    $user['role'] === 'guest'
+    && array_key_exists('email_verified_at', $user)
+    && empty($user['email_verified_at'])
+);
+
+if ($needsEmailVerification) {
+    // Look up tenant slug for verification redirect
+    $tenantSlug = null;
+    if ($user['tenant_id'] !== null) {
+        require_once __DIR__ . '/../../models/Tenant.php';
+        $tenantModel = new Tenant($db);
+        $tenantData = $tenantModel->findById((int) $user['tenant_id']);
+        if ($tenantData && !empty($tenantData['slug'])) {
+            $tenantSlug = $tenantData['slug'];
+        }
+    }
+    if ($tenantSlug) {
+        $redirect = BASE_URL . '/j/' . $tenantSlug . '/verify';
+    }
+}
 
 Response::success([
     'user' => [

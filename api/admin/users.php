@@ -226,7 +226,7 @@ if ($method === 'GET') {
 
                     $tenantModel = new Tenant($db);
                     $tenant = $tenantModel->findById($tenantId);
-                    $tenantName = $tenant ? $tenant['name'] : 'REGULR.vip';
+                    $tenantName = $tenant ? $tenant['name'] : 'REGULR';
 
                     $emailService = new EmailService($db);
                     $templateType = ($role === 'bartender') ? 'bartender_invite' : 'admin_invite';
@@ -252,26 +252,27 @@ if ($method === 'GET') {
                         $templateType,
                         $templateVars,
                         $tenantId,
-                        'nl'
+                        'nl',
+                        $tenantName
                     );
 
                     // Fallback to direct email if template fails
                     if (!$sent) {
                         $subject = ($role === 'bartender')
-                            ? 'REGULR.vip - Jouw bartender account voor ' . $tenantName
-                            : 'REGULR.vip - Jouw admin account voor ' . $tenantName;
+                            ? 'Jouw bartender account bij ' . $tenantName
+                            : 'Jouw admin account bij ' . $tenantName;
 
-                        $html = "<h2>Welkom bij REGULR.vip!</h2>"
+                        $html = "<h2>Welkom bij " . htmlspecialchars($tenantName) . "!</h2>"
                             . "<p>Er is een " . ($role === 'bartender' ? 'bartender' : 'admin') . " account aangemaakt voor <strong>" . htmlspecialchars($tenantName) . "</strong>.</p>"
                             . "<p><strong>Jouw inloggegevens:</strong></p>"
                             . "<ul>"
                             . "<li>E-mail: <code>" . htmlspecialchars($email) . "</code></li>"
                             . "<li>Wachtwoord: <code>" . htmlspecialchars($password) . "</code></li>"
                             . "</ul>"
-                            . "<p>Log in op jouw REGULR.vip omgeving om te beginnen.</p>"
+                            . "<p>Log in op jouw " . htmlspecialchars($tenantName) . " omgeving om te beginnen.</p>"
                             . "<p><em>Verander je wachtwoord na het eerste inloggen!</em></p>";
 
-                        $text = "Welkom bij REGULR.vip!\n\n"
+                        $text = "Welkom bij " . $tenantName . "!\n\n"
                             . "Er is een " . ($role === 'bartender' ? 'bartender' : 'admin') . " account aangemaakt voor " . $tenantName . ".\n\n"
                             . "Inloggegevens:\n"
                             . "- E-mail: " . $email . "\n"
@@ -285,7 +286,8 @@ if ($method === 'GET') {
                             $text,
                             $templateType,
                             $tenantId,
-                            $newUserId
+                            $newUserId,
+                            $tenantName
                         );
                     }
 
@@ -353,12 +355,24 @@ if ($method === 'GET') {
         }
 
         // Update user fields
-        $stmt = $db->prepare(
-            "UPDATE `users`
-             SET `first_name` = :first_name, `last_name` = :last_name,
-                 `email` = :email, `role` = :role, `birthdate` = :birthdate
-             WHERE `id` = :id AND `tenant_id` = :tid"
-        );
+        // When promoting to staff (admin/bartender), also set account_status = 'active'
+        // Staff should never have account_status = 'unverified' or 'suspended'
+        if (in_array($role, ['admin', 'bartender'], true)) {
+            $stmt = $db->prepare(
+                "UPDATE `users`
+                 SET `first_name` = :first_name, `last_name` = :last_name,
+                     `email` = :email, `role` = :role, `birthdate` = :birthdate,
+                     `account_status` = 'active'
+                 WHERE `id` = :id AND `tenant_id` = :tid"
+            );
+        } else {
+            $stmt = $db->prepare(
+                "UPDATE `users`
+                 SET `first_name` = :first_name, `last_name` = :last_name,
+                     `email` = :email, `role` = :role, `birthdate` = :birthdate
+                 WHERE `id` = :id AND `tenant_id` = :tid"
+            );
+        }
         $stmt->execute([
             ':first_name' => $firstName,
             ':last_name'  => $lastName,
@@ -480,8 +494,214 @@ if ($method === 'GET') {
 
         Response::success(['message' => 'Gebruiker gedeblokkeerd', 'user_id' => $userId]);
 
+    // ========================================
+    // ACTIVATE USER (unverified → active)
+    // ========================================
+    } elseif ($action === 'activate') {
+        $userId = (int) ($input['user_id'] ?? 0);
+        if ($userId <= 0) {
+            Response::error('Ongeldig user_id', 'INVALID_INPUT', 400);
+        }
+
+        $user = $userModel->findById($userId);
+        if (!$user || (int) $user['tenant_id'] !== $tenantId) {
+            Response::error('Gebruiker niet gevonden', 'NOT_FOUND', 404);
+        }
+
+        // Can only activate guests
+        if ($user['role'] !== 'guest') {
+            Response::error('Alleen gasten kunnen handmatig geactiveerd worden', 'FORBIDDEN', 403);
+        }
+
+        // Cannot activate yourself
+        if ($userId === currentUserId()) {
+            Response::error('Je kunt jezelf niet activeren', 'SELF_ACTIVATE', 400);
+        }
+
+        $currentStatus = $user['account_status'] ?? 'unverified';
+
+        if ($currentStatus === 'active') {
+            Response::error('Deze gast is al actief', 'ALREADY_ACTIVE', 409);
+        }
+
+        if ($currentStatus === 'suspended') {
+            Response::error('Deze gast is geblokkeerd. Deblokkeer het account eerst via "Deblokkeren".', 'USER_SUSPENDED', 409);
+        }
+
+        // Activate: unverified → active (admin override, no birthdate check)
+        $adminId = currentUserId();
+        $stmt = $db->prepare(
+            "UPDATE `users`
+             SET `account_status` = 'active',
+                 `verified_at` = NOW(),
+                 `verified_by` = :admin_id
+             WHERE `id` = :id AND `tenant_id` = :tid"
+        );
+        $stmt->execute([
+            ':admin_id' => $adminId,
+            ':id'       => $userId,
+            ':tid'      => $tenantId,
+        ]);
+
+        // Audit log
+        $audit->log($tenantId, $adminId, 'admin.user_activated', 'user', $userId, [
+            'status_before' => $currentStatus,
+            'activation_method' => 'admin_manual',
+        ]);
+
+        Response::success([
+            'message' => 'Gast geactiveerd',
+            'user_id' => $userId,
+            'account_status' => 'active',
+        ]);
+
+    // ========================================
+    // CREDIT WALLET (admin manual top-up, positive only)
+    // ========================================
+    } elseif ($action === 'credit_wallet') {
+        $userId      = (int) ($input['user_id'] ?? 0);
+        $amountCents = (int) ($input['amount_cents'] ?? 0);
+        $reason      = trim($input['reason'] ?? '');
+
+        // ── Validate inputs ──
+        if ($userId <= 0) {
+            Response::error('Ongeldig user_id', 'INVALID_INPUT', 400);
+        }
+
+        // CRITICAL: Only positive amounts allowed — admin can only ADD to wallet
+        if ($amountCents <= 0) {
+            Response::error('Bedrag moet groter zijn dan €0,00. Saldo verlagen is niet toegestaan.', 'INVALID_AMOUNT', 400);
+        }
+
+        // Sanity cap: max €10.000 per manual credit
+        if ($amountCents > 1000000) {
+            Response::error('Maximaal €10.000 per handmatige storting.', 'AMOUNT_TOO_LARGE', 400);
+        }
+
+        if (mb_strlen($reason) < 3) {
+            Response::error('Reden is verplicht (minimaal 3 tekens). Bijv. "Contant geld ontvangen aan de bar."', 'REASON_REQUIRED', 400);
+        }
+
+        // ── Verify user belongs to this tenant ──
+        $user = $userModel->findById($userId);
+        if (!$user || (int) $user['tenant_id'] !== $tenantId) {
+            Response::error('Gebruiker niet gevonden', 'NOT_FOUND', 404);
+        }
+
+        // Only guests have wallets that can be credited
+        if ($user['role'] !== 'guest') {
+            Response::error('Alleen gast-wallets kunnen worden opgewaardeerd', 'FORBIDDEN', 403);
+        }
+
+        $adminId = currentUserId();
+
+        // Cannot credit your own wallet (admin is not a guest, but defense in depth)
+        if ($userId === $adminId) {
+            Response::error('Je kunt niet je eigen wallet opwaarderen', 'SELF_CREDIT', 400);
+        }
+
+        try {
+            $db->beginTransaction();
+
+            // ── Lock wallet row for atomic read-then-write ──
+            $wallet = $walletModel->lockForUpdate($userId, $tenantId);
+            if (!$wallet) {
+                $db->rollBack();
+                Response::error('Wallet niet gevonden voor deze gebruiker', 'WALLET_NOT_FOUND', 404);
+            }
+
+            $balanceBefore = (int) $wallet['balance_cents'];
+
+            // ── Credit wallet (positive delta only) ──
+            $updated = $walletModel->updateBalance($userId, $amountCents);
+            if (!$updated) {
+                $db->rollBack();
+                Response::error('Wallet kon niet worden bijgewerkt', 'WALLET_UPDATE_FAILED', 500);
+            }
+
+            // ── Create correction transaction ──
+            $txId = $txModel->create([
+                'tenant_id'         => $tenantId,
+                'user_id'           => $userId,
+                'bartender_id'      => null,
+                'type'              => 'correction',
+                'amount_alc_cents'  => 0,
+                'amount_food_cents' => 0,
+                'discount_alc_cents'  => 0,
+                'discount_food_cents' => 0,
+                'final_total_cents' => $amountCents,
+                'points_earned'     => 0,
+                'points_used'       => 0,
+                'ip_address'        => getClientIP(),
+                'device_fingerprint'=> null,
+                'mollie_payment_id' => null,
+                'description'       => 'Admin handmatige storting: ' . $reason,
+            ]);
+
+            // ── Update transaction with performed_by and admin_reason ──
+            $stmt = $db->prepare(
+                "UPDATE `transactions` SET `performed_by` = :admin_id, `admin_reason` = :reason WHERE `id` = :tx_id"
+            );
+            $stmt->execute([
+                ':admin_id' => $adminId,
+                ':reason'   => $reason,
+                ':tx_id'    => $txId,
+            ]);
+
+            // ── Insert into wallet_credit_log (immutable audit trail) ──
+            $balanceAfter = $balanceBefore + $amountCents;
+            $stmt = $db->prepare(
+                'INSERT INTO `wallet_credit_log`
+                 (`tenant_id`, `guest_user_id`, `admin_user_id`, `transaction_id`,
+                  `amount_cents`, `balance_before`, `balance_after`, `reason`,
+                  `ip_address`, `user_agent`)
+                 VALUES
+                 (:tenant_id, :guest_user_id, :admin_user_id, :transaction_id,
+                  :amount_cents, :balance_before, :balance_after, :reason,
+                  :ip_address, :user_agent)'
+            );
+            $stmt->execute([
+                ':tenant_id'      => $tenantId,
+                ':guest_user_id'  => $userId,
+                ':admin_user_id'  => $adminId,
+                ':transaction_id' => $txId,
+                ':amount_cents'   => $amountCents,
+                ':balance_before' => $balanceBefore,
+                ':balance_after'  => $balanceAfter,
+                ':reason'         => $reason,
+                ':ip_address'     => getClientIP(),
+                ':user_agent'     => $_SERVER['HTTP_USER_AGENT'] ?? null,
+            ]);
+
+            $db->commit();
+
+            // ── Audit log ──
+            $audit->log($tenantId, $adminId, 'admin.wallet_credit', 'user', $userId, [
+                'amount_cents'   => $amountCents,
+                'balance_before' => $balanceBefore,
+                'balance_after'  => $balanceAfter,
+                'reason'         => $reason,
+                'transaction_id' => $txId,
+            ]);
+
+            Response::success([
+                'message'        => 'Saldo succesvol opgewaardeerd',
+                'user_id'        => $userId,
+                'amount_cents'   => $amountCents,
+                'balance_before' => $balanceBefore,
+                'balance_after'  => $balanceAfter,
+                'transaction_id' => $txId,
+            ]);
+
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            Response::error('Wallet opwaarderen mislukt: ' . $e->getMessage(), 'CREDIT_FAILED', 500);
+        }
+
     } else {
-        Response::error('Ongeldige actie. Gebruik: create, update, block, unblock, reset_password', 'INVALID_ACTION', 400);
+        Response::error('Ongeldige actie. Gebruik: create, update, block, unblock, activate, credit_wallet, reset_password', 'INVALID_ACTION', 400);
     }
 
 } else {

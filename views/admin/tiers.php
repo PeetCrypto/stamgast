@@ -103,6 +103,50 @@ $tenantName = $_SESSION['tenant_name'] ?? APP_NAME;
         padding: 6px 10px;
     }
 
+    /* Model Selector Cards */
+    .model-selector {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--space-lg);
+        margin-bottom: var(--space-xl);
+    }
+
+    .model-selector-card {
+        background: rgba(255,255,255,0.04);
+        border: 2px solid rgba(255,255,255,0.1);
+        border-radius: 16px;
+        padding: var(--space-lg) var(--space-xl);
+        cursor: pointer;
+        transition: all 0.25s ease;
+        text-align: center;
+    }
+    .model-selector-card:hover {
+        border-color: var(--brand-color, #FFC107);
+        background: rgba(255,193,7,0.05);
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    }
+    .model-selector-card--selected {
+        border-color: var(--brand-color, #FFC107);
+        background: rgba(255,193,7,0.08);
+        box-shadow: 0 0 20px rgba(255,193,7,0.15);
+    }
+    .model-selector-card__icon {
+        font-size: 2rem;
+        margin-bottom: var(--space-sm);
+    }
+    .model-selector-card__title {
+        font-size: 1.2rem;
+        font-weight: 700;
+        margin-bottom: var(--space-xs);
+        color: var(--text-primary);
+    }
+    .model-selector-card__desc {
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+        line-height: 1.5;
+    }
+
     .toggle-switch {
         position: relative;
         display: inline-block;
@@ -147,6 +191,7 @@ $tenantName = $_SESSION['tenant_name'] ?? APP_NAME;
     @media (max-width: 600px) {
         .form-row { grid-template-columns: 1fr; }
         .packages-grid { grid-template-columns: 1fr; }
+        .model-selector { grid-template-columns: 1fr; }
     }
 </style>
 
@@ -156,10 +201,59 @@ $tenantName = $_SESSION['tenant_name'] ?? APP_NAME;
             <h1 style="margin: 0;">Pakketten</h1>
             <p style="margin: 0; opacity: 0.6; font-size: 0.9rem;">Configureer opwaardeer-pakketten en kortingen</p>
         </div>
-        <button class="btn btn-primary" id="add-tier-btn">
-            <span style="margin-right: var(--space-sm);">+</span>
-            Nieuw Pakket
-        </button>
+    </div>
+
+    <?php
+    $_tdb = Database::getInstance()->getConnection();
+    $_tModel = new Tenant($_tdb);
+    $_t = $_tModel->findById((int)($_SESSION['tenant_id'] ?? 0));
+    $_lockedModel = $_t['tier_model_type'] ?? null;
+    ?>
+
+    <!-- MODEL SELECTOR — aparte sectie boven het grid -->
+    <div id="model-selector-section">
+        <?php if ($_lockedModel): ?>
+        <!-- Model is al vastgezet — toon direct stap 2 button -->
+        <div class="glass-card" style="padding: var(--space-md); margin-bottom: var(--space-lg); border: 1px solid rgba(255,193,7,0.3);">
+            <p style="margin:0;">
+                <strong>🔒 Actief model:</strong>
+                <?= $_lockedModel === 'bonus' ? 'Opwaardeerbonus' : 'Kortingsmodel' ?>
+                <small style="opacity:0.6;margin-left:8px;">— Vastgezet bij het eerste pakket. Reset via superadmin "Verwijder pakketten".</small>
+            </p>
+        </div>
+        <div style="margin-bottom: var(--space-lg);">
+            <button class="btn btn-primary" id="add-tier-btn">
+                <span style="margin-right: var(--space-sm);">+</span>
+                Nieuw Pakket
+            </button>
+        </div>
+        <?php else: ?>
+        <!-- Model nog niet gekozen — toon keuzekaarten, button wordt via JS toegevoegd na selectie -->
+        <div style="margin-bottom: var(--space-md);">
+            <h2 style="font-size: 1.1rem; margin: 0 0 var(--space-xs);">Stap 1: Kies jouw model</h2>
+            <p style="margin: 0; opacity: 0.6; font-size: 0.85rem;">Dit kun je achteraf <u>niet</u> meer wijzigen! Kies tussen kortingsmodel of opwaardeerbonus.</p>
+        </div>
+        <div class="model-selector">
+            <div class="model-selector-card" id="select-discount-model" data-model="discount">
+                <div class="model-selector-card__icon">🏷️</div>
+                <div class="model-selector-card__title">Kortingsmodel</div>
+                <div class="model-selector-card__desc">
+                    Gast stort een bedrag en krijgt korting op dranken & eten bij bestellingen.
+                    <br><strong>Bijv. 10% korting op alle dranken</strong>
+                </div>
+            </div>
+            <div class="model-selector-card" id="select-bonus-model" data-model="bonus">
+                <div class="model-selector-card__icon">🎁</div>
+                <div class="model-selector-card__title">Opwaardeerbonus</div>
+                <div class="model-selector-card__desc">
+                    Gast stort een bedrag en krijgt direct extra tegoed bovenop het gestorte bedrag.
+                    <br><strong>Bijv. stort €100 → krijg €110 tegoed</strong>
+                </div>
+            </div>
+        </div>
+        <!-- Placeholder voor Stap 2 button (gevuld door JS na model selectie) -->
+        <div id="step2-container"></div>
+        <?php endif; ?>
     </div>
 
     <!-- Packages Grid -->
@@ -174,14 +268,14 @@ $tenantName = $_SESSION['tenant_name'] ?? APP_NAME;
     </div>
 </div>
 
-<!-- Tier Modal -->
+<!-- Tier Modal (geen model type keuze meer — die is boven het grid) -->
 <div class="modal-overlay" id="tier-modal-overlay">
-    <div class="modal" id="tier-modal" style="max-width: 520px;">
+    <div class="modal" id="tier-modal" style="max-width: 520px; max-height: 90vh; display: flex; flex-direction: column;">
         <div class="modal-header">
             <h2 id="tier-modal-title">Pakket</h2>
             <button class="btn-close" id="close-tier-modal">&times;</button>
         </div>
-        <div class="modal-body">
+        <div class="modal-body" style="overflow-y: auto; flex: 1;">
             <form id="tier-form">
                 <input type="hidden" id="tier-id">
 
@@ -190,35 +284,17 @@ $tenantName = $_SESSION['tenant_name'] ?? APP_NAME;
                     <input type="text" id="tier-name" class="form-input" placeholder="Bijv. Brons, Silver, Goud, Platina" required>
                 </div>
 
-                <div class="form-group">
-                    <label>Model *</label>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-sm);">
-                        <label class="model-type-option" style="cursor:pointer;">
-                            <input type="radio" name="tier-model-type" value="discount" id="model-discount" checked style="margin-right:6px;">
-                            <strong>Kortingsmodel</strong>
-                            <small style="display:block;opacity:0.7;font-size:0.75rem;margin-top:2px;">Stort €100 → krijg korting op dranken & eten</small>
-                        </label>
-                        <label class="model-type-option" style="cursor:pointer;">
-                            <input type="radio" name="tier-model-type" value="bonus" id="model-bonus" style="margin-right:6px;">
-                            <strong>Opwaardeerbonus</strong>
-                            <small style="display:block;opacity:0.7;font-size:0.75rem;margin-top:2px;">Stort €100 → krijg €110 tegoed (optioneel eten korting)</small>
-                        </label>
-                    </div>
-                </div>
-
                 <!-- BONUS MODEL FIELDS (hidden by default) -->
                 <div id="bonus-fields" style="display:none;">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="tier-bonus-percentage">Bonus percentage (%)</label>
-                            <input type="number" id="tier-bonus-percentage" class="form-input" min="0" max="100" value="10" step="1">
-                            <small class="help-text">Bijv. 10% = stort €100, krijg €110 tegoed</small>
-                        </div>
-                        <div class="form-group">
-                            <label for="tier-food-discount">Eten korting (%) <small style="opacity:0.6;">optioneel</small></label>
-                            <input type="number" id="tier-food-discount" class="form-input" min="0" max="100" value="0" step="0.5">
-                            <small class="help-text">Extra korting op non-alcohol, max 100%</small>
-                        </div>
+                    <div class="form-group">
+                        <label for="tier-bonus-cents">Bonus bedrag (€) *</label>
+                        <input type="number" id="tier-bonus-cents" class="form-input" min="0" max="500" value="10" step="1">
+                        <small class="help-text">Vast bonusbedrag bovenop de storting. Bijv. 10 = stort €100 → krijg €110 tegoed</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="tier-food-discount">Eten korting (%) <small style="opacity:0.6;">optioneel</small></label>
+                        <input type="number" id="tier-food-discount" class="form-input" min="0" max="100" value="0" step="0.5">
+                        <small class="help-text">Extra korting op non-alcohol, max 100%</small>
                     </div>
                 </div>
 
@@ -238,18 +314,12 @@ $tenantName = $_SESSION['tenant_name'] ?? APP_NAME;
                     </div>
                 </div>
 
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="tier-topup-amount">Opwaardeerbedrag (€) *</label>
-                        <input type="number" id="tier-topup-amount" class="form-input" min="100" step="50" value="100" required>
-                        <small class="help-text">Minimaal €100. Dit is het bedrag dat de gast kiest.</small>
-                    </div>
-                    <div class="form-group">
-                        <label for="tier-min-deposit">Drempelbedrag (€)</label>
-                        <input type="number" id="tier-min-deposit" class="form-input" min="0" step="1" value="0">
-                        <small class="help-text">Totaal gestort om dit pakket te bereiken</small>
-                    </div>
+                <div class="form-group">
+                    <label for="tier-topup-amount">Stortingsbedrag (€) *</label>
+                    <input type="number" id="tier-topup-amount" class="form-input" min="100" step="50" value="100" required>
+                    <small class="help-text">Het bedrag dat de gast stort. Minimaal €100. Maak meerdere pakketten voor verschillende bedragen.</small>
                 </div>
+                <input type="hidden" id="tier-min-deposit" value="0">
 
                 <div class="form-row">
                     <div class="form-group">
@@ -285,6 +355,6 @@ $tenantName = $_SESSION['tenant_name'] ?? APP_NAME;
 <div class="alerts-container"></div>
 
 <script src="<?= BASE_URL ?>/public/js/app.js?v=<?= filemtime(PUBLIC_PATH . 'js/app.js') ?>"></script>
-<script src="<?= BASE_URL ?>/public/js/admin.js"></script>
+<script src="<?= BASE_URL ?>/public/js/admin.js?v=<?= filemtime(PUBLIC_PATH . 'js/admin.js') ?>"></script>
 
 <?php require VIEWS_PATH . 'shared/footer.php'; ?>

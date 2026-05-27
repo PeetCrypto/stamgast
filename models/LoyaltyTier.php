@@ -78,26 +78,47 @@ class LoyaltyTier
         return $stmt->fetchAll();
     }
 
+    private ?bool $hasBonusCentsColumn = null;
+
+    /**
+     * Check if bonus_cents column exists in the table
+     */
+    private function hasBonusCentsColumn(): bool
+    {
+        if ($this->hasBonusCentsColumn === null) {
+            $stmt = $this->db->query(
+                "SELECT COUNT(*) FROM information_schema.columns 
+                 WHERE table_schema = DATABASE() AND table_name = 'loyalty_tiers' AND column_name = 'bonus_cents'"
+            );
+            $this->hasBonusCentsColumn = ((int) $stmt->fetchColumn()) > 0;
+        }
+        return $this->hasBonusCentsColumn;
+    }
+
     /**
      * Create a new tier/package
      * @return int The new tier ID
      */
     public function create(array $data): int
     {
-        $stmt = $this->db->prepare(
-            'INSERT INTO `loyalty_tiers`
-             (`tenant_id`, `name`, `min_deposit_cents`, `topup_amount_cents`,
-              `model_type`, `bonus_percentage`,
-              `alcohol_discount_perc`, `food_discount_perc`, `points_multiplier`,
-              `is_active`, `sort_order`)
-             VALUES
-             (:tenant_id, :name, :min_deposit_cents, :topup_amount_cents,
-              :model_type, :bonus_percentage,
-              :alcohol_discount_perc, :food_discount_perc, :points_multiplier,
-              :is_active, :sort_order)'
-        );
+        $includeBonusCents = $this->hasBonusCentsColumn();
 
-        $stmt->execute([
+        $cols = '`tenant_id`, `name`, `min_deposit_cents`, `topup_amount_cents`,
+                 `model_type`, `bonus_percentage`';
+        $vals = ':tenant_id, :name, :min_deposit_cents, :topup_amount_cents,
+                 :model_type, :bonus_percentage';
+
+        if ($includeBonusCents) {
+            $cols .= ', `bonus_cents`';
+            $vals .= ', :bonus_cents';
+        }
+
+        $cols .= ', `alcohol_discount_perc`, `food_discount_perc`, `points_multiplier`,
+                  `is_active`, `sort_order`';
+        $vals .= ', :alcohol_discount_perc, :food_discount_perc, :points_multiplier,
+                  :is_active, :sort_order';
+
+        $params = [
             ':tenant_id'             => $data['tenant_id'],
             ':name'                  => $data['name'],
             ':min_deposit_cents'     => $data['min_deposit_cents'] ?? 0,
@@ -109,7 +130,16 @@ class LoyaltyTier
             ':points_multiplier'     => $data['points_multiplier'] ?? 1.00,
             ':is_active'             => isset($data['is_active']) ? (int) $data['is_active'] : 1,
             ':sort_order'            => $data['sort_order'] ?? 0,
-        ]);
+        ];
+
+        if ($includeBonusCents) {
+            $params[':bonus_cents'] = $data['bonus_cents'] ?? 0;
+        }
+
+        $stmt = $this->db->prepare(
+            "INSERT INTO `loyalty_tiers` ({$cols}) VALUES ({$vals})"
+        );
+        $stmt->execute($params);
 
         return (int) $this->db->lastInsertId();
     }
@@ -128,6 +158,11 @@ class LoyaltyTier
             'alcohol_discount_perc', 'food_discount_perc', 'points_multiplier',
             'is_active', 'sort_order',
         ];
+
+        // Only allow bonus_cents if the column exists
+        if ($this->hasBonusCentsColumn()) {
+            $allowedFields[] = 'bonus_cents';
+        }
 
         foreach ($allowedFields as $field) {
             if (array_key_exists($field, $data)) {

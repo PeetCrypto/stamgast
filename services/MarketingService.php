@@ -206,12 +206,15 @@ class MarketingService
         $perPage = min(max(1, $perPage), 100);
         $offset = ($page - 1) * $perPage;
 
-        // Counts by status (always all statuses for the stat cards)
+        // Counts by status — always show pending count (all time), sent/failed only last 30 days
+        // Pending items must always be visible regardless of age
         $stmt = $this->db->prepare(
-            'SELECT `status`, COUNT(*) as cnt
+            "SELECT `status`, COUNT(*) as cnt
              FROM `email_queue`
              WHERE `tenant_id` = :tenant_id
-             GROUP BY `status`'
+               AND (`status` = 'pending'
+                    OR `created_at` >= DATE_SUB(NOW(), INTERVAL 30 DAY))
+             GROUP BY `status`"
         );
         $stmt->execute([':tenant_id' => $tenantId]);
 
@@ -224,8 +227,10 @@ class MarketingService
         }
         $counts['total'] = array_sum($counts);
 
-        // Paginated items query
-        $whereClause = 'WHERE eq.`tenant_id` = :tenant_id';
+        // Paginated items query — show pending (any age) + sent/failed from last 30 days
+        $whereClause = 'WHERE eq.`tenant_id` = :tenant_id
+                        AND (eq.`status` = \'pending\'
+                             OR eq.`created_at` >= DATE_SUB(NOW(), INTERVAL 30 DAY))';
         $params = [':tenant_id' => $tenantId];
 
         if (in_array($statusFilter, ['pending', 'sent', 'failed'], true)) {
@@ -282,7 +287,9 @@ class MarketingService
         $sql = "SELECT eq.`id`, eq.`tenant_id`, eq.`user_id`, eq.`subject`, eq.`body_html`,
                        u.`email`, u.`first_name`, u.`last_name`,
                        w.`balance_cents`,
-                       t.`name` AS tenant_name
+                       t.`name` AS tenant_name,
+                       t.`brand_color`,
+                       t.`logo_path`
                 FROM `email_queue` eq
                 JOIN `users` u ON u.`id` = eq.`user_id`
                 LEFT JOIN `wallets` w ON w.`user_id` = u.`id`
@@ -331,10 +338,16 @@ class MarketingService
 
             // Replace placeholders in subject and body
             $subject  = str_replace(array_keys($placeholders), array_values($placeholders), $email['subject']);
-            $bodyHtml = str_replace(array_keys($placeholders), array_values($placeholders), $email['body_html']);
+            $bodyRaw  = str_replace(array_keys($placeholders), array_values($placeholders), $email['body_html']);
 
-            // Generate plain text fallback from HTML
-            $textContent = $this->htmlToPlainText($bodyHtml);
+            // Wrap in professional HTML email template
+            $tenantName  = $email['tenant_name'] ?? APP_NAME;
+            $brandColor  = $email['brand_color'] ?? '#FFC107';
+            $logoPath    = $email['logo_path'] ?? null;
+            $bodyHtml    = $this->wrapInEmailTemplate($bodyRaw, $tenantName, $brandColor, $logoPath);
+
+            // Generate plain text fallback from raw content (before template wrapping)
+            $textContent = $this->htmlToPlainText($bodyRaw);
 
             $success = $this->sendEmail(
                 $email['email'],
@@ -343,7 +356,7 @@ class MarketingService
                 $textContent,
                 (int) $email['tenant_id'],
                 (int) $email['user_id'],
-                $email['tenant_name'] ?? ''
+                $tenantName
             );
 
             $updateStmt->execute([
@@ -445,5 +458,159 @@ class MarketingService
         $text = preg_replace('/[ \t]+/', ' ', $text);
         $text = preg_replace('/\n\s*\n/', "\n\n", $text);
         return trim($text);
+    }
+
+    /**
+     * Convert plain text (or text with basic HTML) to properly styled HTML paragraphs.
+     *
+     * - Detects if input already contains block-level HTML tags (<p>, <div>, <h1>-<h6>, etc.)
+     *   If so, treats it as pre-formatted HTML and only normalizes inline.
+     * - Otherwise, splits on double-newlines into <p> paragraphs and converts
+     *   single newlines to <br>.
+     * - Auto-links bare URLs.
+     *
+     * @param string $text Raw text or simple HTML from the compose form
+     * @return string Properly structured HTML
+     */
+    private function textToHtml(string $text): string
+    {
+        $text = trim($text);
+
+        if ($text === '') {
+            return '';
+        }
+
+        // If the text already contains block-level HTML tags, treat as pre-formatted HTML
+        if (preg_match('/<(?:p|div|h[1-6]|ul|ol|li|blockquote|table|hr|br)\b[^>]*>/i', $text)) {
+            // Already has block HTML — just normalize whitespace but preserve structure
+            $html = preg_replace('/\r\n?/', "\n", $text);
+            return trim($html);
+        }
+
+        // Plain text mode: convert to structured HTML paragraphs
+        $text = preg_replace('/\r\n?/', "\n", $text);
+
+        // Auto-link bare URLs
+        $text = preg_replace(
+            '~(?<!href=["\'])(https?://[^\s<]+)~i',
+            '<a href="$1" style="color:{brandColor};text-decoration:underline;">$1</a>',
+            $text
+        );
+
+        // Split on double newlines → paragraphs
+        $blocks = preg_split('/\n{2,}/', $text);
+        $paragraphs = [];
+
+        foreach ($blocks as $block) {
+            $block = trim($block);
+            if ($block === '') {
+                continue;
+            }
+            // Single newlines within a block → <br>
+            $block = nl2br(htmlspecialchars($block, ENT_QUOTES, 'UTF-8'));
+            // Restore auto-linked anchors (htmlspecialchars encoded the <a> tags)
+            $block = preg_replace_callback(
+                '/&lt;a href=&quot;(.*?)&quot; style=&quot;color:\{brandColor\};.*?&quot;&gt;(.*?)&lt;\/a&gt;/',
+                function ($m) {
+                    return '<a href="' . htmlspecialchars_decode($m[1]) . '" style="color:{brandColor};text-decoration:underline;">' . htmlspecialchars_decode($m[2]) . '</a>';
+                },
+                $block
+            );
+            // Decode any HTML entities that were in the original text (e.g. & became &amp;)
+            // But keep the structure tags we added
+            $paragraphs[] = '<p style="margin:0 0 16px 0;line-height:1.6;color:#333333;">' . $block . '</p>';
+        }
+
+        return implode("\n", $paragraphs);
+    }
+
+    /**
+     * Wrap the email body in a professional HTML email template.
+     *
+     * @param string      $bodyContent The message body (plain text or basic HTML)
+     * @param string      $tenantName  Name of the tenant (café/restaurant)
+     * @param string      $brandColor  Primary brand color (hex, e.g. #FFC107)
+     * @param string|null $logoPath    Relative logo path from tenant (e.g. /uploads/logos/xxx.png)
+     * @return string Complete HTML email document
+     */
+    private function wrapInEmailTemplate(string $bodyContent, string $tenantName, string $brandColor = '#FFC107', ?string $logoPath = null): string
+    {
+        // Convert body to proper HTML paragraphs
+        $bodyHtml = $this->textToHtml($bodyContent);
+
+        // Replace {brandColor} placeholders that textToHtml() may have inserted
+        $bodyHtml = str_replace('{brandColor}', htmlspecialchars($brandColor), $bodyHtml);
+
+        // Build logo or tenant name header
+        $logoUrl = '';
+        if (!empty($logoPath)) {
+            $baseUrl = defined('FULL_BASE_URL') ? FULL_BASE_URL : '';
+            $logoUrl = $baseUrl . '/' . ltrim($logoPath, '/');
+        }
+
+        $headerContent = '';
+        if ($logoUrl !== '') {
+            $headerContent = '
+            <tr>
+                <td style="text-align:center;padding:32px 40px 8px 40px;">
+                    <img src="' . htmlspecialchars($logoUrl) . '" alt="' . htmlspecialchars($tenantName) . '"
+                         style="max-height:64px;width:auto;max-width:180px;object-fit:contain;">
+                </td>
+            </tr>';
+        }
+
+        // Greeting header with tenant name (always shown, even with logo)
+        $greetingHeader = '
+            <tr>
+                <td style="text-align:center;padding:' . ($logoUrl !== '' ? '8px' : '32px') . ' 40px 24px 40px;">
+                    <h1 style="margin:0;font-size:22px;font-weight:700;color:#1a1a1a;font-family:Arial,Helvetica,sans-serif;">
+                        ' . htmlspecialchars($tenantName) . '
+                    </h1>
+                    <div style="width:48px;height:3px;background:' . htmlspecialchars($brandColor) . ';margin:12px auto 0 auto;border-radius:2px;"></div>
+                </td>
+            </tr>';
+
+        // Build the full HTML email
+        $html = '<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>' . htmlspecialchars($tenantName) . '</title>
+    <!--[if mso]>
+    <noscript>
+        <xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml>
+    </noscript>
+    <![endif]-->
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:Arial,Helvetica,sans-serif;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
+    <center style="width:100%;background-color:#f4f4f5;">
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color:#f4f4f5;">
+            <tr>
+                <td style="padding:32px 16px;" align="center">
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+                        ' . $headerContent . '
+                        ' . $greetingHeader . '
+                        <tr>
+                            <td style="padding:0 40px 32px 40px;">
+                                ' . $bodyHtml . '
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding:20px 40px;background-color:#fafafa;border-top:1px solid #eeeeee;">
+                                <p style="margin:0;font-size:12px;color:#999999;text-align:center;line-height:1.5;">
+                                    Verstuurd door <strong style="color:#666666;">' . htmlspecialchars($tenantName) . '</strong> via REGULR.vip
+                                </p>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+    </center>
+</body>
+</html>';
+
+        return $html;
     }
 }

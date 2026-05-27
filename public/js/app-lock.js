@@ -504,7 +504,7 @@
             } else {
                 // Andere fout - toon alleen als geen PIN beschikbaar
                 if (!hasPin()) {
-                    showLockError('Biometrie fout: ' + (errorMsg || 'Probeer opnieuw.'));
+                    showLockError('Biometrie kon niet worden gecontroleerd. Probeer opnieuw.');
                 }
             }
         }

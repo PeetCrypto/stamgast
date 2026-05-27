@@ -26,6 +26,11 @@ $tenantLogo = $_SESSION['tenant_logo'] ?? ''; // Tenant uploaded logo URL
     <?php if ($userRole === 'guest' && isset($_SESSION['tenant']['slug'])): ?>
     <meta name="tenant-slug" content="<?= sanitize($_SESSION['tenant']['slug']) ?>">
     <?php endif; ?>
+    <!-- Tenant branding for push notifications -->
+    <meta name="tenant-name" content="<?= sanitize($tenantName) ?>">
+    <?php if (!empty($tenantLogo)): ?>
+    <meta name="tenant-icon" content="<?= sanitize($tenantLogo) ?>">
+    <?php endif; ?>
     <title><?= sanitize($tenantName) ?></title>
 
     <!-- iOS PWA: apple-mobile-web-app-title controls home screen name on iPhone/iPad -->

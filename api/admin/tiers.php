@@ -8,6 +8,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/../../models/LoyaltyTier.php';
+require_once __DIR__ . '/../../models/Tenant.php';
 
 $db = Database::getInstance()->getConnection();
 $tenantId = currentTenantId();
@@ -30,6 +31,7 @@ if ($method === 'GET') {
             'topup_amount_cents'    => (int) $tier['topup_amount_cents'],
             'model_type'            => $tier['model_type'] ?? LoyaltyTier::MODEL_DISCOUNT,
             'bonus_percentage'      => (float) ($tier['bonus_percentage'] ?? 0),
+            'bonus_cents'           => (int) ($tier['bonus_cents'] ?? 0),
             'alcohol_discount_perc' => (float) $tier['alcohol_discount_perc'],
             'food_discount_perc'    => (float) $tier['food_discount_perc'],
             'points_multiplier'     => (float) $tier['points_multiplier'],
@@ -38,8 +40,24 @@ if ($method === 'GET') {
         ];
     }, $tiers);
 
+    $tenant = (new Tenant($db))->findById($tenantId);
+    $lockedModel = $tenant['tier_model_type'] ?? null;
+
+    // Self-heal: if tiers exist but tenant model was never locked, infer from first tier
+    if (!$lockedModel && !empty($tiers)) {
+        $lockedModel = $tiers[0]['model_type'] ?? null;
+        if ($lockedModel) {
+            try {
+                (new Tenant($db))->update($tenantId, ['tier_model_type' => $lockedModel]);
+            } catch (\Throwable $e) {
+                error_log('[tiers] Auto-lock tier_model_type failed: ' . $e->getMessage());
+            }
+        }
+    }
+
     Response::success([
         'tiers' => $result,
+        'tier_model_type' => $lockedModel,
     ]);
 
 } elseif ($method === 'POST') {
@@ -60,8 +78,25 @@ if ($method === 'GET') {
         $name               = trim($input['name'] ?? '');
         $minDepositCents    = (int) ($input['min_deposit_cents'] ?? 0);
         $topupAmountCents   = (int) ($input['topup_amount_cents'] ?? LoyaltyTier::MIN_TOPUP_CENTS);
-        $modelType          = $input['model_type'] ?? LoyaltyTier::MODEL_DISCOUNT;
+        // Enforce tenant-level model type lock
+        $tenant = (new Tenant($db))->findById($tenantId);
+        $lockedModel = $tenant['tier_model_type'] ?? null;
+        if ($lockedModel !== null) {
+            $modelType = $lockedModel;
+        } else {
+            $modelType = $input['model_type'] ?? LoyaltyTier::MODEL_DISCOUNT;
+            if (!in_array($modelType, [LoyaltyTier::MODEL_DISCOUNT, LoyaltyTier::MODEL_BONUS])) {
+                $modelType = LoyaltyTier::MODEL_DISCOUNT;
+            }
+            try {
+                (new Tenant($db))->update($tenantId, ['tier_model_type' => $modelType]);
+            } catch (\Throwable $e) {
+                error_log('[tiers] Failed to lock tier_model_type: ' . $e->getMessage());
+                // Non-fatal: tier creation continues without lock
+            }
+        }
         $bonusPercentage    = (float) ($input['bonus_percentage'] ?? 0);
+        $bonusCents         = (int) ($input['bonus_cents'] ?? 0);
         $alcDiscount        = (float) ($input['alcohol_discount_perc'] ?? 0);
         $foodDiscount       = (float) ($input['food_discount_perc'] ?? 0);
         $pointsMultiplier   = (float) ($input['points_multiplier'] ?? 1.0);
@@ -77,6 +112,13 @@ if ($method === 'GET') {
         if ($name === '') {
             Response::error('Naam is verplicht', 'VALIDATION_ERROR', 422);
         }
+        // Duplicate name check (within same tenant)
+        $existingTiers = $tierModel->getByTenant($tenantId);
+        foreach ($existingTiers as $existing) {
+            if (mb_strtolower(trim($existing['name'])) === mb_strtolower($name)) {
+                Response::error('Er bestaat al een pakket met de naam "' . htmlspecialchars($name) . '"', 'DUPLICATE_NAME', 422);
+            }
+        }
         if ($topupAmountCents < LoyaltyTier::MIN_TOPUP_CENTS) {
             Response::error('Opwaardeerbedrag moet minimaal €' . (LoyaltyTier::MIN_TOPUP_CENTS / 100) . ' zijn', 'VALIDATION_ERROR', 422);
         }
@@ -86,18 +128,17 @@ if ($method === 'GET') {
 
         // Model-specific validation
         if ($modelType === LoyaltyTier::MODEL_BONUS) {
-            // Bonus model: bonus_percentage is required
+            if ($bonusCents < 0 || $bonusCents > 50000) {
+                Response::error('Bonus bedrag moet tussen €0 en €500 zijn', 'VALIDATION_ERROR', 422);
+            }
             if ($bonusPercentage < 0 || $bonusPercentage > LoyaltyTier::BONUS_MAX) {
                 Response::error('Bonus percentage moet tussen 0% en ' . LoyaltyTier::BONUS_MAX . '% zijn', 'VALIDATION_ERROR', 422);
             }
-            // Alcohol discount is NOT allowed in bonus model
             $alcDiscount = 0;
-            // Food discount is optional (extra non-alcohol discount)
             if ($foodDiscount < 0 || $foodDiscount > FOOD_DISCOUNT_MAX) {
                 Response::error('Eten korting moet tussen 0% en ' . FOOD_DISCOUNT_MAX . '% zijn', 'VALIDATION_ERROR', 422);
             }
         } else {
-            // Discount model: standard validation
             if ($alcDiscount < 0 || $alcDiscount > ALCOHOL_DISCOUNT_MAX) {
                 Response::error('Alcohol korting moet tussen 0% en ' . ALCOHOL_DISCOUNT_MAX . '% zijn (wettelijk maximum)', 'VALIDATION_ERROR', 422);
             }
@@ -117,6 +158,7 @@ if ($method === 'GET') {
             'topup_amount_cents'    => $topupAmountCents,
             'model_type'            => $modelType,
             'bonus_percentage'      => $bonusPercentage,
+            'bonus_cents'           => $bonusCents,
             'alcohol_discount_perc' => $alcDiscount,
             'food_discount_perc'    => $foodDiscount,
             'points_multiplier'     => $pointsMultiplier,
@@ -124,10 +166,14 @@ if ($method === 'GET') {
             'sort_order'            => $sortOrder,
         ]);
 
-        (new Audit($db))->log($tenantId, currentUserId(), 'tier.created', 'tier', $tierId, [
-            'name' => $name,
-            'topup_amount_cents' => $topupAmountCents,
-        ]);
+        try {
+            (new Audit($db))->log($tenantId, currentUserId(), 'tier.created', 'tier', $tierId, [
+                'name' => $name,
+                'topup_amount_cents' => $topupAmountCents,
+            ]);
+        } catch (\Throwable $e) {
+            error_log('[tiers] Audit log failed (create): ' . $e->getMessage());
+        }
 
         Response::success([
             'message' => 'Pakket aangemaakt',
@@ -140,18 +186,25 @@ if ($method === 'GET') {
             Response::error('Ongeldig tier_id', 'INVALID_INPUT', 400);
         }
 
-        // Verify tier belongs to this tenant
         $tier = $tierModel->findById($tierId, $tenantId);
         if (!$tier) {
             Response::error('Pakket niet gevonden', 'NOT_FOUND', 404);
         }
 
-        // Build update data with validation
         $data = [];
         if (isset($input['name'])) {
             $data['name'] = trim($input['name']);
             if ($data['name'] === '') {
                 Response::error('Naam mag niet leeg zijn', 'VALIDATION_ERROR', 422);
+            }
+            // Duplicate name check (within same tenant, exclude current tier)
+            $existingTiers = $tierModel->getByTenant($tenantId);
+            foreach ($existingTiers as $existing) {
+                if (((int) $existing['id']) !== $tierId
+                    && mb_strtolower(trim($existing['name'])) === mb_strtolower($data['name'])
+                ) {
+                    Response::error('Er bestaat al een pakket met de naam "' . htmlspecialchars($data['name']) . '"', 'DUPLICATE_NAME', 422);
+                }
             }
         }
         if (isset($input['min_deposit_cents'])) {
@@ -167,16 +220,9 @@ if ($method === 'GET') {
             }
             $data['topup_amount_cents'] = $val;
         }
+        // Model type is locked on tenant level — cannot change per tier
         if (isset($input['model_type'])) {
-            if (!in_array($input['model_type'], [LoyaltyTier::MODEL_DISCOUNT, LoyaltyTier::MODEL_BONUS])) {
-                Response::error('Ongeldig model type', 'VALIDATION_ERROR', 422);
-            }
-            $data['model_type'] = $input['model_type'];
-
-            // When switching model type, enforce constraints
-            if ($input['model_type'] === LoyaltyTier::MODEL_BONUS) {
-                $data['alcohol_discount_perc'] = 0; // No alcohol discount in bonus mode
-            }
+            unset($input['model_type']);
         }
         if (isset($input['bonus_percentage'])) {
             $val = (float) $input['bonus_percentage'];
@@ -185,12 +231,18 @@ if ($method === 'GET') {
             }
             $data['bonus_percentage'] = $val;
         }
+        if (isset($input['bonus_cents'])) {
+            $val = (int) $input['bonus_cents'];
+            if ($val < 0 || $val > 50000) {
+                Response::error('Bonus bedrag moet tussen €0 en €500 zijn', 'VALIDATION_ERROR', 422);
+            }
+            $data['bonus_cents'] = $val;
+        }
         if (isset($input['alcohol_discount_perc'])) {
             $val = (float) $input['alcohol_discount_perc'];
             if ($val < 0 || $val > ALCOHOL_DISCOUNT_MAX) {
                 Response::error('Alcohol korting moet tussen 0% en ' . ALCOHOL_DISCOUNT_MAX . '% zijn', 'VALIDATION_ERROR', 422);
             }
-            // Block alcohol discount in bonus model
             if (isset($input['model_type']) && $input['model_type'] === LoyaltyTier::MODEL_BONUS) {
                 Response::error('Alcohol korting is niet beschikbaar in het bonus model', 'VALIDATION_ERROR', 422);
             }
@@ -226,7 +278,11 @@ if ($method === 'GET') {
 
         $tierModel->update($tierId, $tenantId, $data);
 
-        (new Audit($db))->log($tenantId, currentUserId(), 'tier.updated', 'tier', $tierId, $data);
+        try {
+            (new Audit($db))->log($tenantId, currentUserId(), 'tier.updated', 'tier', $tierId, $data);
+        } catch (\Throwable $e) {
+            error_log('[tiers] Audit log failed (update): ' . $e->getMessage());
+        }
 
         Response::success([
             'message' => 'Pakket bijgewerkt',
@@ -234,7 +290,6 @@ if ($method === 'GET') {
         ]);
 
     } elseif ($action === 'toggle') {
-        // Toggle tier active/inactive
         $tierId = (int) ($input['tier_id'] ?? 0);
         $active = (bool) ($input['is_active'] ?? false);
 
@@ -249,10 +304,14 @@ if ($method === 'GET') {
 
         $tierModel->toggle($tierId, $tenantId, $active);
 
-        (new Audit($db))->log($tenantId, currentUserId(), 'tier.toggled', 'tier', $tierId, [
-            'is_active' => $active ? 1 : 0,
-            'name' => $tier['name'],
-        ]);
+        try {
+            (new Audit($db))->log($tenantId, currentUserId(), 'tier.toggled', 'tier', $tierId, [
+                'is_active' => $active ? 1 : 0,
+                'name' => $tier['name'],
+            ]);
+        } catch (\Throwable $e) {
+            error_log('[tiers] Audit log failed (toggle): ' . $e->getMessage());
+        }
 
         Response::success([
             'message' => $active ? 'Pakket ingeschakeld' : 'Pakket uitgeschakeld',
@@ -273,9 +332,13 @@ if ($method === 'GET') {
 
         $tierModel->delete($tierId, $tenantId);
 
-        (new Audit($db))->log($tenantId, currentUserId(), 'tier.deleted', 'tier', $tierId, [
-            'name' => $tier['name'],
-        ]);
+        try {
+            (new Audit($db))->log($tenantId, currentUserId(), 'tier.deleted', 'tier', $tierId, [
+                'name' => $tier['name'],
+            ]);
+        } catch (\Throwable $e) {
+            error_log('[tiers] Audit log failed (delete): ' . $e->getMessage());
+        }
 
         Response::success([
             'message' => 'Pakket verwijderd',

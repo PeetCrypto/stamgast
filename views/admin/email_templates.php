@@ -188,7 +188,7 @@
                         <label for="admin-template-content">Content *</label>
                         <textarea class="form-control" id="admin-template-content" rows="15" required></textarea>
                         <small class="form-text text-muted">
-                            Available placeholders: {{user_name}}, {{tenant_name}}, {{invitation_link}}, {{user_email}}, {{user_password}}, {{verification_code}}, {{password_reset_link}}, {{campaign_name}}, {{campaign_message}}
+                            Available placeholders: {{guest_name}}, {{tenant_name}}, {{verification_code}}, {{verification_link}}, {{user_name}}, {{invitation_link}}, {{user_email}}, {{user_password}}, {{password_reset_link}}, {{campaign_name}}, {{campaign_message}}
                         </small>
                     </div>
                     
@@ -402,7 +402,7 @@ $(document).ready(function() {
                 $('#adminTemplateModal').modal('show');
             },
             error: function(xhr, status, error) {
-                alert('Error loading template: ' + xhr.responseJSON?.error || error);
+                alert('Kon template niet laden');
             }
         });
     }
@@ -423,7 +423,7 @@ $(document).ready(function() {
                 loadAdminTemplates();
             },
             error: function(xhr, status, error) {
-                alert('Error deleting template: ' + xhr.responseJSON?.error || error);
+                alert('Kon template niet verwijderen');
             }
         });
     }
@@ -453,7 +453,7 @@ $(document).ready(function() {
                 loadAdminTemplates();
             },
             error: function(xhr, status, error) {
-                alert('Error saving template: ' + xhr.responseJSON?.error || error);
+                alert('Kon template niet opslaan');
             }
         });
     }

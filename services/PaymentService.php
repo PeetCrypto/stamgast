@@ -134,6 +134,14 @@ class PaymentService
         $finalTotal = ($amountAlcCents - $discountAlcCents) + ($amountFoodCents - $discountFoodCents);
         $discountTotal = $discountAlcCents + $discountFoodCents;
 
+        // BTW berekening over NETTO bedrag (na korting)
+        // Alcohol: 21% | Food: 9%
+        $netAlcCents  = $amountAlcCents - $discountAlcCents;
+        $netFoodCents = $amountFoodCents - $discountFoodCents;
+        $btwAlcCents  = $netAlcCents > 0 ? (int) floor($netAlcCents / (100 + BTW_ALCOHOL_PERCENTAGE) * BTW_ALCOHOL_PERCENTAGE) : 0;
+        $btwFoodCents = $netFoodCents > 0 ? (int) floor($netFoodCents / (100 + BTW_FOOD_PERCENTAGE) * BTW_FOOD_PERCENTAGE) : 0;
+        $btwTotalCents = $btwAlcCents + $btwFoodCents;
+
         // Calculate points earned: FLOOR(final_total * multiplier / 100)
         // Skip points if tenant has disabled the points system
         $tenantModelPts = new Tenant($this->db);
@@ -186,6 +194,9 @@ class PaymentService
                 'discount_alc_cents'  => $discountAlcCents,
                 'discount_food_cents' => $discountFoodCents,
                 'final_total_cents'   => $finalTotal,
+                'btw_alc_cents'       => $btwAlcCents,
+                'btw_food_cents'      => $btwFoodCents,
+                'btw_total_cents'     => $btwTotalCents,
                 'points_earned'       => $pointsEarned,
                 'ip_address'          => getClientIP(),
                 'description'         => 'Betaling via POS',

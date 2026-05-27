@@ -183,11 +183,41 @@ $connectSuccess = isset($_GET['connect']) && $_GET['connect'] === 'success';
                             </label>
                             <p class="text-sm text-secondary" style="margin-top:4px;">Wanneer uit: nieuwe gasten zijn direct actief na registratie. Bestaande unverified gasten blijven onveranderd.</p>
                         </div>
+                        <div class="form-group" style="margin-top: var(--space-md); padding-top: var(--space-md); border-top: 1px solid rgba(255,255,255,0.1);">
+                            <label class="text-sm text-secondary">Test Modus</label>
+                            <label style="display:flex;align-items:center;gap:var(--space-sm);cursor:pointer;">
+                                <input type="checkbox" id="naw-is_test" <?= ($tenant['is_test'] ?? false) ? 'checked' : '' ?> style="width:18px;height:18px;">
+                                <span id="naw-is_test-label" style="color: <?= ($tenant['is_test'] ?? false) ? '#FF9800' : 'inherit' ?>;">
+                                    <?= ($tenant['is_test'] ?? false) ? 'Test tenant' : 'Productie' ?>
+                                </span>
+                            </label>
+                            <p class="text-sm text-secondary" style="margin-top:4px;">Schakel in om test-data te kunnen wissen (gasten, pakketten, saldo).</p>
+                        </div>
                     </div>
 
                     <button type="submit" class="btn btn-primary" style="width:100%;margin-top:var(--space-sm);">Opslaan</button>
                     <p id="naw-status" class="text-sm" style="margin-top:var(--space-sm);text-align:center;"></p>
                 </form>
+            </div>
+
+            <!-- Test Tenant: Danger Zone (always rendered, shown/hidden via JS) -->
+            <div id="test-danger-zone" class="glass-card" style="padding: var(--space-lg); margin-top: var(--space-lg); border: 1px solid rgba(244,67,54,0.4); background: rgba(244,67,54,0.05); display: none;">
+                <h2 style="margin-bottom: var(--space-md); color: #f44336;">⚠ Test Data Wissen</h2>
+                <p class="text-sm text-secondary" style="margin-bottom: var(--space-md);">
+                    Deze tenant is gemarkeerd als <strong>test tenant</strong>. Je kunt hieronder test-data wissen.
+                </p>
+                <div style="display: grid; gap: var(--space-sm);">
+                    <button type="button" id="btn-purge-guests" class="btn" style="width:100%;background:rgba(244,67,54,0.15);color:#f44336;border:1px solid rgba(244,67,54,0.3);">
+                        🗑 Verwijder alle gasten
+                    </button>
+                    <button type="button" id="btn-purge-packages" class="btn" style="width:100%;background:rgba(244,67,54,0.15);color:#f44336;border:1px solid rgba(244,67,54,0.3);">
+                        🗑 Verwijder alle pakketten
+                    </button>
+                    <button type="button" id="btn-reset-balances" class="btn" style="width:100%;background:rgba(255,152,0,0.15);color:#FF9800;border:1px solid rgba(255,152,0,0.3);">
+                        ↺ Reset saldo gasten naar €0
+                    </button>
+                </div>
+                <p id="purge-status" class="text-sm" style="margin-top:var(--space-sm);text-align:center;"></p>
             </div>
 
             <!-- Platform Fee Config -->
@@ -394,6 +424,17 @@ $connectSuccess = isset($_GET['connect']) && $_GET['connect'] === 'success';
 const CSRF = '<?= generateCSRFToken() ?>';
 const TENANT_ID = <?= $tenantId ?>;
 
+// Show/hide test danger zone based on checkbox state
+function toggleDangerZone() {
+    const cb = document.getElementById('naw-is_test');
+    const dz = document.getElementById('test-danger-zone');
+    if (cb && dz) {
+        dz.style.display = cb.checked ? 'block' : 'none';
+    }
+}
+// Initialize on page load
+toggleDangerZone();
+
 // ============================================
 // USER EDIT PANEL
 // ============================================
@@ -475,7 +516,7 @@ document.getElementById('save-email-btn')?.addEventListener('click', async funct
                 if (editBtn) editBtn.dataset.userEmail = newEmail;
             }
         } else {
-            statusEl.textContent = '✗ ' + (result.error || 'Fout bij wijzigen e-mail');
+            statusEl.textContent = '✗ E-mail wijzigen mislukt';
             statusEl.style.color = '#f44336';
         }
     } catch (err) {
@@ -524,7 +565,7 @@ document.getElementById('save-password-btn')?.addEventListener('click', async fu
             document.getElementById('edit-new-password').value = '';
             document.getElementById('edit-confirm-password').value = '';
         } else {
-            statusEl.textContent = '✗ ' + (result.error || 'Fout bij wijzigen wachtwoord');
+            statusEl.textContent = '✗ Wachtwoord wijzigen mislukt';
             statusEl.style.color = '#f44336';
         }
     } catch (err) {
@@ -557,6 +598,8 @@ document.getElementById('naw-form')?.addEventListener('submit', async (e) => {
     if (activeEl) data.is_active = activeEl.checked ? 1 : 0;
     const verifEl = document.getElementById('naw-verification_required');
     if (verifEl) data.verification_required = verifEl.checked ? 1 : 0;
+    const testEl = document.getElementById('naw-is_test');
+    if (testEl) data.is_test = testEl.checked ? 1 : 0;
 
     try {
         const res = await fetch((window.__BASE_URL || '') + '/api/superadmin/tenants', {
@@ -568,8 +611,12 @@ document.getElementById('naw-form')?.addEventListener('submit', async (e) => {
         if (result.success) {
             statusEl.textContent = '✓ Opgeslagen';
             statusEl.style.color = '#4CAF50';
+            // Reload if is_test changed (danger zone needs server render)
+            if (data.is_test !== undefined) {
+                setTimeout(() => location.reload(), 1000);
+            }
         } else {
-            statusEl.textContent = '✗ ' + (result.error || 'Fout');
+            statusEl.textContent = '✗ Actie mislukt';
             statusEl.style.color = '#f44336';
         }
     } catch (err) {
@@ -595,6 +642,13 @@ document.getElementById('naw-is_active')?.addEventListener('change', function() 
     label.textContent = this.checked ? 'Actief' : 'Uitgeschakeld';
     label.style.color = this.checked ? '#4CAF50' : '#f44336';
 });
+// Test mode toggle label update
+document.getElementById('naw-is_test')?.addEventListener('change', function() {
+    const label = document.getElementById('naw-is_test-label');
+    label.textContent = this.checked ? 'Test tenant' : 'Productie';
+    label.style.color = this.checked ? '#FF9800' : 'inherit';
+    toggleDangerZone();
+});
 
 // Role change
 document.querySelectorAll('.role-select').forEach(sel => {
@@ -615,11 +669,11 @@ document.querySelectorAll('.role-select').forEach(sel => {
                 this.style.background = 'rgba(76,175,80,0.3)';
                 setTimeout(() => { this.style.background = originalBg || ''; }, 1500);
             } else {
-                alert('Fout: ' + (result.error || 'Onbekend'));
+                alert('Actie mislukt. Probeer het opnieuw.');
                 this.style.background = originalBg || '';
             }
         } catch (err) {
-            alert('Netwerkfout: ' + err.message);
+            alert('Er is een netwerkfout opgetreden');
             this.style.background = originalBg || '';
         }
     });
@@ -651,7 +705,7 @@ document.getElementById('fee-form')?.addEventListener('submit', async (e) => {
             statusEl.textContent = '✓ Fee config opgeslagen';
             statusEl.style.color = '#4CAF50';
         } else {
-            statusEl.textContent = '✗ ' + (result.error || 'Fout');
+            statusEl.textContent = '✗ Actie mislukt';
             statusEl.style.color = '#f44336';
         }
     } catch (err) {
@@ -703,7 +757,7 @@ document.getElementById('btn-connect-mollie')?.addEventListener('click', async (
             });
             window.location.href = oauthUrl;
         } else {
-            statusEl.textContent = '✗ ' + (result.error || 'Fout');
+            statusEl.textContent = '✗ Actie mislukt';
             statusEl.style.color = '#f44336';
         }
     } catch (err) {
@@ -729,13 +783,96 @@ document.getElementById('btn-disconnect-mollie')?.addEventListener('click', asyn
         if (result.success) {
             window.location.reload();
         } else {
-            statusEl.textContent = '✗ ' + (result.error || 'Fout');
+            statusEl.textContent = '✗ Actie mislukt';
             statusEl.style.color = '#f44336';
         }
     } catch (err) {
         statusEl.textContent = '✗ Netwerkfout';
         statusEl.style.color = '#f44336';
     }
+});
+
+// === TEST TENANT PURGE ACTIONS ===
+
+document.getElementById('btn-purge-guests')?.addEventListener('click', async () => {
+    if (!confirm('⚠ Alle gasten voor deze tenant PERMANENT verwijderen?\n\nDit verwijdert ook hun wallets, transacties en notificaties.')) return;
+    const statusEl = document.getElementById('purge-status');
+    statusEl.textContent = 'Gasten verwijderen...';
+    statusEl.style.color = 'var(--text-secondary)';
+    try {
+        const res = await fetch((window.__BASE_URL || '') + '/api/superadmin/tenants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+            body: JSON.stringify({ action: 'purge_guests', tenant_id: TENANT_ID })
+        });
+        const result = await res.json();
+        if (result.success) {
+            statusEl.textContent = '✓ ' + (result.purged_guests || 0) + ' gasten en ' + (result.purged_transactions || 0) + ' transacties verwijderd';
+            statusEl.style.color = '#4CAF50';
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            statusEl.textContent = '✗ Actie mislukt';
+            statusEl.style.color = '#f44336';
+        }
+    } catch (err) {
+        statusEl.textContent = '✗ Netwerkfout';
+        statusEl.style.color = '#f44336';
+    }
+    setTimeout(() => { statusEl.textContent = ''; }, 6000);
+});
+
+document.getElementById('btn-purge-packages')?.addEventListener('click', async () => {
+    if (!confirm('⚠ Alle pakketten (loyalty tiers) voor deze tenant PERMANENT verwijderen?')) return;
+    const statusEl = document.getElementById('purge-status');
+    statusEl.textContent = 'Pakketten verwijderen...';
+    statusEl.style.color = 'var(--text-secondary)';
+    try {
+        const res = await fetch((window.__BASE_URL || '') + '/api/superadmin/tenants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+            body: JSON.stringify({ action: 'purge_packages', tenant_id: TENANT_ID })
+        });
+        const result = await res.json();
+        if (result.success) {
+            statusEl.textContent = '✓ ' + (result.purged_packages || 0) + ' pakketten verwijderd';
+            statusEl.style.color = '#4CAF50';
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            statusEl.textContent = '✗ Actie mislukt';
+            statusEl.style.color = '#f44336';
+        }
+    } catch (err) {
+        statusEl.textContent = '✗ Netwerkfout';
+        statusEl.style.color = '#f44336';
+    }
+    setTimeout(() => { statusEl.textContent = ''; }, 6000);
+});
+
+document.getElementById('btn-reset-balances')?.addEventListener('click', async () => {
+    if (!confirm('⚠ Saldo van alle gasten naar €0.00 resetten?\n\nDe gasten blijven bestaan, maar hun wallet wordt geleegd.')) return;
+    const statusEl = document.getElementById('purge-status');
+    statusEl.textContent = 'Saldo resetten...';
+    statusEl.style.color = 'var(--text-secondary)';
+    try {
+        const res = await fetch((window.__BASE_URL || '') + '/api/superadmin/tenants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+            body: JSON.stringify({ action: 'reset_guest_balances', tenant_id: TENANT_ID })
+        });
+        const result = await res.json();
+        if (result.success) {
+            statusEl.textContent = '✓ ' + (result.wallets_reset || 0) + ' wallets gereset naar €0.00';
+            statusEl.style.color = '#4CAF50';
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            statusEl.textContent = '✗ Actie mislukt';
+            statusEl.style.color = '#f44336';
+        }
+    } catch (err) {
+        statusEl.textContent = '✗ Netwerkfout';
+        statusEl.style.color = '#f44336';
+    }
+    setTimeout(() => { statusEl.textContent = ''; }, 6000);
 });
 </script>
 

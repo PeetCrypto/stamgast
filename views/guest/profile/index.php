@@ -19,6 +19,7 @@ $migrations = [
     ['house_number', "ALTER TABLE users ADD COLUMN house_number VARCHAR(10) NULL DEFAULT NULL"],
     ['postal_code',  "ALTER TABLE users ADD COLUMN postal_code VARCHAR(10) NULL DEFAULT NULL"],
     ['city',         "ALTER TABLE users ADD COLUMN city VARCHAR(50) NULL DEFAULT NULL"],
+    ['push_enabled', "ALTER TABLE users ADD COLUMN push_enabled TINYINT(1) NOT NULL DEFAULT 1"],
 ];
 foreach ($migrations as [$col, $sql]) {
     $exists = $db->query("SHOW COLUMNS FROM users LIKE '{$col}'")->fetch();
@@ -201,6 +202,14 @@ if ($photoUrl) {
 <style>
     .profile-section { margin-bottom: var(--space-lg); }
     .profile-section h3 { margin-bottom: var(--space-md); font-size: 18px; }
+    /* Push toggle switch */
+    .push-toggle-switch { position: relative; display: inline-block; width: 50px; height: 28px; }
+    .push-toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .push-toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--glass-border); transition: 0.3s; border-radius: 28px; }
+    .push-toggle-slider:before { position: absolute; content: ''; height: 22px; width: 22px; left: 3px; bottom: 3px; background-color: white; transition: 0.3s; border-radius: 50%; }
+    .push-toggle-switch input:checked + .push-toggle-slider { background-color: var(--accent-primary); }
+    .push-toggle-switch input:checked + .push-toggle-slider:before { transform: translateX(22px); }
+    .push-toggle-switch input:disabled + .push-toggle-slider { opacity: 0.4; cursor: not-allowed; }
     .profile-label {
         display: block;
         margin-bottom: 6px;
@@ -502,22 +511,115 @@ if ($photoUrl) {
 
         <hr class="profile-divider">
 
-        <!-- ── Notifications (VERPLICHT — altijd aan) ── -->
+        <!-- ── Notifications (toggle aan/uit) ── -->
         <div class="profile-section">
             <h3>🔔 Notificaties</h3>
             <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: var(--space-md);">
-                Notificaties staan altijd aan zodat je nooit een bericht mist van <?= sanitize($tenant['name'] ?? APP_NAME) ?>.
+                Ontvang push berichten over saldo, betalingen en aanbiedingen.
             </p>
-            <div style="display:flex;align-items:center;gap:12px;padding:var(--space-md);border-radius:12px;border:1px solid rgba(76,175,80,0.3);background:rgba(76,175,80,0.06);">
-                <span style="font-size:24px;">🔔</span>
-                <div>
-                    <strong style="color:#4CAF50;">Altijd ingeschakeld</strong>
-                    <p style="color:var(--text-secondary);font-size:13px;margin-top:2px;">Je ontvangt push berichten over saldo, betalingen en aanbiedingen</p>
+            <div id="push-row" style="display:flex;align-items:center;justify-content:space-between;padding:var(--space-md);border-radius:12px;border:1px solid var(--glass-border);background:var(--glass-bg);cursor:pointer;">
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <span id="push-icon" style="font-size:24px;"><?= $hasFcmToken ? '🔔' : '🔕' ?></span>
+                    <div>
+                        <strong id="push-label"><?= $hasFcmToken ? 'Ingeschakeld' : 'Uitgeschakeld' ?></strong>
+                        <p id="push-desc" style="color:var(--text-secondary);font-size:13px;margin-top:2px;">
+                            <?= $hasFcmToken ? 'Je ontvangt push berichten' : 'Je ontvangt geen push berichten' ?>
+                        </p>
+                    </div>
+                </div>
+                <label class="push-toggle-switch" onclick="event.stopPropagation();">
+                    <input type="checkbox" id="push-toggle" <?= $hasFcmToken ? 'checked' : '' ?>>
+                    <span class="push-toggle-slider"></span>
+                </label>
+            </div>
+            <p id="push-error" style="display:none;color:#F44336;font-size:13px;margin-top:var(--space-sm);"></p>
+        </div>
+
+        <!-- ── Push Permission Modal ── -->
+        <div id="push-permission-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;">
+            <div style="background:var(--glass-bg,#1a1a2e);border:1px solid var(--glass-border,rgba(255,255,255,0.1));border-radius:16px;max-width:420px;width:90%;padding:28px 24px;box-shadow:0 24px 64px rgba(0,0,0,0.5);">
+                <div style="text-align:center;margin-bottom:20px;">
+                    <span style="font-size:48px;">🔔</span>
+                    <h2 style="margin:12px 0 4px;font-size:20px;color:var(--text-primary,#fff);">Notificaties inschakelen</h2>
+                    <p style="color:var(--text-secondary,rgba(255,255,255,0.6));font-size:14px;line-height:1.5;" id="push-modal-intro">
+                        Je browser heeft notificaties geblokkeerd voor deze site. Volg de stappen hieronder om dit te wijzigen.
+                    </p>
+                </div>
+
+                <!-- Browser-specific instructions -->
+                <div id="push-instructions-chrome" style="display:none;">
+                    <div style="background:rgba(255,255,255,0.05);border-radius:10px;padding:16px;margin-bottom:16px;">
+                        <p style="color:var(--text-primary,#fff);font-size:14px;font-weight:600;margin:0 0 12px;">📋 Stappen voor Chrome / Edge:</p>
+                        <ol style="color:var(--text-secondary,rgba(255,255,255,0.7));font-size:13px;line-height:1.8;padding-left:20px;margin:0;">
+                            <li>Klik op het <strong style="color:#FFC107;">🔒 slot-icoon</strong> links van de adresbalk</li>
+                            <li>Zoek <strong>"Notificaties"</strong> in het lijstje</li>
+                            <li>Wijzig van <strong style="color:#F44336;">Blokkeren</strong> naar <strong style="color:#4CAF50;">Toestaan</strong></li>
+                            <li>Klik op <strong>"Gereed"</strong> of sluit het paneel</li>
+                        </ol>
+                    </div>
+                </div>
+
+                <div id="push-instructions-firefox" style="display:none;">
+                    <div style="background:rgba(255,255,255,0.05);border-radius:10px;padding:16px;margin-bottom:16px;">
+                        <p style="color:var(--text-primary,#fff);font-size:14px;font-weight:600;margin:0 0 12px;">📋 Stappen voor Firefox:</p>
+                        <ol style="color:var(--text-secondary,rgba(255,255,255,0.7));font-size:13px;line-height:1.8;padding-left:20px;margin:0;">
+                            <li>Klik op het <strong style="color:#FFC107;">🔒 slot-icoon</strong> links van de adresbalk</li>
+                            <li>Klik op <strong>"Verwijder uitzondering"</strong> naast Notificaties</li>
+                            <li>Herlaad de pagina (F5)</li>
+                            <li>Klik op de schakelaar om notificaties toe te staan</li>
+                        </ol>
+                    </div>
+                </div>
+
+                <div id="push-instructions-safari" style="display:none;">
+                    <div style="background:rgba(255,255,255,0.05);border-radius:10px;padding:16px;margin-bottom:16px;">
+                        <p style="color:var(--text-primary,#fff);font-size:14px;font-weight:600;margin:0 0 12px;">📋 Stappen voor Safari (iOS/macOS):</p>
+                        <ol style="color:var(--text-secondary,rgba(255,255,255,0.7));font-size:13px;line-height:1.8;padding-left:20px;margin:0;">
+                            <li>Open <strong>Instellingen</strong> op je iPhone/iPad</li>
+                            <li>Ga naar <strong>Safari → Websites → Notificaties</strong></li>
+                            <li>Zoek deze website en kies <strong style="color:#4CAF50;">Toestaan</strong></li>
+                            <li>Herlaad de website</li>
+                        </ol>
+                    </div>
+                </div>
+
+                <div id="push-instructions-generic" style="display:none;">
+                    <div style="background:rgba(255,255,255,0.05);border-radius:10px;padding:16px;margin-bottom:16px;">
+                        <p style="color:var(--text-primary,#fff);font-size:14px;font-weight:600;margin:0 0 12px;">📋 Stappen:</p>
+                        <ol style="color:var(--text-secondary,rgba(255,255,255,0.7));font-size:13px;line-height:1.8;padding-left:20px;margin:0;">
+                            <li>Open de <strong>instellingen</strong> van je browser</li>
+                            <li>Zoek naar <strong>"Notificaties"</strong> of <strong>"Site-instellingen"</strong></li>
+                            <li>Zoek deze website in de lijst</li>
+                            <li>Wijzig van <strong style="color:#F44336;">Blokkeren</strong> naar <strong style="color:#4CAF50;">Toestaan</strong></li>
+                        </ol>
+                    </div>
+                </div>
+
+                <div id="push-instructions-ios-install" style="display:none;">
+                    <div style="background:rgba(255,255,255,0.05);border-radius:10px;padding:16px;margin-bottom:16px;">
+                        <p style="color:var(--text-primary,#fff);font-size:14px;font-weight:600;margin:0 0 12px;">📱 Stappen voor iPhone / iPad:</p>
+                        <ol style="color:var(--text-secondary,rgba(255,255,255,0.7));font-size:13px;line-height:1.8;padding-left:20px;margin:0;">
+                            <li>Tik op het <strong style="color:#FFC107;">deel-icoon</strong> onderaan je scherm (het vierkantje met het pijltje omhoog)</li>
+                            <li>Scroll naar beneden en tik op <strong>"Zet op thuisscherm"</strong></li>
+                            <li>Tik op <strong>"Voeg toe"</strong></li>
+                            <li>Open de app vanaf je <strong>thuisscherm</strong></li>
+                            <li>Ga naar dit profiel en schakel push notificaties in</li>
+                        </ol>
+                    </div>
+                    <div style="background:rgba(255,193,7,0.1);border:1px solid rgba(255,193,7,0.3);border-radius:10px;padding:12px;margin-bottom:16px;">
+                        <p style="color:#FFC107;font-size:13px;margin:0;">⚠️ Push notificaties werken op iOS alleen vanuit de geïnstalleerde app, niet vanuit Safari.</p>
+                    </div>
+                </div>
+
+                <div style="display:flex;gap:12px;">
+                    <button type="button" id="push-modal-check" style="flex:1;padding:14px;border-radius:10px;border:none;background:var(--accent-primary,#FFC107);color:#000;font-weight:600;font-size:15px;cursor:pointer;">
+                        ✅ Ik heb het gewijzigd — controleer opnieuw
+                    </button>
+                    <button type="button" id="push-modal-close" style="padding:14px 20px;border-radius:10px;border:1px solid var(--glass-border,rgba(255,255,255,0.1));background:transparent;color:var(--text-secondary,rgba(255,255,255,0.6));font-size:15px;cursor:pointer;">
+                        Sluiten
+                    </button>
                 </div>
             </div>
-            <p id="push-denied-hint" style="display:none;color:#F44336;font-size:13px;margin-top:var(--space-sm);">
-                Notificaties zijn geblokkeerd in je apparaatinstellingen. Open je browser- of apparaatinstellingen om notificaties toe te staan.
-            </p>
         </div>
     </div>
 
@@ -528,15 +630,380 @@ if ($photoUrl) {
 <script src="<?= BASE_URL ?>/public/js/push.js"></script>
 <script>
 (function() {
-    // Push notificaties zijn VERPLICHT — geen toggle, alleen denied-hint
-    setTimeout(function() {
-        var deniedHint = document.getElementById('push-denied-hint');
+    // ── Elements ──
+    var pushToggle    = document.getElementById('push-toggle');
+    var pushLabel     = document.getElementById('push-label');
+    var pushDesc      = document.getElementById('push-desc');
+    var pushIcon      = document.getElementById('push-icon');
+    var pushError     = document.getElementById('push-error');
+    var pushRow       = document.getElementById('push-row');
+    var modal         = document.getElementById('push-permission-modal');
+    var modalClose    = document.getElementById('push-modal-close');
+    var modalCheck    = document.getElementById('push-modal-check');
+    var modalIntro    = document.getElementById('push-modal-intro');
 
-        // Als browser notificaties heeft geblokkeerd → toon hint
-        if (typeof Notification !== 'undefined' && Notification.permission === 'denied') {
-            if (deniedHint) deniedHint.style.display = 'block';
+    function getPermission() {
+        if (typeof Notification === 'undefined') return 'unsupported';
+        return Notification.permission;
+    }
+
+    function getCsrfToken() {
+        var meta = document.querySelector('meta[name="csrf-token"]');
+        return meta ? meta.getAttribute('content') : '';
+    }
+
+    // ── Platform detection ──
+    function detectPlatform() {
+        var ua = navigator.userAgent;
+        var isStandalone = false;
+        try {
+            isStandalone = window.matchMedia('(display-mode: standalone)').matches
+                || window.navigator.standalone === true;
+        } catch(_) {}
+
+        var isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+        var isAndroid = /Android/.test(ua);
+
+        if (isIOS) return isStandalone ? 'ios_pwa' : 'ios_browser';
+        if (isAndroid) return 'android';
+        return 'desktop';
+    }
+
+    function detectBrowser() {
+        var ua = navigator.userAgent;
+        if (ua.indexOf('Edg/') > -1) return 'chrome';
+        if (ua.indexOf('Chrome') > -1) return 'chrome';
+        if (ua.indexOf('Firefox') > -1) return 'firefox';
+        if (ua.indexOf('Safari') > -1) return 'safari';
+        return 'generic';
+    }
+
+    var platform = detectPlatform();
+    console.log('[Push Toggle] Platform:', platform, 'Permission:', getPermission());
+
+    // ════════════════════════════════════════════════════════════
+    // TOGGLE UI SYNC
+    // ════════════════════════════════════════════════════════════
+
+    function syncToggleState() {
+        var perm = getPermission();
+
+        // iOS browser (non-PWA) — push is NOT possible
+        if (platform === 'ios_browser') {
+            if (pushToggle) { pushToggle.checked = false; pushToggle.disabled = false; }
+            if (pushLabel) pushLabel.textContent = 'Installeer de app';
+            if (pushDesc) pushDesc.textContent = 'Tik hier om deze app op je thuisscherm te zetten. Push werkt alleen vanuit de app.';
+            if (pushIcon) pushIcon.textContent = '📱';
+            return;
         }
-    }, 500);
+
+        if (perm === 'unsupported') {
+            if (pushToggle) { pushToggle.checked = false; pushToggle.disabled = true; }
+            if (pushLabel) pushLabel.textContent = 'Niet ondersteund';
+            if (pushDesc) pushDesc.textContent = 'Deze browser ondersteunt geen push notificaties';
+            if (pushIcon) pushIcon.textContent = '⚠️';
+            return;
+        }
+
+        if (perm === 'denied') {
+            if (pushToggle) { pushToggle.checked = false; pushToggle.disabled = false; }
+            if (pushLabel) pushLabel.textContent = 'Geblokkeerd — tik om in te schakelen';
+            if (pushDesc) pushDesc.textContent = 'Notificaties zijn geblokkeerd. Tik op de schakelaar om ze vrij te geven.';
+            if (pushIcon) pushIcon.textContent = '🚫';
+            return;
+        }
+
+        // perm === 'granted' or 'default'
+        if (pushToggle) pushToggle.disabled = false;
+    }
+
+    syncToggleState();
+
+    // ════════════════════════════════════════════════════════════
+    // PERMISSION MODAL
+    // ════════════════════════════════════════════════════════════
+
+    function openPermissionModal(reason) {
+        if (!modal) return;
+
+        // Hide all instruction blocks first
+        var ids = ['push-instructions-chrome', 'push-instructions-firefox', 'push-instructions-safari', 'push-instructions-generic', 'push-instructions-ios-install'];
+        for (var i = 0; i < ids.length; i++) {
+            var el = document.getElementById(ids[i]);
+            if (el) el.style.display = 'none';
+        }
+
+        if (reason === 'ios_install') {
+            if (modalIntro) modalIntro.textContent = 'Om push notificaties te ontvangen op je iPhone of iPad, moet je deze app toevoegen aan je thuisscherm.';
+            var iosEl = document.getElementById('push-instructions-ios-install');
+            if (iosEl) iosEl.style.display = 'block';
+            if (modalCheck) modalCheck.style.display = 'none';
+            modal.style.display = 'flex';
+            return;
+        }
+
+        if (reason === 'denied') {
+            if (modalIntro) modalIntro.textContent = 'Je browser heeft notificaties geblokkeerd voor deze site. Volg de stappen hieronder om dit te wijzigen.';
+        } else if (reason === 'push_unavailable') {
+            if (modalIntro) modalIntro.textContent = 'Push notificaties zijn niet beschikbaar in deze browsersessie (bijv. incognito/privémodus). Open deze site in een normaal browservenster.';
+        }
+
+        // Show correct browser instructions
+        var browser = detectBrowser();
+        var targetId = 'push-instructions-' + browser;
+        var targetEl = document.getElementById(targetId);
+        if (targetEl) targetEl.style.display = 'block';
+
+        if (modalCheck) modalCheck.style.display = (reason === 'denied') ? 'block' : 'none';
+        modal.style.display = 'flex';
+    }
+
+    function closePermissionModal() {
+        if (modal) modal.style.display = 'none';
+    }
+
+    if (modalClose) modalClose.addEventListener('click', closePermissionModal);
+    if (modal) modal.addEventListener('click', function(e) {
+        if (e.target === modal) closePermissionModal();
+    });
+
+    if (modalCheck) {
+        modalCheck.addEventListener('click', async function() {
+            modalCheck.textContent = '⏳ Controleren...';
+            modalCheck.disabled = true;
+
+            var perm = getPermission();
+            if (perm === 'granted') {
+                closePermissionModal();
+                if (pushToggle) pushToggle.checked = true;
+                await enablePush();
+            } else {
+                modalCheck.textContent = '❌ Nog steeds geblokkeerd — probeer opnieuw';
+                setTimeout(function() {
+                    modalCheck.textContent = '✅ Ik heb het gewijzigd — controleer opnieuw';
+                    modalCheck.disabled = false;
+                }, 2000);
+            }
+        });
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // TOGGLE HANDLER
+    // ════════════════════════════════════════════════════════════
+
+    if (pushToggle) {
+        pushToggle.addEventListener('change', function() {
+            if (this.checked) {
+                enablePush();
+            } else {
+                disablePush();
+            }
+        });
+    }
+
+    // Entire row clickable for iOS browser + denied state
+    if (pushRow) {
+        pushRow.addEventListener('click', function(e) {
+            // Don't interfere with the toggle itself
+            if (e.target.closest('.push-toggle-switch')) return;
+
+            if (platform === 'ios_browser') {
+                openPermissionModal('ios_install');
+            } else if (getPermission() === 'denied') {
+                openPermissionModal('denied');
+            }
+        });
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // ENABLE PUSH
+    // ════════════════════════════════════════════════════════════
+
+    async function enablePush() {
+        // iOS browser → must install PWA first
+        if (platform === 'ios_browser') {
+            if (pushToggle) pushToggle.checked = false;
+            openPermissionModal('ios_install');
+            return;
+        }
+
+        var perm = getPermission();
+
+        if (perm === 'unsupported') {
+            showPushError('Push notificaties worden niet ondersteund door deze browser');
+            if (pushToggle) pushToggle.checked = false;
+            return;
+        }
+
+        if (perm === 'denied') {
+            if (pushToggle) pushToggle.checked = false;
+            openPermissionModal('denied');
+            return;
+        }
+
+        try {
+            // Register callback for UI updates during the flow
+            window.__pushPermissionCallback = function(state) {
+                if (state === 'waiting_for_dialog') {
+                    if (platform === 'android' || platform === 'ios_pwa') {
+                        if (pushLabel) pushLabel.textContent = 'Wacht op toestemming...';
+                        if (pushDesc) pushDesc.textContent = '👆 Er verschijnt een pop-up. Tik op "Toestaan".';
+                    } else {
+                        if (pushLabel) pushLabel.textContent = 'Wacht op toestemming...';
+                        if (pushDesc) pushDesc.textContent = '👆 Kijk bovenaan je scherm — klik op "Toestaan" in het dialoogje.';
+                    }
+                    if (pushIcon) pushIcon.textContent = '👆';
+                } else if (state === 'getting_token') {
+                    if (pushLabel) pushLabel.textContent = 'Token ophalen...';
+                    if (pushDesc) pushDesc.textContent = 'Even geduld, push wordt geactiveerd';
+                    if (pushIcon) pushIcon.textContent = '⏳';
+                }
+            };
+
+            if (pushLabel) pushLabel.textContent = 'Inschakelen...';
+            if (pushDesc) pushDesc.textContent = 'Even geduld...';
+            if (pushIcon) pushIcon.textContent = '⏳';
+
+            if (window.FCMHandler && typeof window.FCMHandler.subscribe === 'function') {
+                console.log('[Push Toggle] Using FCMHandler.subscribe()');
+                var result = await window.FCMHandler.subscribe();
+                console.log('[Push Toggle] subscribe result:', result);
+
+                window.__pushPermissionCallback = null;
+
+                if (!result.granted) {
+                    if (result.reason === 'push_unavailable') {
+                        if (pushToggle) pushToggle.checked = false;
+                        updatePushUI(false);
+                        openPermissionModal('push_unavailable');
+                        return;
+                    }
+                    if (result.reason === 'denied') {
+                        if (pushToggle) pushToggle.checked = false;
+                        updatePushUI(false);
+                        openPermissionModal('denied');
+                        return;
+                    }
+                    if (result.reason === 'timeout') {
+                        if (pushToggle) pushToggle.checked = false;
+                        updatePushUI(false);
+                        showPushError('De toestemmingsdialoog is niet beantwoord. Probeer opnieuw en tik op "Toestaan".');
+                        return;
+                    }
+                    if (result.reason === 'dismissed') {
+                        if (pushToggle) pushToggle.checked = false;
+                        updatePushUI(false);
+                        showPushError('Je hebt de toestemming geweigerd. Tik op de schakelaar om opnieuw te proberen.');
+                        return;
+                    }
+                    var errMsg = result.message || result.reason || 'onbekend';
+                    showPushError('Kon push niet inschakelen: ' + errMsg);
+                    if (pushToggle) pushToggle.checked = false;
+                    updatePushUI(false);
+                    return;
+                }
+            } else {
+                // Fallback
+                console.log('[Push Toggle] FCMHandler not available');
+                showPushError('Push systeem niet beschikbaar — herlaad de pagina');
+                if (pushToggle) pushToggle.checked = false;
+                updatePushUI(false);
+                return;
+            }
+
+            // Success!
+            updatePushUI(true);
+            savePushEnabled(1);
+            showPushSuccess('Push notificaties ingeschakeld! ✅');
+
+        } catch (e) {
+            console.error('[Push Toggle] Enable error:', e);
+            showPushError('Kon push notificaties niet inschakelen');
+            if (pushToggle) pushToggle.checked = false;
+            updatePushUI(false);
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // DISABLE PUSH
+    // ════════════════════════════════════════════════════════════
+
+    async function disablePush() {
+        try {
+            await fetch(window.__BASE_URL + '/api/push/unsubscribe', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCsrfToken() },
+                body: JSON.stringify({})
+            });
+            updatePushUI(false);
+            savePushEnabled(0);
+        } catch (e) {
+            console.error('[Push Toggle] Disable error:', e);
+            showPushError('Kon push niet uitschakelen — probeer opnieuw');
+            if (pushToggle) pushToggle.checked = true;
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // HELPERS
+    // ════════════════════════════════════════════════════════════
+
+    async function savePushEnabled(enabled) {
+        try {
+            var resp = await fetch(window.__BASE_URL + '/api/push/save-preference', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCsrfToken() },
+                body: JSON.stringify({ push_enabled: enabled })
+            });
+            var result = await resp.json();
+            if (result.success) {
+                console.log('[Push Toggle] Preference saved:', enabled);
+            } else {
+                console.warn('[Push Toggle] Save preference failed:', result.error || 'unknown');
+            }
+        } catch (e) {
+            console.error('[Push Toggle] Save preference error:', e);
+        }
+    }
+
+    function updatePushUI(enabled) {
+        if (enabled) {
+            if (pushLabel) pushLabel.textContent = 'Ingeschakeld';
+            if (pushDesc) pushDesc.textContent = 'Je ontvangt push berichten';
+            if (pushIcon) pushIcon.textContent = '🔔';
+        } else {
+            var perm = getPermission();
+            if (perm === 'denied') {
+                if (pushLabel) pushLabel.textContent = 'Geblokkeerd — tik om in te schakelen';
+                if (pushDesc) pushDesc.textContent = 'Notificaties zijn geblokkeerd. Tik op de schakelaar om ze vrij te geven.';
+                if (pushIcon) pushIcon.textContent = '🚫';
+            } else {
+                if (pushLabel) pushLabel.textContent = 'Uitgeschakeld';
+                if (pushDesc) pushDesc.textContent = 'Je ontvangt geen push berichten';
+                if (pushIcon) pushIcon.textContent = '🔕';
+            }
+        }
+    }
+
+    function showPushError(msg) {
+        if (pushError) {
+            pushError.textContent = msg;
+            pushError.style.display = 'block';
+            pushError.style.color = '#F44336';
+            setTimeout(function() { pushError.style.display = 'none'; }, 8000);
+        }
+    }
+
+    function showPushSuccess(msg) {
+        if (pushError) {
+            pushError.textContent = msg;
+            pushError.style.display = 'block';
+            pushError.style.color = '#4CAF50';
+            setTimeout(function() { pushError.style.display = 'none'; }, 4000);
+        }
+    }
 })();
 
 // ============================================
@@ -912,7 +1379,7 @@ if ($photoUrl) {
                         setTimeout(function() { window.location.reload(); }, 500);
                     } catch (e) {
                         console.warn('FaceID verification cancelled/failed:', e.message);
-                        webauthnError.textContent = e.message || 'FaceID verificatie mislukt of geannuleerd';
+                        webauthnError.textContent = 'FaceID verificatie mislukt of geannuleerd';
                         webauthnError.style.display = 'block';
                         updateWebauthnState();
                     }
@@ -961,7 +1428,7 @@ if ($photoUrl) {
                 setTimeout(function() { window.location.reload(); }, 500);
             } catch (e) {
                 console.warn('WebAuthn registration failed:', e.message);
-                webauthnError.textContent = e.message || 'FaceID kon niet worden ingeschakeld';
+                webauthnError.textContent = 'FaceID kon niet worden ingeschakeld. Probeer het opnieuw.';
                 webauthnError.style.display = 'block';
                 updateWebauthnState();
             } finally {

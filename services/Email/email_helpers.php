@@ -22,13 +22,13 @@ require_once __DIR__ . '/EmailService.php';
  * @param string|null $tenantId Tenant ID (null for global templates)
  * @return array Result with success status and message
  */
-function sendEmailTemplate($db, $to, $templateType, $variables, $tenantId = null) {
+function sendEmailTemplate($db, $to, $templateType, $variables, $tenantId = null, $fromName = null) {
     try {
         // Initialize email service
         $emailService = new EmailService($db);
         
         // Send the email
-        $result = $emailService->sendTemplatedEmail($to, $templateType, $variables, $tenantId);
+        $result = $emailService->sendTemplatedEmail($to, $templateType, $variables, $tenantId, 'nl', $fromName);
         
         return $result;
     } catch (Exception $e) {
@@ -86,8 +86,8 @@ function sendAdminInviteEmail($db, $tenant, $user, $inviteToken, $tenantId) {
             'invitation_link' => FULL_BASE_URL . '/accept-invite?token=' . $inviteToken
         ];
         
-        // Send the email
-        return sendEmailTemplate($db, $user['email'], 'admin_invite', $variables, $tenantId);
+        // Send the email with tenant name as from_name for branding
+        return sendEmailTemplate($db, $user['email'], 'admin_invite', $variables, $tenantId, $tenant['name']);
     } catch (Exception $e) {
         return ['success' => false, 'message' => $e->getMessage()];
     }
@@ -114,8 +114,8 @@ function sendBartenderInviteEmail($db, $tenant, $user, $inviteToken, $tenantId) 
             'user_password' => $user['password'] ?? '',
         ];
         
-        // Send the email
-        return sendEmailTemplate($db, $user['email'], 'bartender_invite', $variables, $tenantId);
+        // Send the email with tenant name as from_name for branding
+        return sendEmailTemplate($db, $user['email'], 'bartender_invite', $variables, $tenantId, $tenant['name']);
     } catch (Exception $e) {
         return ['success' => false, 'message' => $e->getMessage()];
     }
@@ -131,18 +131,35 @@ function sendBartenderInviteEmail($db, $tenant, $user, $inviteToken, $tenantId) 
  * @param int $tenantId Tenant ID
  * @return array Result with success status and message
  */
-function sendGuestConfirmationEmail($db, $email, $tenantName, $verificationCode, $tenantId) {
+function sendGuestConfirmationEmail($db, $email, $tenantName, $verificationCode, $tenantId, $guestName = '') {
     try {
+        // Look up tenant slug for correct verification URL
+        $tenantSlug = '';
+        try {
+            $tenantModel = new Tenant($db);
+            $tenant = $tenantModel->findById((int) $tenantId);
+            if ($tenant && !empty($tenant['slug'])) {
+                $tenantSlug = $tenant['slug'];
+            }
+        } catch (\Throwable $e) {
+            // Ignore — slug lookup is best-effort
+        }
+
+        // Verification page URL: /j/{slug}/verify (user must be logged in, code from session)
+        $verificationUrl = $tenantSlug
+            ? (FULL_BASE_URL . '/j/' . $tenantSlug . '/verify')
+            : (FULL_BASE_URL . '/dashboard');
+
         // Prepare template variables
         $variables = [
-            'guest_name' => '',
-            'tenant_name' => $tenantName,
-            'verification_code' => $verificationCode,
-            'verification_link' => FULL_BASE_URL . '/verify?code=' . $verificationCode
+            'guest_name'         => $guestName,
+            'tenant_name'        => $tenantName,
+            'verification_code'  => $verificationCode,
+            'verification_link'  => $verificationUrl,
         ];
-        
-        // Send the email
-        return sendEmailTemplate($db, $email, 'guest_confirmation', $variables, $tenantId);
+
+        // Send the email with tenant name as from_name for branding
+        return sendEmailTemplate($db, $email, 'guest_confirmation', $variables, $tenantId, $tenantName);
     } catch (Exception $e) {
         return ['success' => false, 'message' => $e->getMessage()];
     }
@@ -158,17 +175,17 @@ function sendGuestConfirmationEmail($db, $email, $tenantName, $verificationCode,
  * @param int $tenantId Tenant ID
  * @return array Result with success status and message
  */
-function sendGuestPasswordResetEmail($db, $email, $tenantName, $passwordResetLink, $tenantId) {
+function sendGuestPasswordResetEmail($db, $email, $tenantName, $passwordResetLink, $tenantId, $guestName = '') {
     try {
         // Prepare template variables
         $variables = [
-            'guest_name' => '',
+            'guest_name' => $guestName,
             'tenant_name' => $tenantName,
             'password_reset_link' => $passwordResetLink
         ];
         
-        // Send the email
-        return sendEmailTemplate($db, $email, 'guest_password_reset', $variables, $tenantId);
+        // Send the email with tenant name as from_name for branding
+        return sendEmailTemplate($db, $email, 'guest_password_reset', $variables, $tenantId, $tenantName);
     } catch (Exception $e) {
         return ['success' => false, 'message' => $e->getMessage()];
     }
@@ -198,8 +215,8 @@ function sendMarketingEmail($db, $email, $tenantName, $campaignName, $campaignMe
             'action_text' => $actionText
         ];
         
-        // Send the email
-        return sendEmailTemplate($db, $email, 'marketing', $variables, $tenantId);
+        // Send the email with tenant name as from_name for branding
+        return sendEmailTemplate($db, $email, 'marketing', $variables, $tenantId, $tenantName);
     } catch (Exception $e) {
         return ['success' => false, 'message' => $e->getMessage()];
     }

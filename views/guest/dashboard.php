@@ -12,9 +12,9 @@ $userId = currentUserId();
 $tenantId = currentTenantId();
 $firstName = $_SESSION['first_name'] ?? 'Gast';
 
-// Get wallet balance
+// Get wallet balance (tenant-scoped for isolation safety)
 $walletModel = new Wallet($db);
-$wallet = $walletModel->findByUserId($userId);
+$wallet = $walletModel->findByUserAndTenant($userId, $tenantId);
 $balanceCents = $wallet ? (int) $wallet['balance_cents'] : 0;
 $pointsCents = $wallet ? (int) $wallet['points_cents'] : 0;
 
@@ -23,6 +23,7 @@ $userModel = new User($db);
 $accountStatus = $userModel->getAccountStatus($userId);
 $user = $userModel->findById($userId);
 $hasFcmToken = !empty($user['fcm_token']);
+$emailVerified = !empty($user['email_verified_at']);
 $tenantModel = new Tenant($db);
 $tenant = $tenantModel->findById($tenantId);
 $verificationRequired = (bool) ($tenant['verification_required'] ?? true);
@@ -32,40 +33,124 @@ $isUnverified = ($accountStatus !== 'active' && $verificationRequired);
 
 <?php require VIEWS_PATH . 'shared/header.php'; ?>
 
+<style>
+/* ── Gold Wallet Card (texteffects.dev style) ── */
+.gold-wallet-card {
+    position: relative;
+    border: none;
+    border-radius: 20px;
+    background-clip: padding-box;
+}
+
+.gold-wallet-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 20px;
+    padding: 2px;
+    background: linear-gradient(135deg, #cfc09f, #634f2c, #cfc09f, #ffecb3, #cfc09f);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+}
+
+/* ── Silver Action Card ── */
+.silver-action-card {
+    position: relative;
+    border: none;
+    border-radius: 16px;
+    background-clip: padding-box;
+    overflow: visible;
+}
+
+.silver-action-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 20px;
+    padding: 2px;
+    background: linear-gradient(135deg, #e8e8e8, #a0a0a0, #d0d0d0, #888888, #c0c0c0);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+}
+
+.gold-text {
+    background: linear-gradient(to bottom, #cfc09f 27%, #ffecb3 40%, #3a2c0f 78%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    color: #fff;
+    position: relative;
+    font-size: 48px;
+    font-weight: 700;
+    margin: 0;
+    line-height: 1.2;
+}
+
+.gold-text::after {
+    background: none;
+    content: attr(data-heading);
+    inset: 0;
+    z-index: -1;
+    position: absolute;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    text-shadow:
+        -1px 0 1px #c6bb9f,
+        0 1px 1px #c6bb9f,
+        5px 5px 10px rgba(0, 0, 0, 0.4),
+        -5px -5px 10px rgba(0, 0, 0, 0.4);
+}
+</style>
+
 <div class="container" style="padding: var(--space-lg);">
     <h1 style="margin-bottom: var(--space-lg);">Hoi, <?= sanitize($firstName) ?>!</h1>
 
     <!-- Wallet Card -->
-    <div class="glass-card" style="padding: var(--space-xl); margin-bottom: var(--space-lg); border: 2px solid var(--accent-primary); text-align: center; position: relative; overflow: hidden;">
+    <div class="glass-card gold-wallet-card" style="padding: var(--space-xl); margin-bottom: var(--space-lg); text-align: center; position: relative;">
         <p class="text-secondary text-sm">Je saldo</p>
 
-        <div id="balance-display">
-            <p style="font-size: 48px; font-weight: 700; color: var(--accent-primary);">&euro; <?= number_format($balanceCents / 100, 2, ',', '.') ?></p>
+        <div id="balance-display" style="transition: filter 0.3s ease;">
+            <h2 class="gold-text" data-heading="€ <?= number_format($balanceCents / 100, 2, ',', '.') ?>">€ <?= number_format($balanceCents / 100, 2, ',', '.') ?></h2>
         </div>
 
         <?php if ($pointsEnabled): ?>
         <p class="text-secondary text-sm" style="margin-top: var(--space-xs);"><?= number_format($pointsCents / 100, 0) ?> punten</p>
         <?php endif; ?>
         <?php if (!$isUnverified): ?>
-        <a href="<?= BASE_URL ?>/qr" class="btn btn-primary" style="margin-top: var(--space-md);">Betalen</a>
+        <a href="<?= BASE_URL ?>/pay" class="btn btn-primary" style="margin-top: var(--space-md); display: inline-flex; align-items: center; gap: 8px;">Scan &amp; betaal <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg></a>
         <?php endif; ?>
+
     </div>
 
-        <!-- Lock overlay (alleen als PIN ingesteld is — JS toont/verbergt dit) -->
-        <div id="balance-lock" style="position:absolute;inset:0;display:none;align-items:center;justify-content:center;cursor:pointer;background:rgba(15,15,15,0.6);border-radius:inherit;z-index:2;">
-            <div style="text-align:center;">
-                <p style="font-size:32px;">&#128274;</p>
-                <p class="text-sm text-secondary">Tik om saldo te bekijken</p>
-            </div>
-        </div>
+    <?php if (!$emailVerified && array_key_exists('email_verified_at', $user)): ?>
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- STEP 1: Email verificatie (MOET eerst)                   -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <div class="glass-card" style="padding: var(--space-lg); margin-bottom: var(--space-lg); border: 2px solid rgba(33,150,243,0.5); background: rgba(33,150,243,0.06); text-align: center;">
+        <p style="font-size: 36px; margin-bottom: var(--space-sm);">📧</p>
+        <p style="font-size: 18px; font-weight: 700; margin-bottom: 0.5rem; color: #2196F3;">E-mail nog niet geverifieerd</p>
+        <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 1rem;">
+            We hebben een verificatiecode gestuurd naar <strong><?= sanitize($user['email']) ?></strong>.<br>
+            Voer deze code in om je account te activeren.
+        </p>
+        <a href="<?= BASE_URL ?>/j/<?= sanitize($tenantSlug ?? ($_SESSION['tenant']['slug'] ?? '')) ?>/verify" class="btn btn-primary" style="background: #2196F3; border-color: #2196F3;">Verifieer je e-mail</a>
+        <p style="color: var(--text-muted); font-size: 12px; margin-top: 0.75rem;">
+            Geen code ontvangen? Controleer je spamfolder of vraag een nieuwe code aan.
+        </p>
     </div>
 
-    <?php if ($isUnverified): ?>
-    <!-- Unverified Account Banner -->
+    <?php elseif ($isUnverified): ?>
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- STEP 2: Barman verificatie (alleen na email verificatie)   -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
     <div class="glass-card" style="padding: var(--space-lg); margin-bottom: var(--space-lg); border: 2px solid rgba(255,193,7,0.4); background: rgba(255,193,7,0.06); text-align: center;">
         <p style="font-size: 18px; color: #FFC107; font-weight: 600; margin-bottom: 0.5rem;">⚠️ Account niet geactiveerd</p>
         <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 1rem;">Hoi! Om je wallet te activeren en saldo te storten, moet je eenmalig je ID laten zien bij de bar. Zo houden we het veilig en legaal.</p>
-        <a href="<?= BASE_URL ?>/qr" class="btn btn-outline" style="border-color: #FFC107; color: #FFC107;">Laat je QR zien aan de bar</a>
+        <a href="<?= BASE_URL ?>/pay" class="btn btn-outline" style="border-color: #FFC107; color: #FFC107;">Activeer bij de bar</a>
     </div>
     <?php endif; ?>
 
@@ -111,8 +196,8 @@ $isUnverified = ($accountStatus !== 'active' && $verificationRequired);
         </div>
     </div>
 
-    <?php if (!$hasFcmToken): ?>
-    <!-- Push Notificaties VERPLICHT — blokkeert dashboard tot ingeschakeld -->
+    <?php if (!$hasFcmToken && $emailVerified): ?>
+    <!-- Push Notificaties VERPLICHT — blokkeert dashboard tot ingeschakeld (only after email verified) -->
     <div id="push-mandatory-overlay" style="position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;padding:var(--space-lg);">
         <div style="background:var(--glass-bg);border:2px solid rgba(76,175,80,0.5);border-radius:16px;padding:var(--space-xl);max-width:400px;width:100%;text-align:center;">
             <p style="font-size:36px;margin-bottom:var(--space-md);">🔔</p>
@@ -134,20 +219,20 @@ $isUnverified = ($accountStatus !== 'active' && $verificationRequired);
 
     <!-- Quick Actions -->
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-md); margin-bottom: var(--space-xl);">
-        <a href="<?= BASE_URL ?>/qr" class="glass-card" style="padding: var(--space-lg); text-align: center; text-decoration: none; color: inherit;">
-            <p style="font-size: 24px; margin-bottom: var(--space-xs);">&#9203;</p>
-            <p class="text-sm">QR Code</p>
+        <a href="<?= BASE_URL ?>/pay" class="glass-card silver-action-card" style="padding: var(--space-lg); text-align: center; text-decoration: none; color: inherit;">
+            <p style="font-size: 24px; margin-bottom: var(--space-xs);">&#128247;</p>
+            <p class="text-sm">Scan &amp; Betaal</p>
         </a>
-        <a href="<?= BASE_URL ?>/wallet" class="glass-card" style="padding: var(--space-lg); text-align: center; text-decoration: none; color: inherit;">
-            <p style="font-size: 24px; margin-bottom: var(--space-xs);">&#128176;</p>
+        <a href="<?= BASE_URL ?>/wallet" class="glass-card silver-action-card" style="padding: var(--space-lg); text-align: center; text-decoration: none; color: inherit;">
+            <img src="<?= BASE_URL ?>/public/icons/wallet.svg" alt="Wallet" style="width: 86px; height: auto; margin: 0 auto var(--space-xs); display: block;">
             <p class="text-sm">Wallet</p>
         </a>
-        <a href="<?= BASE_URL ?>/inbox" class="glass-card" style="padding: var(--space-lg); text-align: center; text-decoration: none; color: inherit; position: relative;">
+        <a href="<?= BASE_URL ?>/inbox" class="glass-card silver-action-card" style="padding: var(--space-lg); text-align: center; text-decoration: none; color: inherit; position: relative;">
             <p style="font-size: 24px; margin-bottom: var(--space-xs);">&#128233;</p>
             <p class="text-sm">Inbox</p>
             <span class="notif-badge" id="inbox-badge" style="display:none;position:absolute;top:8px;right:8px;background:#4CAF50;color:#fff;font-size:11px;font-weight:700;min-width:20px;height:20px;border-radius:10px;align-items:center;justify-content:center;padding:0 5px;">0</span>
         </a>
-        <a href="<?= BASE_URL ?>/profile" class="glass-card" style="padding: var(--space-lg); text-align: center; text-decoration: none; color: inherit;">
+        <a href="<?= BASE_URL ?>/profile" class="glass-card silver-action-card" style="padding: var(--space-lg); text-align: center; text-decoration: none; color: inherit;">
             <p style="font-size: 24px; margin-bottom: var(--space-xs);">&#128100;</p>
             <p class="text-sm">Profiel</p>
         </a>
@@ -255,6 +340,7 @@ $isUnverified = ($accountStatus !== 'active' && $verificationRequired);
 
 <script src="<?= BASE_URL ?>/public/js/app.js?v=<?= filemtime(PUBLIC_PATH . 'js/app.js') ?>"></script>
 <script src="<?= BASE_URL ?>/public/js/push.js"></script>
+
 <script>
 // Fetch unread inbox count and show badge on Inbox card
 fetch((window.__BASE_URL || '') + '/api/notification/check', {

@@ -89,7 +89,7 @@ class PushService
      */
     public function sendNotification(int $userId, string $title, string $body, array $data = []): array
     {
-        $stmt = $this->db->prepare("SELECT fcm_token FROM users WHERE id = :user_id");
+        $stmt = $this->db->prepare("SELECT u.fcm_token, t.name AS tenant_name, t.logo_path FROM users u LEFT JOIN tenants t ON u.tenant_id = t.id WHERE u.id = :user_id");
         $stmt->execute([':user_id' => $userId]);
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -97,7 +97,13 @@ class PushService
             return ['sent' => 0, 'failed' => 1];
         }
 
-        $response = $this->fcm->sendMessage($result['fcm_token'], $title, $body, $data);
+        // Inject tenant branding into data payload
+        $brandedData = array_merge($data, [
+            'tenant_name' => $result['tenant_name'] ?? '',
+            'icon'        => !empty($result['logo_path']) ? $result['logo_path'] : '/icons/favicon.png',
+        ]);
+
+        $response = $this->fcm->sendMessage($result['fcm_token'], $title, $body, $brandedData);
 
         if ($response !== false) {
             return ['sent' => 1, 'failed' => 0];
@@ -113,6 +119,20 @@ class PushService
      */
     public function broadcastNotification(int $tenantId, string $title, string $body, array $data = []): array
     {
+        // Fetch tenant branding
+        $tenantStmt = $this->db->prepare("SELECT name, logo_path FROM tenants WHERE id = :id");
+        $tenantStmt->execute([':id' => $tenantId]);
+        $tenant = $tenantStmt->fetch(PDO::FETCH_ASSOC);
+
+        $tenantName = $tenant['name'] ?? '';
+        $tenantIcon = !empty($tenant['logo_path']) ? $tenant['logo_path'] : '/icons/favicon.png';
+
+        // Inject tenant branding into data payload
+        $brandedData = array_merge($data, [
+            'tenant_name' => $tenantName,
+            'icon'        => $tenantIcon,
+        ]);
+
         $stmt = $this->db->prepare(
             "SELECT id, fcm_token FROM users WHERE tenant_id = :tenant_id AND fcm_token IS NOT NULL AND fcm_token != ''"
         );
@@ -123,18 +143,11 @@ class PushService
         $failed = 0;
 
         foreach ($users as $user) {
-            $result = $this->fcm->sendMessage($user['fcm_token'], $title, $body, $data);
+            $result = $this->fcm->sendMessage($user['fcm_token'], $title, $body, $brandedData);
             if ($result !== false) {
                 $sent++;
             } else {
                 $failed++;
-                // Auto-cleanup stale FCM tokens
-                if ($this->fcm->lastUnregisteredToken) {
-                    $clean = $this->db->prepare("UPDATE users SET fcm_token = NULL WHERE fcm_token = ?");
-                    $clean->execute([$user['fcm_token']]);
-                    $this->fcm->lastUnregisteredToken = null;
-                    error_log('[Push] Stale token removed for user ' . $user['id']);
-                }
             }
         }
 

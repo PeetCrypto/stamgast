@@ -2,8 +2,11 @@
 declare(strict_types=1);
 
 /**
- * Bartender POS Dashboard
- * Unified scanner + payment in one view
+ * Bartender POS Dashboard — NEW FLOW
+ * 1. Bartender enters amounts (alcohol + food)
+ * 2. Generates QR code with payment session
+ * 3. Shows QR on screen for guest to scan
+ * 4. Polls session status → big ✅ or ❌
  */
 
 $firstName = $_SESSION['first_name'] ?? 'Bartender';
@@ -11,128 +14,124 @@ $firstName = $_SESSION['first_name'] ?? 'Bartender';
 
 <?php require VIEWS_PATH . 'shared/header.php'; ?>
 
+<!-- QR code wordt nu server-side gegenereerd als PNG (zelfde methode als join QR op /admin/settings) -->
+
 <div class="scanner-page" id="pos-page">
 
-    <!-- ============ STATE: SCANNER ============ -->
-    <div id="state-scanner">
+    <!-- ============ STATE: AMOUNT ENTRY ============ -->
+    <div id="state-amount">
         <div class="scanner-header">
-            <span class="scanner-header__title">QR Scanner</span>
+            <span class="scanner-header__title">Kassa</span>
             <span class="nav-user">Hoi, <?= sanitize($firstName) ?></span>
             <button class="btn btn-ghost btn-sm" id="btn-logout" onclick="location.href=(window.__BASE_URL||'')+'/logout'">Uit</button>
         </div>
 
-        <div class="scanner-viewport">
-            <div id="qr-reader" style="width:100%;height:100%;"></div>
-            <div class="scanner-frame"><span></span></div>
-            <div class="scanner-line"></div>
-        </div>
-
-        <!-- Manual QR fallback -->
-        <div style="padding:0.75rem 1rem;background:rgba(0,0,0,0.8);">
-            <details>
-                <summary style="color:var(--text-muted);font-size:13px;cursor:pointer;">Handmatige QR invoer</summary>
-                <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
-                    <input type="text" id="manual-qr-input" class="form-input" placeholder="Plak QR code data..." style="font-size:13px;">
-                    <button class="btn btn-primary btn-sm" id="manual-qr-btn" style="white-space:nowrap;">Verwerk</button>
-                </div>
-            </details>
-        </div>
-    </div>
-
-    <!-- ============ STATE: PAYMENT ============ -->
-    <div id="state-payment" style="display:none;">
-        <div class="scanner-header">
-            <button class="btn btn-ghost btn-sm" id="btn-back-scan">&larr; Terug</button>
-            <span class="scanner-header__title">Betaling</span>
-            <span></span>
-        </div>
-
-        <div class="payment-page" style="padding-bottom:1rem;">
-            <!-- Scanned user info -->
-            <div class="scan-result__avatar" style="text-align:center;margin-top:1rem;">
-                <div class="avatar avatar--xl" id="pay-avatar" style="margin:0 auto;">
-                    <div class="avatar__placeholder" id="pay-avatar-initial">?</div>
-                </div>
-            </div>
-            <h2 class="scan-result__name" id="pay-user-name" style="text-align:center;margin-bottom:0.25rem;">-</h2>
-            <div class="scan-result__badges" id="pay-badges" style="justify-content:center;margin-bottom:1.5rem;"></div>
-
-            <!-- Amount inputs -->
-            <div class="payment-amounts">
-                <div class="payment-field glass-card" style="padding:1rem;">
-                    <div class="payment-field__label">Alcohol</div>
-                    <div class="payment-field__value" id="pay-alc-display">&euro; 0,00</div>
-                    <div style="display:flex;gap:0.25rem;margin-top:0.5rem;flex-wrap:wrap;justify-content:center;">
-                        <button class="btn btn-secondary btn-sm alc-quick" data-amount="400" style="width:auto;padding:0.35rem 0.6rem;font-size:13px;">+4</button>
-                        <button class="btn btn-secondary btn-sm alc-quick" data-amount="600" style="width:auto;padding:0.35rem 0.6rem;font-size:13px;">+6</button>
-                        <button class="btn btn-secondary btn-sm alc-quick" data-amount="800" style="width:auto;padding:0.35rem 0.6rem;font-size:13px;">+8</button>
-                        <button class="btn btn-secondary btn-sm alc-quick" data-amount="1000" style="width:auto;padding:0.35rem 0.6rem;font-size:13px;">+10</button>
-                    </div>
-                </div>
-                <div class="payment-field glass-card" style="padding:1rem;">
-                    <div class="payment-field__label">Eten</div>
-                    <div class="payment-field__value" id="pay-food-display">&euro; 0,00</div>
-                    <div style="display:flex;gap:0.25rem;margin-top:0.5rem;flex-wrap:wrap;justify-content:center;">
-                        <button class="btn btn-secondary btn-sm food-quick" data-amount="500" style="width:auto;padding:0.35rem 0.6rem;font-size:13px;">+5</button>
-                        <button class="btn btn-secondary btn-sm food-quick" data-amount="750" style="width:auto;padding:0.35rem 0.6rem;font-size:13px;">+7.50</button>
-                        <button class="btn btn-secondary btn-sm food-quick" data-amount="1000" style="width:auto;padding:0.35rem 0.6rem;font-size:13px;">+10</button>
-                        <button class="btn btn-secondary btn-sm food-quick" data-amount="1500" style="width:auto;padding:0.35rem 0.6rem;font-size:13px;">+15</button>
-                    </div>
+         <div class="payment-page" style="padding:1rem;">
+            <!-- Alcohol amount -->
+            <div class="payment-field glass-card" style="padding:1rem;margin-bottom:0.75rem;">
+                <div class="payment-field__label">Alcohol</div>
+                <input type="number" id="alc-input" inputmode="decimal" class="form-input" placeholder="0.00" step="0.01" min="0"
+                    style="text-align:center;font-size:28px;font-weight:700;color:var(--accent-primary);background:transparent;border:1px dashed var(--border-color);border-radius:8px;padding:0.25rem 0.5rem;width:100%;">
+                <div style="display:flex;gap:0.25rem;margin-top:0.5rem;flex-wrap:wrap;justify-content:center;">
+                    <button class="btn btn-secondary btn-sm alc-quick" data-amount="400" style="width:auto;padding:0.35rem 0.6rem;font-size:13px;">+4</button>
+                    <button class="btn btn-secondary btn-sm alc-quick" data-amount="600" style="width:auto;padding:0.35rem 0.6rem;font-size:13px;">+6</button>
+                    <button class="btn btn-secondary btn-sm alc-quick" data-amount="800" style="width:auto;padding:0.35rem 0.6rem;font-size:13px;">+8</button>
+                    <button class="btn btn-secondary btn-sm alc-quick" data-amount="1000" style="width:auto;padding:0.35rem 0.6rem;font-size:13px;">+10</button>
                 </div>
             </div>
 
-            <!-- Manual amount input -->
-            <div class="glass-card" style="padding:1rem;margin-bottom:1rem;">
-                <div style="display:flex;gap:0.75rem;">
-                    <div style="flex:1;">
-                        <label style="font-size:12px;color:var(--text-muted);">Alcohol (&euro;)</label>
-                        <input type="number" id="pay-alc-input" class="form-input" placeholder="0.00" step="0.01" min="0" style="text-align:center;">
-                    </div>
-                    <div style="flex:1;">
-                        <label style="font-size:12px;color:var(--text-muted);">Eten (&euro;)</label>
-                        <input type="number" id="pay-food-input" class="form-input" placeholder="0.00" step="0.01" min="0" style="text-align:center;">
-                    </div>
+            <!-- Food amount -->
+            <div class="payment-field glass-card" style="padding:1rem;margin-bottom:0.75rem;">
+                <div class="payment-field__label">Eten</div>
+                <input type="number" id="food-input" inputmode="decimal" class="form-input" placeholder="0.00" step="0.01" min="0"
+                    style="text-align:center;font-size:28px;font-weight:700;color:var(--accent-primary);background:transparent;border:1px dashed var(--border-color);border-radius:8px;padding:0.25rem 0.5rem;width:100%;">
+                <div style="display:flex;gap:0.25rem;margin-top:0.5rem;flex-wrap:wrap;justify-content:center;">
+                    <button class="btn btn-secondary btn-sm food-quick" data-amount="500" style="width:auto;padding:0.35rem 0.6rem;font-size:13px;">+5</button>
+                    <button class="btn btn-secondary btn-sm food-quick" data-amount="750" style="width:auto;padding:0.35rem 0.6rem;font-size:13px;">+7.50</button>
+                    <button class="btn btn-secondary btn-sm food-quick" data-amount="1000" style="width:auto;padding:0.35rem 0.6rem;font-size:13px;">+10</button>
+                    <button class="btn btn-secondary btn-sm food-quick" data-amount="1500" style="width:auto;padding:0.35rem 0.6rem;font-size:13px;">+15</button>
                 </div>
+            </div>
+
+            <!-- Total + Clear -->
+            <div class="glass-card" style="padding:1rem;margin-bottom:1rem;text-align:center;">
+                <div style="font-size:13px;color:var(--text-muted);">Totaal</div>
+                <div style="font-size:32px;font-weight:700;color:var(--accent-primary);" id="total-display">&euro; 0,00</div>
                 <button class="btn btn-ghost btn-sm" id="btn-clear-amounts" style="margin-top:0.5rem;width:auto;">Wissen</button>
             </div>
 
-            <!-- Summary -->
-            <div class="glass-card payment-summary" style="padding:1rem;margin-bottom:1rem;">
-                <div class="payment-summary__row">
-                    <span>Korting alcohol</span>
-                    <span id="pay-disc-alc">-&euro;0,00</span>
-                </div>
-                <div class="payment-summary__row">
-                    <span>Korting eten</span>
-                    <span id="pay-disc-food">-&euro;0,00</span>
-                </div>
-                <div class="payment-summary__total">
-                    <span>Totaal</span>
-                    <span id="pay-total">&euro;0,00</span>
-                </div>
-                <div class="payment-summary__row" style="margin-top:0.5rem;">
-                    <span>Saldo gast</span>
-                    <span id="pay-balance">-</span>
-                </div>
-            </div>
-
-            <!-- Pay button -->
-            <button class="btn btn-primary" id="btn-pay" disabled style="font-size:18px;padding:1rem;">
-                Betaling Verwerken
+            <!-- Generate QR button -->
+            <button class="btn btn-primary" id="btn-generate-qr" disabled style="font-size:18px;padding:1rem;width:100%;">
+                Genereer QR Code
             </button>
         </div>
     </div>
 
-    <!-- ============ STATE: VERIFY (Gated Onboarding) ============ -->
+    <!-- ============ STATE: SHOW QR (waiting for guest) ============ -->
+    <div id="state-qr" style="display:none;">
+        <div class="scanner-header">
+            <button class="btn btn-ghost btn-sm" id="btn-back-amount">&larr; Terug</button>
+            <span class="scanner-header__title">Laat gast scannen</span>
+            <span></span>
+        </div>
+
+        <div style="padding:1rem;text-align:center;">
+            <!-- Amount summary -->
+            <div class="glass-card" style="padding:0.75rem;margin-bottom:1rem;">
+                <div style="font-size:14px;color:var(--text-muted);">Te betalen</div>
+                <div style="font-size:28px;font-weight:700;color:var(--accent-primary);" id="qr-total">&euro; 0,00</div>
+            </div>
+
+            <!-- QR Code display (BIG) — server-side PNG, zelfde methode als join QR -->
+            <div class="glass-card" style="padding:1.5rem;margin-bottom:1rem;display:inline-block;">
+                <img id="qr-image" src="" alt="QR Code" style="width:280px;height:280px;display:none;margin:0 auto;">
+                <div id="qr-loading" style="width:280px;height:280px;display:flex;align-items:center;justify-content:center;">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+
+            <p style="color:var(--text-secondary);font-size:14px;margin-bottom:1rem;">
+                Laat de gast deze QR code scannen met hun telefoon
+            </p>
+
+            <!-- Spinner + waiting status -->
+            <div id="waiting-spinner" style="margin:1rem 0;">
+                <div class="spinner" style="margin:0 auto 0.5rem;"></div>
+                <p style="color:var(--text-muted);font-size:13px;">Wachten op gast...</p>
+            </div>
+
+            <!-- Countdown timer -->
+            <div style="font-size:12px;color:var(--text-muted);margin-top:0.5rem;">
+                <span id="qr-countdown">5:00</span> resterend
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ STATE: SUCCESS ============ -->
+    <div id="state-success" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,0.95);flex-direction:column;align-items:center;justify-content:center;padding:2rem;">
+        <div style="font-size:120px;line-height:1;">&#10003;</div>
+        <h2 style="color:#4CAF50;font-size:32px;margin-bottom:0.5rem;">BETALING GELUKT!</h2>
+        <p id="success-amount" style="color:var(--text-secondary);font-size:24px;font-weight:600;margin-bottom:0.25rem;"></p>
+        <p id="success-guest" style="color:var(--text-muted);font-size:16px;margin-bottom:2rem;"></p>
+        <button class="btn btn-primary" id="btn-next-guest" style="font-size:18px;padding:1rem 2rem;">Volgende gast</button>
+    </div>
+
+    <!-- ============ STATE: FAILED ============ -->
+    <div id="state-failed" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,0.95);flex-direction:column;align-items:center;justify-content:center;padding:2rem;">
+        <div style="font-size:120px;line-height:1;">&#10060;</div>
+        <h2 style="color:#F44336;font-size:32px;margin-bottom:0.5rem;">BETALING MISLUKT</h2>
+        <p id="fail-reason" style="color:var(--text-secondary);font-size:16px;margin-bottom:2rem;max-width:300px;text-align:center;"></p>
+        <button class="btn btn-primary" id="btn-retry" style="font-size:18px;padding:1rem 2rem;">Opnieuw</button>
+    </div>
+
+    <!-- ============ STATE: VERIFY (Gated Onboarding — kept for identity verification) ============ -->
     <div id="state-verify" style="display:none;">
         <div class="scanner-header">
             <button class="btn btn-ghost btn-sm" id="btn-back-scan-verify">&larr; Terug</button>
             <span class="scanner-header__title">Identiteit Verifiëren</span>
             <span></span>
         </div>
-
         <div style="padding:1rem;">
-            <!-- Scanned user info -->
             <div style="text-align:center;margin:1rem 0;">
                 <div class="avatar avatar--xl" id="verify-avatar" style="margin:0 auto;">
                     <div class="avatar__placeholder" id="verify-avatar-initial">?</div>
@@ -142,59 +141,37 @@ $firstName = $_SESSION['first_name'] ?? 'Bartender';
             <p id="verify-status-badge" style="text-align:center;margin-bottom:1.5rem;">
                 <span style="background:rgba(255,193,7,0.2);color:#FFC107;padding:4px 12px;border-radius:12px;font-size:12px;font-weight:600;">NIET GEVERIFIEERD</span>
             </p>
-
-            <!-- Instructions -->
             <div class="glass-card" style="padding:1rem;margin-bottom:1rem;background:rgba(255,193,7,0.08);border-color:rgba(255,193,7,0.3);">
-                <p style="font-size:13px;color:var(--text-secondary);margin:0;">
-                    Controleer het ID van de gast. Voer de geboortedatum in zoals op het ID staat.
-                </p>
+                <p style="font-size:13px;color:var(--text-secondary);margin:0;">Controleer het ID van de gast. Voer de geboortedatum in zoals op het ID staat.</p>
             </div>
-
-            <!-- Birthdate input -->
             <div class="glass-card" style="padding:1rem;margin-bottom:1rem;">
                 <label for="verify-birthdate" style="font-size:13px;color:var(--text-muted);display:block;margin-bottom:0.5rem;">Geboortedatum van ID</label>
                 <input type="date" id="verify-birthdate" class="form-input" style="text-align:center;font-size:18px;" required>
             </div>
-
-            <!-- Verify button -->
-            <button class="btn btn-primary" id="btn-verify" style="font-size:18px;padding:1rem;width:100%;">
-                Valideer & Activeer
-            </button>
-
-            <!-- Error display -->
+            <button class="btn btn-primary" id="btn-verify" style="font-size:18px;padding:1rem;width:100%;">Valideer & Activeer</button>
             <div id="verify-error" style="display:none;margin-top:1rem;padding:1rem;border-radius:8px;background:rgba(244,67,54,0.1);border:1px solid rgba(244,67,54,0.3);">
                 <p id="verify-error-msg" style="color:var(--error);font-size:14px;margin:0;"></p>
             </div>
-
-            <!-- Success display -->
             <div id="verify-success" style="display:none;margin-top:1rem;padding:1rem;border-radius:8px;background:rgba(76,175,80,0.1);border:1px solid rgba(76,175,80,0.3);">
-                <p style="color:var(--success);font-size:14px;margin:0;">✓ Account geactiveerd! Doorsturen naar betaling...</p>
+                <p style="color:var(--success);font-size:14px;margin:0;">&#10003; Account geactiveerd!</p>
             </div>
         </div>
-    </div>
-
-    <!-- ============ STATE: SUCCESS ============ -->
-    <div id="state-success" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:999;display:none;flex-direction:column;align-items:center;justify-content:center;padding:2rem;">
-        <div style="font-size:64px;margin-bottom:1rem;">&#10003;</div>
-        <h2 style="color:var(--success);margin-bottom:0.5rem;">Betaling gelukt!</h2>
-        <p id="success-details" style="color:var(--text-secondary);margin-bottom:2rem;"></p>
-        <button class="btn btn-primary" id="btn-next-scan">Volgende gast</button>
     </div>
 
     <!-- Alerts container -->
     <div class="alerts-container" id="pos-alerts"></div>
 </div>
 
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 (function() {
     'use strict';
 
     // --- State ---
-    let currentUser = null;
     let alcCents = 0;
     let foodCents = 0;
-    let qrScanner = null;
+    let currentSessionToken = null;
+    let pollTimer = null;
+    let countdownTimer = null;
     let processing = false;
 
     // --- Helpers ---
@@ -209,32 +186,35 @@ $firstName = $_SESSION['first_name'] ?? 'Bartender';
     function hide(el) { if (typeof el === 'string') el = $(el); if (el) el.style.display = 'none'; }
 
     function switchState(state) {
-        hide('#state-scanner');
-        hide('#state-payment');
-        hide('#state-verify');
+        hide('#state-amount');
+        hide('#state-qr');
         hide('#state-success');
-        if (state === 'scanner') {
-            show('#state-scanner');
-            startScanner();
-        } else if (state === 'payment') {
-            stopScanner();
-            show('#state-payment');
-        } else if (state === 'verify') {
-            stopScanner();
-            show('#state-verify');
+        hide('#state-failed');
+        hide('#state-verify');
+        $('#state-success').style.display = 'none';
+        $('#state-failed').style.display = 'none';
+
+        if (state === 'amount') {
+            show('#state-amount');
+        } else if (state === 'qr') {
+            show('#state-qr');
         } else if (state === 'success') {
-            stopScanner();
-            show('#state-success');
-            $('#state-success').style.display = 'flex';
+            var el = $('#state-success');
+            el.style.display = 'flex';
+        } else if (state === 'failed') {
+            var el = $('#state-failed');
+            el.style.display = 'flex';
+        } else if (state === 'verify') {
+            show('#state-verify');
         }
     }
 
     function alert(msg, type) {
         type = type || 'error';
-        const div = document.createElement('div');
+        var div = document.createElement('div');
         div.className = 'alert alert-' + type;
         div.textContent = msg;
-        const c = $('#pos-alerts');
+        var c = $('#pos-alerts');
         if (c) {
             c.appendChild(div);
             setTimeout(function() { div.remove(); }, 4000);
@@ -242,157 +222,274 @@ $firstName = $_SESSION['first_name'] ?? 'Bartender';
     }
 
     function getCSRF() {
-        const m = document.querySelector('meta[name="csrf-token"]');
+        var m = document.querySelector('meta[name="csrf-token"]');
         return m ? m.content : '';
     }
 
-    // --- Scanner ---
-    function startScanner() {
-        if (qrScanner) return;
-        try {
-            qrScanner = new Html5Qrcode('qr-reader');
-            qrScanner.start(
-                { facingMode: 'environment' },
-                { fps: 10, qrbox: { width: 250, height: 250 } },
-                onQRDetected,
-                function() {} // ignore scan failures
-            ).catch(function(err) {
-                console.error('Camera start error:', err);
-                alert('Camera kon niet starten: ' + err);
+    // --- Amount UI ---
+    function updateAmountUI() {
+        var total = alcCents + foodCents;
+        $('#total-display').textContent = fmtCents(total);
+        $('#btn-generate-qr').disabled = total <= 0;
+    }
+
+    /** Read current value from an input field and sync to cents */
+    function readInputToCents(inputEl) {
+        return Math.round((parseFloat(inputEl.value) || 0) * 100);
+    }
+
+    /** Write cents value to an input field (euro format) */
+    function writeCentsToInput(inputEl, cents) {
+        inputEl.value = (cents / 100).toFixed(2);
+    }
+
+    function setupQuickAmounts() {
+        $$('.alc-quick').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var alcInput = $('#alc-input');
+                // Read current input value first (user may have typed manually)
+                alcCents = readInputToCents(alcInput);
+                // Add the quick-add amount
+                alcCents += parseInt(btn.dataset.amount, 10);
+                writeCentsToInput(alcInput, alcCents);
+                updateAmountUI();
             });
-        } catch (e) {
-            console.error('Html5Qrcode init error:', e);
-            alert('QR scanner kon niet initialiseren. Gebruik handmatige invoer.');
+        });
+        $$('.food-quick').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var foodInput = $('#food-input');
+                // Read current input value first (user may have typed manually)
+                foodCents = readInputToCents(foodInput);
+                // Add the quick-add amount
+                foodCents += parseInt(btn.dataset.amount, 10);
+                writeCentsToInput(foodInput, foodCents);
+                updateAmountUI();
+            });
+        });
+    }
+
+    function setupManualInputs() {
+        var alcInput = $('#alc-input');
+        var foodInput = $('#food-input');
+        if (alcInput) {
+            alcInput.addEventListener('input', function() {
+                alcCents = readInputToCents(alcInput);
+                updateAmountUI();
+            });
+        }
+        if (foodInput) {
+            foodInput.addEventListener('input', function() {
+                foodCents = readInputToCents(foodInput);
+                updateAmountUI();
+            });
+        }
+        var clearBtn = $('#btn-clear-amounts');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', function() {
+                alcCents = 0;
+                foodCents = 0;
+                if (alcInput) alcInput.value = '';
+                if (foodInput) foodInput.value = '';
+                updateAmountUI();
+            });
         }
     }
 
-    function stopScanner() {
-        if (qrScanner) {
-            try {
-                qrScanner.stop().then(function() {
-                    qrScanner.clear();
-                    qrScanner = null;
-                }).catch(function() {
-                    qrScanner = null;
-                });
-            } catch (e) {
-                qrScanner = null;
-            }
+    // --- Generate QR (create session) ---
+    function generateQR() {
+        if (processing) return;
+        if (alcCents <= 0 && foodCents <= 0) {
+            alert('Voer een bedrag in');
+            return;
         }
-    }
+        processing = true;
+        var btn = $('#btn-generate-qr');
+        if (btn) btn.disabled = true;
 
-    function onQRDetected(decodedText) {
-        stopScanner();
-        validateQR(decodedText);
-    }
-
-    // --- QR Validation ---
-    function validateQR(payload) {
-        fetch((window.__BASE_URL || '') + '/api/pos/scan', {
+        fetch((window.__BASE_URL || '') + '/api/pos/create_session', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRF-Token': getCSRF()
             },
             credentials: 'same-origin',
-            body: JSON.stringify({ qr_payload: payload })
+            body: JSON.stringify({
+                amount_alc_cents: alcCents,
+                amount_food_cents: foodCents
+            })
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
-            // API returns { success: true, data: { valid, user } } or { success: false, error }
-            var result = data.data || data;
-            if (data.success && result.valid) {
-                currentUser = result;
-                var status = result.user.account_status || 'active';
-                if (status === 'suspended') {
-                    alert('Dit account is geblokkeerd door de beheerder');
-                    startScanner();
-                } else if (status === 'unverified' && result.verification_required !== false) {
-                    showVerify();
-                } else {
-                    showPayment();
-                }
+            processing = false;
+            if (data.success) {
+                var d = data.data;
+                currentSessionToken = d.session_token;
+                $('#qr-total').textContent = fmtCents(alcCents + foodCents);
+
+                // Render QR code — try base64 first, then URL, then fallback
+                renderQR(d.qr_png_base64, d.qr_png_url, d.qr_data);
+
+                // Show QR state
+                switchState('qr');
+
+                // Start polling
+                startPolling();
+
+                // Start countdown
+                startCountdown(d.expires_at);
             } else {
-                alert(result.error || data.error || 'QR validatie mislukt');
-                startScanner();
+                alert('QR code kon niet worden gegenereerd');
+                if (btn) btn.disabled = false;
             }
         })
         .catch(function(e) {
-            alert('Fout bij validatie: ' + e.message);
-            startScanner();
+            processing = false;
+            alert('Er is een fout opgetreden');
+            if (btn) btn.disabled = false;
         });
     }
 
-    // --- Payment State ---
-    function showPayment() {
-        if (!currentUser || !currentUser.user) return;
+    function renderQR(base64, pngUrl, fallbackData) {
+        var img = document.getElementById('qr-image');
+        var loading = document.getElementById('qr-loading');
+        if (!img) return;
 
-        // User info — API returns user.name (combined), user.age, user.tier
-        var u = currentUser.user;
-        $('#pay-user-name').textContent = u.name || '-';
+        // Show loading spinner
+        if (loading) loading.style.display = 'flex';
+        img.style.display = 'none';
 
-        var initial = (u.name || '?').charAt(0).toUpperCase();
-        $('#pay-avatar-initial').textContent = initial;
-
-        if (u.photo_url) {
-            var img = document.createElement('img');
-            img.src = u.photo_url;
-            img.alt = 'Gast';
-            var avatar = $('#pay-avatar');
-            avatar.innerHTML = '';
-            avatar.appendChild(img);
-        }
-
-        // Badges
-        var badges = '';
-        if (u.age >= 18) {
-            badges += '<span class="badge-age badge-age--adult">18+</span>';
-        } else {
-            badges += '<span class="badge-age badge-age--minor">&lt;18</span>';
-        }
-        if (u.tier && u.tier.name) {
-            badges += ' <span class="badge badge--gold">' + u.tier.name + '</span>';
-            if (u.tier.model_type === 'bonus' && u.tier.bonus_percentage > 0) {
-                badges += ' <span class="badge badge--green">+' + u.tier.bonus_percentage + '% bonus</span>';
+        img.onload = function() {
+            if (loading) loading.style.display = 'none';
+            img.style.display = 'block';
+        };
+        img.onerror = function() {
+            // Try next fallback
+            if (pngUrl && !img.dataset.triedUrl) {
+                img.dataset.triedUrl = '1';
+                img.src = pngUrl;
+            } else {
+                if (loading) loading.style.display = 'none';
+                img.style.display = 'none';
+                var container = img.parentElement;
+                container.innerHTML = '<div style="padding:1rem;color:var(--error);text-align:center;">QR kon niet laden</div>';
             }
+        };
+
+        // Priority: base64 data URI > png URL
+        if (base64 && base64.length > 100) {
+            img.src = base64;
+        } else if (pngUrl) {
+            img.src = pngUrl;
+        } else {
+            img.onerror();
         }
-        $('#pay-badges').innerHTML = badges;
-
-        // Reset amounts
-        alcCents = 0;
-        foodCents = 0;
-        updatePaymentUI();
-
-        switchState('payment');
+        delete img.dataset.triedUrl;
     }
 
-    // --- Verify State (Gated Onboarding) ---
-    function showVerify() {
-        if (!currentUser || !currentUser.user) return;
-        var u = currentUser.user;
-        $('#verify-user-name').textContent = u.name || '-';
-        $('#verify-avatar-initial').textContent = (u.name || '?').charAt(0).toUpperCase();
-        if (u.photo_url) {
-            var img = document.createElement('img');
-            img.src = u.photo_url;
-            img.alt = 'Gast';
-            var avatar = $('#verify-avatar');
-            avatar.innerHTML = '';
-            avatar.appendChild(img);
+    // --- Polling ---
+    function startPolling() {
+        stopPolling();
+        pollTimer = setInterval(function() {
+            if (!currentSessionToken) return;
+            fetch((window.__BASE_URL || '') + '/api/pos/session_status?session_token=' + encodeURIComponent(currentSessionToken), {
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' }
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.success) return;
+                var status = data.data.status;
+                if (status === 'confirmed') {
+                    stopPolling();
+                    stopCountdown();
+                    showSuccess(data.data);
+                } else if (status === 'failed' || status === 'cancelled' || status === 'expired') {
+                    stopPolling();
+                    stopCountdown();
+                    showFailed(data.data.error_message || 'Betaling mislukt');
+                }
+            })
+            .catch(function() {});
+        }, 2000);
+    }
+
+    function stopPolling() {
+        if (pollTimer) {
+            clearInterval(pollTimer);
+            pollTimer = null;
         }
-        $('#verify-birthdate').value = '';
-        hide('#verify-error');
-        hide('#verify-success');
-        var btn = $('#btn-verify');
+    }
+
+    // --- Countdown ---
+    function startCountdown(expiresAt) {
+        stopCountdown();
+        var el = $('#qr-countdown');
+        countdownTimer = setInterval(function() {
+            var now = Math.floor(Date.now() / 1000);
+            var remaining = expiresAt - now;
+            if (remaining <= 0) {
+                stopCountdown();
+                stopPolling();
+                if (el) el.textContent = '0:00';
+                showFailed('QR code verlopen');
+                return;
+            }
+            var min = Math.floor(remaining / 60);
+            var sec = remaining % 60;
+            if (el) el.textContent = min + ':' + (sec < 10 ? '0' : '') + sec;
+        }, 1000);
+    }
+
+    function stopCountdown() {
+        if (countdownTimer) {
+            clearInterval(countdownTimer);
+            countdownTimer = null;
+        }
+    }
+
+    // --- Success / Failed ---
+    function showSuccess(data) {
+        $('#success-amount').textContent = fmtCents(data.final_total_cents || 0);
+        $('#success-guest').textContent = data.guest_name || '';
+        switchState('success');
+    }
+
+    function showFailed(reason) {
+        $('#fail-reason').textContent = reason || 'Onbekende fout';
+        switchState('failed');
+    }
+
+    // --- Reset ---
+    function resetAll() {
+        stopPolling();
+        stopCountdown();
+        alcCents = 0;
+        foodCents = 0;
+        currentSessionToken = null;
+        processing = false;
+        var alcInput = $('#alc-input');
+        var foodInput = $('#food-input');
+        if (alcInput) alcInput.value = '';
+        if (foodInput) foodInput.value = '';
+        updateAmountUI();
+        var qrImage = document.getElementById('qr-image');
+        if (qrImage) { qrImage.src = ''; qrImage.style.display = 'none'; }
+        var qrLoading = document.getElementById('qr-loading');
+        if (qrLoading) qrLoading.style.display = 'flex';
+        var btn = $('#btn-generate-qr');
         if (btn) btn.disabled = false;
+        switchState('amount');
+    }
+
+    // --- Verify (kept for gated onboarding) ---
+    function showVerify() {
         switchState('verify');
     }
 
     function verifyUser() {
-        if (!currentUser || !currentUser.user) return;
         var birthdate = $('#verify-birthdate').value;
         if (!birthdate) {
-            alert('Voer de geboortedatum in zoals op het ID staat');
+            alert('Voer de geboortedatum in');
             return;
         }
         var btn = $('#btn-verify');
@@ -405,236 +502,59 @@ $firstName = $_SESSION['first_name'] ?? 'Bartender';
                 'X-CSRF-Token': getCSRF()
             },
             credentials: 'same-origin',
-            body: JSON.stringify({ user_id: currentUser.user.id, birthdate: birthdate })
+            body: JSON.stringify({ user_id: null, birthdate: birthdate })
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (data.success) {
-                currentUser.user.account_status = 'active';
                 show('#verify-success');
                 hide('#verify-error');
-                setTimeout(function() { showPayment(); }, 1200);
+                setTimeout(function() { resetAll(); }, 1200);
             } else {
                 hide('#verify-success');
                 show('#verify-error');
-                $('#verify-error-msg').textContent = data.error || 'Verificatie mislukt';
+                $('#verify-error-msg').textContent = 'Verificatie mislukt. Probeer het opnieuw.';
                 if (btn) btn.disabled = false;
             }
         })
         .catch(function(e) {
-            alert('Fout bij verificatie: ' + e.message);
+            alert('Er is een fout opgetreden');
             if (btn) btn.disabled = false;
         });
     }
 
-    function updatePaymentUI() {
-        var alcDiscount = 0;
-        var foodDiscount = 0;
-
-        if (currentUser && currentUser.user && currentUser.user.tier) {
-            var tier = currentUser.user.tier;
-            // BONUS MODEL: no alcohol discount, only food discount
-            var isBonusModel = (tier.model_type === 'bonus');
-            var alcPerc = isBonusModel ? 0 : Math.min(tier.alcohol_discount || 0, 25);
-            var foodPerc = tier.food_discount || 0;
-            alcDiscount = Math.floor(alcCents * alcPerc / 100);
-            foodDiscount = Math.floor(foodCents * foodPerc / 100);
-        }
-
-        var alcFinal = alcCents - alcDiscount;
-        var foodFinal = foodCents - foodDiscount;
-        var total = alcFinal + foodFinal;
-
-        $('#pay-alc-display').textContent = fmtCents(alcFinal);
-        $('#pay-food-display').textContent = fmtCents(foodFinal);
-        $('#pay-disc-alc').textContent = '-' + fmtCents(alcDiscount);
-        $('#pay-disc-food').textContent = '-' + fmtCents(foodDiscount);
-        $('#pay-total').textContent = fmtCents(total);
-
-        // Balance check
-        var balance = (currentUser && currentUser.user && currentUser.user.wallet) ? currentUser.user.wallet.balance_cents : 0;
-        var balanceEl = $('#pay-balance');
-        if (balanceEl) {
-            balanceEl.textContent = fmtCents(balance);
-            balanceEl.style.color = balance >= total ? 'var(--success)' : 'var(--error)';
-        }
-
-        // Pay button
-        var payBtn = $('#btn-pay');
-        if (payBtn) {
-            payBtn.disabled = total <= 0 || !currentUser || balance < total || processing;
-        }
-    }
-
-    // --- Quick amount buttons ---
-    function setupQuickAmounts() {
-        $$('.alc-quick').forEach(function(btn) {
-            btn.addEventListener('click', function() {
-                alcCents += parseInt(btn.dataset.amount, 10);
-                var inp = $('#pay-alc-input');
-                if (inp) inp.value = (alcCents / 100).toFixed(2);
-                updatePaymentUI();
-            });
-        });
-
-        $$('.food-quick').forEach(function(btn) {
-            btn.addEventListener('click', function() {
-                foodCents += parseInt(btn.dataset.amount, 10);
-                var inp = $('#pay-food-input');
-                if (inp) inp.value = (foodCents / 100).toFixed(2);
-                updatePaymentUI();
-            });
-        });
-    }
-
-    function setupManualInputs() {
-        var alcInput = $('#pay-alc-input');
-        var foodInput = $('#pay-food-input');
-
-        if (alcInput) {
-            alcInput.addEventListener('input', function() {
-                alcCents = Math.round((parseFloat(alcInput.value) || 0) * 100);
-                updatePaymentUI();
-            });
-        }
-        if (foodInput) {
-            foodInput.addEventListener('input', function() {
-                foodCents = Math.round((parseFloat(foodInput.value) || 0) * 100);
-                updatePaymentUI();
-            });
-        }
-
-        var clearBtn = $('#btn-clear-amounts');
-        if (clearBtn) {
-            clearBtn.addEventListener('click', function() {
-                alcCents = 0;
-                foodCents = 0;
-                if (alcInput) alcInput.value = '';
-                if (foodInput) foodInput.value = '';
-                updatePaymentUI();
-            });
-        }
-    }
-
-    // --- Process payment ---
-    function processPayment() {
-        if (processing || !currentUser) return;
-
-        var tier = (currentUser.user && currentUser.user.tier) ? currentUser.user.tier : null;
-        var alcDiscount = Math.floor(alcCents * Math.min(tier ? tier.alcohol_discount : 0, 25) / 100);
-        var foodDiscount = Math.floor(foodCents * (tier ? tier.food_discount : 0) / 100);
-        var total = (alcCents - alcDiscount) + (foodCents - foodDiscount);
-
-        if (total <= 0) {
-            alert('Geen bedrag ingevoerd');
-            return;
-        }
-
-        processing = true;
-        var payBtn = $('#btn-pay');
-        if (payBtn) payBtn.disabled = true;
-
-        fetch((window.__BASE_URL || '') + '/api/pos/process_payment', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': getCSRF()
-            },
-            credentials: 'same-origin',
-            body: JSON.stringify({
-                user_id: currentUser.user.id,
-                amount_alc_cents: alcCents,
-                amount_food_cents: foodCents
-            })
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            if (data.success) {
-                var d = data.data || data;
-                $('#success-details').textContent =
-                    fmtCents(d.final_total) + ' verwerkt \u2022 +' + (d.points_earned || 0) + ' punten';
-                switchState('success');
-            } else {
-                throw new Error(data.error || 'Betaling mislukt');
-            }
-        })
-        .catch(function(e) {
-            alert('Betaling mislukt: ' + e.message);
-            processing = false;
-            if (payBtn) payBtn.disabled = false;
-        });
-    }
-
-    // --- Manual QR input ---
-    function setupManualQR() {
-        var btn = $('#manual-qr-btn');
-        var input = $('#manual-qr-input');
-        if (!btn || !input) return;
-
-        btn.addEventListener('click', function() {
-            var val = input.value.trim();
-            if (val) {
-                stopScanner();
-                validateQR(val);
-                input.value = '';
-            }
-        });
-        input.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') btn.click();
-        });
-    }
-
-    // --- Navigation ---
+    // --- Setup navigation ---
     function setupNav() {
-        var backBtn = $('#btn-back-scan');
-        if (backBtn) {
-            backBtn.addEventListener('click', function() {
-                currentUser = null;
-                alcCents = 0;
-                foodCents = 0;
-                switchState('scanner');
-            });
-        }
+        var genBtn = $('#btn-generate-qr');
+        if (genBtn) genBtn.addEventListener('click', generateQR);
 
-        var nextBtn = $('#btn-next-scan');
-        if (nextBtn) {
-            nextBtn.addEventListener('click', function() {
-                currentUser = null;
-                alcCents = 0;
-                foodCents = 0;
-                processing = false;
-                switchState('scanner');
-            });
-        }
+        var backBtn = $('#btn-back-amount');
+        if (backBtn) backBtn.addEventListener('click', function() {
+            stopPolling();
+            stopCountdown();
+            resetAll();
+        });
 
-        var payBtn = $('#btn-pay');
-        if (payBtn) {
-            payBtn.addEventListener('click', processPayment);
-        }
+        var nextBtn = $('#btn-next-guest');
+        if (nextBtn) nextBtn.addEventListener('click', resetAll);
 
-        // Verify state buttons (Gated Onboarding)
+        var retryBtn = $('#btn-retry');
+        if (retryBtn) retryBtn.addEventListener('click', resetAll);
+
         var verifyBtn = $('#btn-verify');
-        if (verifyBtn) {
-            verifyBtn.addEventListener('click', verifyUser);
-        }
-        var backScanVerify = $('#btn-back-scan-verify');
-        if (backScanVerify) {
-            backScanVerify.addEventListener('click', function() {
-                currentUser = null;
-                alcCents = 0;
-                foodCents = 0;
-                switchState('scanner');
-            });
-        }
+        if (verifyBtn) verifyBtn.addEventListener('click', verifyUser);
+
+        var backVerify = $('#btn-back-scan-verify');
+        if (backVerify) backVerify.addEventListener('click', resetAll);
     }
 
     // --- Init ---
     function init() {
         setupQuickAmounts();
         setupManualInputs();
-        setupManualQR();
         setupNav();
-        switchState('scanner');
+        updateAmountUI();
+        switchState('amount');
     }
 
     if (document.readyState === 'loading') {

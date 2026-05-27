@@ -93,7 +93,8 @@ class EmailService
         string $templateType,
         array $variables = [],
         ?int $tenantId = null,
-        ?string $languageCode = 'nl'
+        ?string $languageCode = 'nl',
+        ?string $fromName = null
     ): bool {
         try {
             // Get the template
@@ -105,15 +106,18 @@ class EmailService
             // Render the template with variables
             $htmlContent = $this->emailTemplateModel->renderTemplate($template['content'], $variables);
             $textContent = $template['text_content'] ? $this->emailTemplateModel->renderTemplate($template['text_content'], $variables) : null;
+            $subject     = $this->emailTemplateModel->renderTemplate($template['subject'], $variables);
 
             // Send the email
             return $this->sendEmail(
                 $to,
-                $template['subject'],
+                $subject,
                 $htmlContent,
                 $textContent,
                 $templateType,
-                $tenantId
+                $tenantId,
+                null,
+                $fromName
             );
         } catch (\Exception $e) {
             error_log("EmailService::sendTemplatedEmail - " . $e->getMessage());

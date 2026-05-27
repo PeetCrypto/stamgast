@@ -334,6 +334,7 @@ $subscriberCount = $pushService->getSubscriptionCount($tenantId);
                 Geschiedenis ophalen...
             </p>
         </div>
+        <div id="push-history-pagination" style="display: flex; justify-content: center; gap: 4px; margin-top: var(--space-sm);"></div>
     </div>
 
     <?php endif; ?>
@@ -345,4 +346,4 @@ $subscriberCount = $pushService->getSubscriptionCount($tenantId);
 
 <?php require VIEWS_PATH . 'shared/footer.php'; ?>
 <script src="<?= BASE_URL ?>/public/js/app.js?v=<?= filemtime(PUBLIC_PATH . 'js/app.js') ?>"></script>
-<script src="<?= BASE_URL ?>/public/js/admin.js"></script>
+<script src="<?= BASE_URL ?>/public/js/admin.js?v=<?= filemtime(PUBLIC_PATH . 'js/admin.js') ?>"></script>

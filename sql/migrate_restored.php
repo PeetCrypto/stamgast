@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * REGULR.vip — Database Migration Runner
+ * REGULR.vip â€” Database Migration Runner
  * 
  * Runs all pending SQL migrations in the correct order and verifies the result.
  * 
@@ -10,25 +10,25 @@ declare(strict_types=1);
  *   Local:    php sql/migrate.php
  *   Production: php sql/migrate.php --env=production
  * 
- * Safe to run multiple times — skips already-applied migrations.
+ * Safe to run multiple times â€” skips already-applied migrations.
  * Uses column/table existence checks instead of a migrations table
  * for maximum compatibility with existing deployments.
  */
 
-// ── Prevent web access ──────────────────────────────────────────────────────
+// â”€â”€ Prevent web access â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 if (php_sapi_name() !== 'cli' && !defined('REGULR_MIGRATE_ALLOW_WEB')) {
     http_response_code(403);
     die("This script can only be run from CLI.\n");
 }
 
-// ── Color helpers for CLI output (overridable by web_migrate.php) ───────────
+// â”€â”€ Color helpers for CLI output (overridable by web_migrate.php) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 if (!function_exists('green'))   { function green(string $text): string   { return "\033[32m{$text}\033[0m"; } }
 if (!function_exists('red'))     { function red(string $text): string     { return "\033[31m{$text}\033[0m"; } }
 if (!function_exists('yellow'))  { function yellow(string $text): string  { return "\033[33m{$text}\033[0m"; } }
 if (!function_exists('bold'))    { function bold(string $text): string    { return "\033[1m{$text}\033[0m"; } }
 if (!function_exists('dim'))     { function dim(string $text): string     { return "\033[2m{$text}\033[0m"; } }
 
-// ── Load environment ────────────────────────────────────────────────────────
+// â”€â”€ Load environment â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 $rootPath = dirname(__DIR__);
 $envFile  = $rootPath . '/.env';
 
@@ -57,16 +57,16 @@ if (file_exists($envFile)) {
     }
 }
 
-// ── Database connection ─────────────────────────────────────────────────────
+// â”€â”€ Database connection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 $dbHost = getenv('DB_HOST') ?: 'localhost';
 $dbPort = (int)(getenv('DB_PORT') ?: 3306);
 $dbName = getenv('DB_NAME') ?: 'stamgast_db';
 $dbUser = getenv('DB_USER') ?: 'root';
 $dbPass = getenv('DB_PASS') ?: '';
 
-echo bold("\n╔══════════════════════════════════════════════════════════╗\n");
-echo bold("║        REGULR.vip — Database Migration Runner           ║\n");
-echo bold("╚══════════════════════════════════════════════════════════╝\n\n");
+echo bold("\nâ•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—\n");
+echo bold("â•‘        REGULR.vip â€” Database Migration Runner           â•‘\n");
+echo bold("â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n\n");
 
 echo "Environment: " . ($isProduction ? yellow('PRODUCTION') : green('DEVELOPMENT')) . "\n";
 echo "Database:    {$dbUser}@{$dbHost}:{$dbPort}/{$dbName}\n\n";
@@ -79,14 +79,14 @@ try {
         PDO::ATTR_EMULATE_PREPARES   => false,
     ]);
 } catch (PDOException $e) {
-    echo red("✗ Database connection failed: " . $e->getMessage()) . "\n";
+    echo red("âœ— Database connection failed: " . $e->getMessage()) . "\n";
     echo dim("  Check your .env file or DB_* environment variables.\n\n");
     exit(1);
 }
 
-echo green("✓ Database connection successful\n\n");
+echo green("âœ“ Database connection successful\n\n");
 
-// ── Migration definitions (in correct dependency order) ─────────────────────
+// â”€â”€ Migration definitions (in correct dependency order) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 $migrations = [
     [
         'name'   => 'Base Schema',
@@ -198,6 +198,14 @@ $migrations = [
         },
     ],
     [
+        'name'   => 'Test Tenant Toggle',
+        'file'   => 'test_tenant_migration.sql',
+        'type'   => 'alter',
+        'check'  => function (PDO $db): bool {
+            return columnExists($db, 'tenants', 'is_test');
+        },
+    ],
+    [
         'name'   => 'FCM Token & Profile Columns',
         'type'   => 'inline',
         'check'  => function (PDO $db): bool {
@@ -223,9 +231,77 @@ $migrations = [
             return true;
         },
     ],
+    [
+        'name'   => 'POS Payment Sessions',
+        'file'   => 'pos_payment_session_migration.sql',
+        'type'   => 'table',
+        'check'  => function (PDO $db): bool {
+            return tableExists($db, 'pos_payment_sessions');
+        },
+    ],
+    [
+        'name'   => 'Default Email Templates (guest_confirmation, guest_password_reset)',
+        'type'   => 'inline',
+        'check'  => function (PDO $db): bool {
+            // Check that global defaults exist AND no templates have hardcoded REGULR.vip branding
+            $stmt = $db->prepare("SELECT COUNT(*) FROM email_templates WHERE type IN ('guest_confirmation', 'guest_password_reset') AND tenant_id IS NULL AND language_code = 'nl'");
+            $stmt->execute();
+            $hasGlobals = (int) $stmt->fetchColumn() >= 2;
+
+            // Also check no templates still have hardcoded "Het REGULR.vip Team" or "© 2026 REGULR.vip"
+            $stmt2 = $db->prepare("SELECT COUNT(*) FROM email_templates WHERE type IN ('guest_confirmation', 'guest_password_reset') AND (content LIKE '%REGULR.vip Team%' OR content LIKE '%©%REGULR.vip%')");
+            $stmt2->execute();
+            $hasHardcoded = (int) $stmt2->fetchColumn() > 0;
+
+            return $hasGlobals && !$hasHardcoded;
+        },
+        'run'    => function (PDO $db): bool {
+            $templates = [
+                [
+                    'type'        => 'guest_confirmation',
+                    'subject'     => 'Welkom bij {{tenant_name}} — Je verificatiecode',
+                    'content'     => '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin:0;padding:20px;background:#0f0f1a;color:#e0e0e0;font-family:Arial,Helvetica,sans-serif;"><div style="max-width:600px;margin:0 auto;background:#1a1a2e;border-radius:12px;overflow:hidden;"><div style="background:#FFC107;padding:20px;text-align:center;"><h1 style="margin:0;color:#000;font-size:24px;">{{tenant_name}}</h1></div><div style="padding:30px;"><h2 style="color:#FFC107;margin-top:0;">Welkom, {{guest_name}}!</h2><p>Bedankt voor je registratie bij <strong>{{tenant_name}}</strong>.</p><p>Jouw verificatiecode is:</p><div style="background:#16213e;border:2px dashed #FFC107;border-radius:8px;padding:20px;text-align:center;margin:20px 0;"><span style="font-size:32px;font-weight:bold;color:#FFC107;letter-spacing:4px;">{{verification_code}}</span></div><p>Geef deze code aan de barman bij je eerste bezoek om je account te verifiëren.</p><p style="color:#888;font-size:12px;margin-top:30px;">Deze code is persoonlijk. Deel hem niet met anderen.</p><hr style="border:none;border-top:1px solid #2a2a4a;margin:25px 0;"><p style="color:#888;font-size:13px;margin:0;">Met vriendelijke groet,<br><strong style="color:#e0e0e0;">{{tenant_name}}</strong></p></div></div></body></html>',
+                    'text_content' => "Welkom bij {{tenant_name}}!\n\nBeste {{guest_name}},\n\nBedankt voor je registratie.\n\nJe verificatiecode is: {{verification_code}}\n\nGeef deze code aan de barman bij je eerste bezoek om je account te verifiëren.\n\nDeze code is persoonlijk. Deel hem niet met anderen.\n\nMet vriendelijke groet,\n{{tenant_name}}",
+                ],
+                [
+                    'type'        => 'guest_password_reset',
+                    'subject'     => '{{tenant_name}} — Wachtwoord resetten',
+                    'content'     => '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin:0;padding:20px;background:#0f0f1a;color:#e0e0e0;font-family:Arial,Helvetica,sans-serif;"><div style="max-width:600px;margin:0 auto;background:#1a1a2e;border-radius:12px;overflow:hidden;"><div style="background:#FFC107;padding:20px;text-align:center;"><h1 style="margin:0;color:#000;font-size:24px;">{{tenant_name}}</h1></div><div style="padding:30px;"><h2 style="color:#FFC107;margin-top:0;">Wachtwoord resetten</h2><p>Hallo {{guest_name}},</p><p>We hebben een verzoek ontvangen om je wachtwoord te resetten voor je account bij <strong>{{tenant_name}}</strong>.</p><p>Klik op de onderstaande knop om een nieuw wachtwoord in te stellen:</p><div style="text-align:center;margin:30px 0;"><a href="{{password_reset_link}}" style="background:#FFC107;color:#000;padding:12px 30px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;display:inline-block;">Wachtwoord resetten</a></div><p style="color:#888;font-size:14px;">Deze link is 1 uur geldig. Daarna moet je een nieuwe aanvragen.</p><p style="color:#888;font-size:12px;">Als je dit verzoek niet hebt gedaan, kun je deze e-mail negeren.</p><hr style="border:none;border-top:1px solid #2a2a4a;margin:25px 0;"><p style="color:#888;font-size:13px;margin:0;">Met vriendelijke groet,<br><strong style="color:#e0e0e0;">{{tenant_name}}</strong></p></div></div></body></html>',
+                    'text_content' => "Wachtwoord resetten — {{tenant_name}}\n\nHallo {{guest_name}},\n\nWe hebben een verzoek ontvangen om je wachtwoord te resetten.\n\nKlik op de onderstaande link om een nieuw wachtwoord in te stellen:\n{{password_reset_link}}\n\nDeze link is 1 uur geldig. Daarna moet je een nieuwe aanvragen.\n\nAls je dit verzoek niet hebt gedaan, kun je deze e-mail negeren.\n\nMet vriendelijke groet,\n{{tenant_name}}",
+                ],
+            ];
+
+            foreach ($templates as $tpl) {
+                // 1. UPSERT global default (tenant_id IS NULL)
+                $stmt = $db->prepare("SELECT id FROM email_templates WHERE type = :type AND tenant_id IS NULL AND language_code = 'nl'");
+                $stmt->execute([':type' => $tpl['type']]);
+                $existing = $stmt->fetch();
+
+                if ($existing) {
+                    $stmt = $db->prepare("UPDATE email_templates SET subject = :subject, content = :content, text_content = :text_content WHERE id = :id");
+                    $stmt->execute([':subject' => $tpl['subject'], ':content' => $tpl['content'], ':text_content' => $tpl['text_content'], ':id' => $existing['id']]);
+                } else {
+                    $stmt = $db->prepare("INSERT INTO email_templates (type, subject, content, text_content, tenant_id, language_code, is_default) VALUES (:type, :subject, :content, :text_content, NULL, 'nl', 1)");
+                    $stmt->execute([':type' => $tpl['type'], ':subject' => $tpl['subject'], ':content' => $tpl['content'], ':text_content' => $tpl['text_content']]);
+                }
+
+                // 2. Also overwrite ALL tenant-specific templates of this type
+                //    (they take precedence over global defaults in getTemplate())
+                $stmt = $db->prepare("SELECT id, tenant_id FROM email_templates WHERE type = :type AND tenant_id IS NOT NULL AND language_code = 'nl'");
+                $stmt->execute([':type' => $tpl['type']]);
+                $tenantTemplates = $stmt->fetchAll();
+
+                foreach ($tenantTemplates as $tt) {
+                    $stmt = $db->prepare("UPDATE email_templates SET subject = :subject, content = :content, text_content = :text_content WHERE id = :id");
+                    $stmt->execute([':subject' => $tpl['subject'], ':content' => $tpl['content'], ':text_content' => $tpl['text_content'], ':id' => $tt['id']]);
+                }
+            }
+            return true;
+        },
+    ],
 ];
 
-// ── Helper functions ────────────────────────────────────────────────────────
+// â”€â”€ Helper functions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function tableExists(PDO $db, string $table): bool
 {
@@ -297,7 +373,7 @@ function runMigrationFile(PDO $db, string $filePath): array
                 str_contains($errorMsg, 'Duplicate key') ||
                 str_contains($errorMsg, 'multiple primary key')
             ) {
-                // Already applied — not an error
+                // Already applied â€” not an error
                 continue;
             }
             
@@ -312,8 +388,8 @@ function runMigrationFile(PDO $db, string $filePath): array
     ];
 }
 
-// ── Phase 1: Check current state ────────────────────────────────────────────
-echo bold("── Phase 1: Checking migration status ─────────────────────\n\n");
+// â”€â”€ Phase 1: Check current state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+echo bold("â”€â”€ Phase 1: Checking migration status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€\n\n");
 
 $applied = 0;
 $pending = 0;
@@ -325,10 +401,10 @@ foreach ($migrations as $i => &$migration) {
     
     $num = str_pad((string) ($i + 1), 2, ' ', STR_PAD_LEFT);
     if ($isApplied) {
-        echo "  {$num}. " . green('✓') . " {$migration['name']} " . dim('[already applied]') . "\n";
+        echo "  {$num}. " . green('âœ“') . " {$migration['name']} " . dim('[already applied]') . "\n";
         $applied++;
     } else {
-        echo "  {$num}. " . yellow('⏳') . " {$migration['name']} " . yellow('[PENDING]') . "\n";
+        echo "  {$num}. " . yellow('â³') . " {$migration['name']} " . yellow('[PENDING]') . "\n";
         $pending++;
     }
 }
@@ -337,15 +413,15 @@ unset($migration);
 echo "\n  Applied: {$applied} | Pending: {$pending} | Total: " . count($migrations) . "\n\n";
 
 if ($pending === 0) {
-    echo green("✓ All migrations are up to date. Nothing to do.\n\n");
+    echo green("âœ“ All migrations are up to date. Nothing to do.\n\n");
     
     // Still run the verification phase
     runVerification($db);
     exit(0);
 }
 
-// ── Phase 2: Run pending migrations ────────────────────────────────────────
-echo bold("── Phase 2: Running pending migrations ────────────────────\n\n");
+// â”€â”€ Phase 2: Run pending migrations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+echo bold("â”€â”€ Phase 2: Running pending migrations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€\n\n");
 
 $failed = 0;
 
@@ -363,13 +439,13 @@ foreach ($migrations as $i => $migration) {
             $ok = ($migration['run'])($db);
             $verifyOk = ($migration['check'])($db);
             if ($ok && $verifyOk) {
-                echo green(" ✓ OK") . "\n";
+                echo green(" âœ“ OK") . "\n";
             } else {
-                echo yellow(" ⚠ RAN but check still fails\n");
+                echo yellow(" âš  RAN but check still fails\n");
                 $failed++;
             }
         } catch (\Throwable $e) {
-            echo red(" ✗ FAILED: " . $e->getMessage()) . "\n";
+            echo red(" âœ— FAILED: " . $e->getMessage()) . "\n";
             $failed++;
         }
         continue;
@@ -381,7 +457,7 @@ foreach ($migrations as $i => $migration) {
     echo "  {$num}. Running {$migration['name']}...";
     
     if (!file_exists($fullPath)) {
-        echo red(" ✗ FILE MISSING: {$file}\n") . dim("     Create the file or remove the migration entry.\n");
+        echo red(" âœ— FILE MISSING: {$file}\n") . dim("     Create the file or remove the migration entry.\n");
         $failed++;
         continue;
     }
@@ -392,13 +468,13 @@ foreach ($migrations as $i => $migration) {
         // Verify the migration actually applied
         $verifyOk = ($migration['check'])($db);
         if ($verifyOk) {
-            echo green(" ✓ OK") . dim(" ({$result['statements']} statements)\n");
+            echo green(" âœ“ OK") . dim(" ({$result['statements']} statements)\n");
         } else {
-            echo yellow(" ⚠ RAN but check still fails — manual verification needed\n");
+            echo yellow(" âš  RAN but check still fails â€” manual verification needed\n");
             $failed++;
         }
     } else {
-        echo red(" ✗ FAILED\n");
+        echo red(" âœ— FAILED\n");
         foreach ($result['errors'] as $err) {
             echo red("     " . $err . "\n");
         }
@@ -409,10 +485,10 @@ foreach ($migrations as $i => $migration) {
 echo "\n";
 
 if ($failed > 0) {
-    echo red("✗ {$failed} migration(s) failed. See errors above.\n\n");
+    echo red("âœ— {$failed} migration(s) failed. See errors above.\n\n");
 }
 
-// ── Phase 3: Post-migration verification ────────────────────────────────────
+// â”€â”€ Phase 3: Post-migration verification â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 runVerification($db);
 
 if ($failed > 0) {
@@ -420,10 +496,10 @@ if ($failed > 0) {
 }
 exit(0);
 
-// ── Verification function ───────────────────────────────────────────────────
+// â”€â”€ Verification function â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function runVerification(PDO $db): void
 {
-    echo bold("── Phase 3: Full schema verification ──────────────────────\n\n");
+    echo bold("â”€â”€ Phase 3: Full schema verification â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€\n\n");
 
     $requiredTables = [
         'tenants', 'users', 'wallets', 'loyalty_tiers', 'transactions',
@@ -433,6 +509,7 @@ function runVerification(PDO $db): void
         'platform_fees', 'platform_invoices', 'platform_fee_log',
         'platform_settings', 'verification_attempts',
         'user_credentials', 'webauthn_challenges',
+        'pos_payment_sessions',
     ];
 
     $requiredColumns = [
@@ -452,6 +529,8 @@ function runVerification(PDO $db): void
             'verification_required',
             // Points toggle migration
             'points_enabled',
+            // Test tenant migration
+            'is_test',
         ],
         'users' => [
             'tenant_id', 'email', 'password_hash', 'role', 'first_name', 'last_name',
@@ -484,9 +563,9 @@ function runVerification(PDO $db): void
     echo "  " . bold("Tables:\n");
     foreach ($requiredTables as $table) {
         if (tableExists($db, $table)) {
-            echo "    " . green('✓') . " {$table}\n";
+            echo "    " . green('âœ“') . " {$table}\n";
         } else {
-            echo "    " . red('✗') . " {$table} " . red('MISSING') . "\n";
+            echo "    " . red('âœ—') . " {$table} " . red('MISSING') . "\n";
             $tablesOk = false;
         }
     }
@@ -494,12 +573,12 @@ function runVerification(PDO $db): void
     // Check columns
     echo "\n  " . bold("Critical Columns:\n");
     foreach ($requiredColumns as $table => $columns) {
-        echo "    " . dim("── {$table} ──") . "\n";
+        echo "    " . dim("â”€â”€ {$table} â”€â”€") . "\n";
         foreach ($columns as $column) {
             if (columnExists($db, $table, $column)) {
-                echo "      " . green('✓') . " {$column}\n";
+                echo "      " . green('âœ“') . " {$column}\n";
             } else {
-                echo "      " . red('✗') . " {$column} " . red('MISSING') . "\n";
+                echo "      " . red('âœ—') . " {$column} " . red('MISSING') . "\n";
                 $columnsOk = false;
             }
         }
@@ -510,11 +589,11 @@ function runVerification(PDO $db): void
     echo "\n";
     $allOk = $tablesOk && $columnsOk;
     if ($allOk) {
-        echo green("✓ All {$tableCount} tables and all critical columns verified.\n");
-        echo green("✓ Database schema is complete and up to date.\n\n");
+        echo green("âœ“ All {$tableCount} tables and all critical columns verified.\n");
+        echo green("âœ“ Database schema is complete and up to date.\n\n");
     } else {
-        if (!$tablesOk) echo red("✗ Some tables are missing.\n");
-        if (!$columnsOk) echo red("✗ Some columns are missing.\n");
+        if (!$tablesOk) echo red("âœ— Some tables are missing.\n");
+        if (!$columnsOk) echo red("âœ— Some columns are missing.\n");
         echo yellow("  Run this script again or apply migrations manually.\n\n");
     }
 }

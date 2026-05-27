@@ -476,7 +476,7 @@
                 faceidRegisterBtn.disabled = false;
                 faceidRegisterBtn.innerHTML = '<span class="icon">👤</span>Registreer FaceID / Vingerafdruk';
                 if (faceidError) {
-                    faceidError.textContent = e.message || 'Kon FaceID niet registreren. Probeer het opnieuw.';
+                    faceidError.textContent = 'Kon FaceID niet registreren. Probeer het opnieuw.';
                     faceidError.style.display = 'block';
                 }
             }

@@ -162,10 +162,10 @@ document.getElementById('btn-filter')?.addEventListener('click', async () => {
         if (result.success) {
             renderPerTenantTable(result.data.tenants);
         } else {
-            alert('Fout: ' + (result.error || 'Onbekend'));
+            alert('Actie mislukt. Probeer het opnieuw.');
         }
     } catch (err) {
-        alert('Netwerkfout: ' + err.message);
+        alert('Er is een netwerkfout opgetreden');
     }
 });
 
@@ -181,7 +181,7 @@ document.getElementById('btn-clear-filter')?.addEventListener('click', async () 
             renderPerTenantTable(result.data.tenants);
         }
     } catch (err) {
-        alert('Netwerkfout: ' + err.message);
+        alert('Er is een netwerkfout opgetreden');
     }
 });
 

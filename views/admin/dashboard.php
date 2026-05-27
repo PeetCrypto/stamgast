@@ -256,6 +256,7 @@ $featureMarketing = (bool) ($_tenant['feature_marketing'] ?? true);
             <p style="color: var(--text-secondary);"><?= sanitize($tenantName) ?></p>
         </div>
         <div style="display: flex; gap: var(--space-sm);">
+            <a href="<?= BASE_URL ?>/admin/reports" class="btn btn-secondary btn-sm">Overzicht</a>
             <?php if ($featurePush): ?>
             <a href="<?= BASE_URL ?>/admin/push" class="btn btn-secondary btn-sm">Push</a>
             <?php endif; ?>
@@ -698,7 +699,7 @@ async function sendWhaleBonus(userId) {
         if (data.success) {
             alert('Bonus melding verstuurd!');
         } else {
-            alert('Fout: ' + data.error);
+            alert('Kon dashboard niet laden');
         }
     } catch (e) {
         alert('Kon bonus niet versturen');

@@ -43,12 +43,14 @@ class Transaction
               `amount_alc_cents`, `amount_food_cents`,
               `discount_alc_cents`, `discount_food_cents`,
               `final_total_cents`, `points_earned`, `points_used`,
+              `btw_alc_cents`, `btw_food_cents`, `btw_total_cents`,
               `ip_address`, `device_fingerprint`, `mollie_payment_id`, `description`)
              VALUES
              (:tenant_id, :user_id, :bartender_id, :type,
               :amount_alc_cents, :amount_food_cents,
               :discount_alc_cents, :discount_food_cents,
               :final_total_cents, :points_earned, :points_used,
+              :btw_alc_cents, :btw_food_cents, :btw_total_cents,
               :ip_address, :device_fingerprint, :mollie_payment_id, :description)'
         );
 
@@ -64,6 +66,9 @@ class Transaction
             ':final_total_cents'   => $data['final_total_cents'],
             ':points_earned'       => $data['points_earned'] ?? 0,
             ':points_used'         => $data['points_used'] ?? 0,
+            ':btw_alc_cents'       => $data['btw_alc_cents'] ?? 0,
+            ':btw_food_cents'      => $data['btw_food_cents'] ?? 0,
+            ':btw_total_cents'     => $data['btw_total_cents'] ?? 0,
             ':ip_address'          => $data['ip_address'],
             ':device_fingerprint'  => $data['device_fingerprint'] ?? null,
             ':mollie_payment_id'   => $data['mollie_payment_id'] ?? null,

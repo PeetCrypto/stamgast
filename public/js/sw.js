@@ -32,14 +32,16 @@ const messaging = firebase.messaging();
 // Background message handler
 messaging.onBackgroundMessage((payload) => {
     console.log('[SW-FCM] Background message:', payload);
-    const title = payload.notification?.title || payload.data?.title || 'REGULR.vip';
+    // Use tenant name from data, fallback to notification title, then generic
+    const title = payload.data?.tenant_name || payload.notification?.title || payload.data?.title || 'REGULR.vip';
     const body = payload.notification?.body || payload.data?.body || '';
-    const icon = payload.notification?.icon || '/icons/favicon.png';
+    // Use tenant icon from data, fallback to notification icon, then generic
+    const icon = payload.data?.icon || payload.notification?.icon || '/icons/favicon.png';
     
     const options = {
         body: body,
         icon: icon,
-        badge: '/icons/favicon.png',
+        badge: icon,
         data: { url: payload.data?.url || '/' }
     };
     self.registration.showNotification(title, options);

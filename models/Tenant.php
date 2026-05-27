@@ -19,7 +19,7 @@ class Tenant
     private array $allowedFields = [
         'name', 'slug', 'brand_color', 'secondary_color', 'logo_path',
         'whitelisted_ips',
-        'is_active',
+        'is_active', 'is_test', 'tier_model_type',
         'feature_push', 'feature_marketing', 'points_enabled', 'verification_required',
         // NAW fields
         'contact_name', 'contact_email', 'phone', 'address',
@@ -428,5 +428,169 @@ class Tenant
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
         return $stmt->fetchAll();
+    }
+
+    /**
+     * Check if a tenant is marked as test tenant
+     */
+    public function isTest(int $tenantId): bool
+    {
+        $stmt = $this->db->prepare('SELECT `is_test` FROM `tenants` WHERE `id` = :id LIMIT 1');
+        $stmt->execute([':id' => $tenantId]);
+        return (bool) $stmt->fetchColumn();
+    }
+
+    /**
+     * Purge all guest users for a test tenant (and their related data)
+     * Only works when is_test = 1
+     *
+     * @return array{purged_guests: int, purged_transactions: int}
+     */
+    public function purgeGuests(int $tenantId): array
+    {
+        if (!$this->isTest($tenantId)) {
+            throw new \RuntimeException('Cannot purge guests from a non-test tenant');
+        }
+
+        // Get all guest user IDs for this tenant
+        $stmt = $this->db->prepare(
+            "SELECT `id` FROM `users` WHERE `tenant_id` = :tid AND `role` = 'guest'"
+        );
+        $stmt->execute([':tid' => $tenantId]);
+        $guestIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+        if (empty($guestIds)) {
+            return ['purged_guests' => 0, 'purged_transactions' => 0];
+        }
+
+        $placeholders = implode(',', array_fill(0, count($guestIds), '?'));
+
+        // Delete related data in correct order (foreign keys)
+        $relatedTables = [
+            'notifications',
+            'push_subscriptions',
+            'password_resets',
+            'verification_attempts',
+        ];
+
+        foreach ($relatedTables as $table) {
+            // Check table exists before trying to delete
+            try {
+                $stmt = $this->db->prepare(
+                    "DELETE FROM `{$table}` WHERE `user_id` IN ({$placeholders})"
+                );
+                $stmt->execute($guestIds);
+            } catch (\Throwable $e) {
+                // Table might not exist or might not have user_id — skip silently
+                error_log("purgeGuests: skip {$table}: " . $e->getMessage());
+            }
+        }
+
+        // Delete email_queue entries for these users
+        try {
+            $stmt = $this->db->prepare(
+                "DELETE FROM `email_queue` WHERE `user_id` IN ({$placeholders})"
+            );
+            $stmt->execute($guestIds);
+        } catch (\Throwable $e) {
+            error_log("purgeGuests: skip email_queue: " . $e->getMessage());
+        }
+
+        // Count transactions before deleting
+        $stmt = $this->db->prepare(
+            "SELECT COUNT(*) FROM `transactions` WHERE `tenant_id` = ? AND `user_id` IN ({$placeholders})"
+        );
+        $params = array_merge([$tenantId], $guestIds);
+        $stmt->execute($params);
+        $transactionCount = (int) $stmt->fetchColumn();
+
+        // Delete transactions for these guests
+        $stmt = $this->db->prepare(
+            "DELETE FROM `transactions` WHERE `tenant_id` = ? AND `user_id` IN ({$placeholders})"
+        );
+        $stmt->execute($params);
+
+        // Delete platform_fees linked to those deleted transactions (orphan cleanup)
+        // We skip this — platform_fees are linked via mollie_payment_id, not user_id directly
+
+        // Delete wallets for these guests
+        $stmt = $this->db->prepare(
+            "DELETE FROM `wallets` WHERE `user_id` IN ({$placeholders})"
+        );
+        $stmt->execute($guestIds);
+
+        // Finally delete the guest users themselves
+        $stmt = $this->db->prepare(
+            "DELETE FROM `users` WHERE `id` IN ({$placeholders}) AND `role` = 'guest'"
+        );
+        $stmt->execute($guestIds);
+
+        return [
+            'purged_guests'      => count($guestIds),
+            'purged_transactions' => $transactionCount,
+        ];
+    }
+
+    /**
+     * Purge all loyalty tiers (packages) for a test tenant
+     * Only works when is_test = 1
+     *
+     * @return int Number of tiers deleted
+     */
+    public function purgePackages(int $tenantId): int
+    {
+        if (!$this->isTest($tenantId)) {
+            throw new \RuntimeException('Cannot purge packages from a non-test tenant');
+        }
+
+        $stmt = $this->db->prepare(
+            'SELECT COUNT(*) FROM `loyalty_tiers` WHERE `tenant_id` = :tid'
+        );
+        $stmt->execute([':tid' => $tenantId]);
+        $count = (int) $stmt->fetchColumn();
+
+        $stmt = $this->db->prepare(
+            'DELETE FROM `loyalty_tiers` WHERE `tenant_id` = :tid'
+        );
+        $stmt->execute([':tid' => $tenantId]);
+
+        // Reset model type lock so admin can choose again
+        $stmt = $this->db->prepare("UPDATE `tenants` SET `tier_model_type` = NULL WHERE `id` = ?");
+        $stmt->execute([$tenantId]);
+
+        return $count;
+    }
+
+    /**
+     * Reset all guest wallet balances to 0 for a test tenant
+     * Only works when is_test = 1
+     *
+     * @return int Number of wallets reset
+     */
+    public function resetGuestBalances(int $tenantId): int
+    {
+        if (!$this->isTest($tenantId)) {
+            throw new \RuntimeException('Cannot reset balances for a non-test tenant');
+        }
+
+        // Get guest user IDs
+        $stmt = $this->db->prepare(
+            "SELECT `id` FROM `users` WHERE `tenant_id` = :tid AND `role` = 'guest'"
+        );
+        $stmt->execute([':tid' => $tenantId]);
+        $guestIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+        if (empty($guestIds)) {
+            return 0;
+        }
+
+        $placeholders = implode(',', array_fill(0, count($guestIds), '?'));
+
+        $stmt = $this->db->prepare(
+            "UPDATE `wallets` SET `balance_cents` = 0, `points_cents` = 0 WHERE `user_id` IN ({$placeholders})"
+        );
+        $stmt->execute($guestIds);
+
+        return count($guestIds);
     }
 }

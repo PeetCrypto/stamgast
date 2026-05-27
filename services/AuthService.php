@@ -29,8 +29,19 @@ class AuthService
      */
     public function login(string $email, string $password, ?int $tenantId = null): ?array
     {
-        // First try global search — superadmins have tenant_id = NULL
-        $user = $this->userModel->findByEmailGlobal($email);
+        $user = null;
+
+        // If tenant_id is provided, try tenant-specific search FIRST.
+        // This prevents findByEmailGlobal() from returning the wrong user
+        // when the same email exists across multiple tenants.
+        if ($tenantId !== null) {
+            $user = $this->userModel->findByEmail($email, $tenantId);
+        }
+
+        // Fall back to global search (for superadmins or when no tenant context)
+        if ($user === null) {
+            $user = $this->userModel->findByEmailGlobal($email);
+        }
 
         if ($user === null) {
             return null;

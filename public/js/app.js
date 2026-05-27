@@ -72,6 +72,53 @@
         }, duration);
     }
 
+    /**
+     * Sanitize error objects for user-facing messages.
+     * Strips URLs, stack traces, SQL fragments, and technical gibberish.
+     * Returns a safe Dutch string suitable for showError().
+     */
+    function sanitizeError(error, fallback) {
+        var msg = (error && error.message) ? error.message : String(error || '');
+        var fb = fallback || 'Er is iets misgegaan. Probeer het opnieuw.';
+
+        // Known network / browser error patterns → friendly Dutch
+        var patterns = [
+            [/Failed to fetch/i,                  'Geen verbinding met de server'],
+            [/NetworkError/i,                     'Geen netwerkverbinding'],
+            [/Network request failed/i,           'Geen netwerkverbinding'],
+            [/netwerkfout/i,                      'Geen netwerkverbinding'],
+            [/Server returned non-JSON/i,         'Serverfout, probeer het later opnieuw'],
+            [/API Error/i,                        fb],
+            [/Sessie verlopen/i,                  'Sessie verlopen — log opnieuw in'],
+            [/load failed/i,                      'Geen verbinding met de server'],
+            [/fetch/i,                            'Geen verbinding met de server'],
+            [/timeout/i,                          'Server reageert te langzaam, probeer opnieuw'],
+            [/4\d{2}|5\d{2}/,                     fb],  // HTTP status codes
+        ];
+
+        for (var i = 0; i < patterns.length; i++) {
+            if (patterns[i][0].test(msg)) {
+                return patterns[i][1];
+            }
+        }
+
+        // If the server returned a clean Dutch message (no URL/path artifacts), pass it through
+        var clean = msg
+            .replace(/https?:\/\/[^\s]+/gi, '')   // strip URLs
+            .replace(/\/api\/[^\s]*/gi, '')        // strip API paths
+            .replace(/\.php\b/gi, '')              // strip .php references
+            .replace(/SQL\[[^\]]*\]/gi, '')        // strip SQL fragments
+            .replace(/at\s+\S+\s+\(/gi, '')        // strip stack trace lines
+            .trim();
+
+        // If what remains is meaningful (>5 chars) and looks Dutch, use it
+        if (clean.length > 5 && /[a-zA-Z]/.test(clean)) {
+            return clean;
+        }
+
+        return fb;
+    }
+
     function formatCurrency(cents) {
         return new Intl.NumberFormat('nl-NL', {
             style: 'currency',
@@ -439,6 +486,7 @@
         // UI
         showError,
         showSuccess,
+        sanitizeError,
         showLoading,
         hideLoading,
         formatCurrency,
