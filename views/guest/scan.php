@@ -38,17 +38,6 @@ require __DIR__ . '/../shared/header.php';
             </div>
         </div>
 
-        <!-- Manual fallback -->
-        <div class="glass-card" style="padding:1rem;">
-            <details>
-                <summary style="color:var(--text-muted);font-size:13px;cursor:pointer;">Handmatige QR invoer</summary>
-                <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
-                    <input type="text" id="manual-qr-input" class="form-input" placeholder="Plak QR code data..." style="font-size:13px;">
-                    <button class="btn btn-primary btn-sm" id="manual-qr-btn" style="white-space:nowrap;">Scan</button>
-                </div>
-            </details>
-        </div>
-
         <!-- Back to dashboard -->
         <div style="text-align:center;margin-top:1rem;">
             <a href="<?= BASE_URL ?>/dashboard" class="btn btn-ghost btn-sm">&larr; Terug naar dashboard</a>
@@ -66,6 +55,24 @@ require __DIR__ . '/../shared/header.php';
         <div class="glass-card" style="padding:var(--space-lg);margin-bottom:1rem;">
             <div id="confirm-amounts">
                 <!-- Filled by JS -->
+            </div>
+        </div>
+
+        <!-- Tip section -->
+        <div id="tip-section" class="glass-card" style="padding:var(--space-md);margin-bottom:1rem;display:none;">
+            <div style="text-align:center;margin-bottom:0.75rem;">
+                <span style="font-size:16px;font-weight:600;color:var(--accent-primary);">Fooi geven? 💸</span>
+            </div>
+            <div id="tip-buttons" style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+                <!-- Filled by JS -->
+            </div>
+            <!-- Custom tip input (shown when "Anders" is tapped) -->
+            <div id="tip-custom" style="display:none;margin-top:0.75rem;">
+                <div style="display:flex;gap:6px;align-items:center;justify-content:center;">
+                    <span style="color:var(--text-secondary);">€</span>
+                    <input type="number" id="tip-custom-input" class="form-input" placeholder="0.00" min="0.50" max="100" step="0.01" style="max-width:100px;text-align:center;font-size:18px;font-weight:600;">
+                    <button class="btn btn-primary btn-sm" id="tip-custom-confirm">OK</button>
+                </div>
             </div>
         </div>
 
@@ -137,6 +144,7 @@ require __DIR__ . '/../shared/header.php';
     var paymentData = null;
     var qrScanner = null;
     var scanAttempts = 0;
+    var selectedTipCents = 0;
 
     // --- Helpers ---
     function $(sel) { return document.querySelector(sel); }
@@ -250,7 +258,7 @@ require __DIR__ . '/../shared/header.php';
             } else if (msg.indexOf('NotFound') !== -1) {
                 msgEl.textContent = 'Geen camera gevonden op dit apparaat.';
             } else {
-                msgEl.textContent = 'Camera kon niet starten. Gebruik handmatige invoer hieronder.';
+                msgEl.textContent = 'Camera kon niet starten. Probeer het opnieuw.';
             }
         }
     }
@@ -310,6 +318,7 @@ require __DIR__ . '/../shared/header.php';
     // --- Confirm UI ---
     function showConfirm() {
         var d = paymentData;
+        selectedTipCents = 0;
 
         // Show tenant name so the guest knows which establishment they're paying
         var tenantNameEl = $('#confirm-tenant-name');
@@ -335,7 +344,7 @@ require __DIR__ . '/../shared/header.php';
         // Food line
         if (d.amount_food_cents > 0) {
             html += '<div style="display:flex;justify-content:space-between;margin-bottom:0.5rem;">';
-            html += '<span>\uD83C\uDF5F Eten</span>';
+            html += '<span>\uD83E\uDD64 Non-Alcohol</span>';
             html += '<span>' + fmtCents(d.amount_food_cents) + '</span>';
             html += '</div>';
         }
@@ -352,18 +361,179 @@ require __DIR__ . '/../shared/header.php';
         // Separator
         html += '<div style="border-top:1px solid var(--border);margin:0.75rem 0;"></div>';
 
-        // Total
+        // Total (without tip)
         html += '<div style="display:flex;justify-content:space-between;font-size:20px;font-weight:700;">';
         html += '<span>Totaal</span>';
-        html += '<span style="color:var(--accent-primary);">' + fmtCents(d.final_total_cents) + '</span>';
+        html += '<span style="color:var(--accent-primary);" id="confirm-total-value">' + fmtCents(d.final_total_cents) + '</span>';
+        html += '</div>';
+
+        // Tip line (hidden initially, shown when tip selected)
+        html += '<div id="confirm-tip-line" style="display:none;margin-top:0.5rem;">';
+        html += '<div style="display:flex;justify-content:space-between;font-size:14px;">';
+        html += '<span style="color:var(--text-secondary);">Fooi</span>';
+        html += '<span id="confirm-tip-value" style="color:var(--accent-primary);"></span>';
+        html += '</div>';
+        html += '</div>';
+
+        // Grand total line (hidden initially)
+        html += '<div id="confirm-grand-total-line" style="display:none;border-top:1px solid var(--border);margin-top:0.5rem;padding-top:0.5rem;">';
+        html += '<div style="display:flex;justify-content:space-between;font-size:20px;font-weight:700;">';
+        html += '<span>Totaal incl. fooi</span>';
+        html += '<span style="color:var(--accent-primary);" id="confirm-grand-total-value"></span>';
+        html += '</div>';
         html += '</div>';
 
         $('#confirm-amounts').innerHTML = html;
 
+        // Render tip buttons
+        renderTipButtons(d.tip_options_cents || []);
+
         // Balance
+        updateBalanceDisplay();
+
+        switchState('confirm');
+    }
+
+    // --- Tip buttons ---
+    function renderTipButtons(tipOptions) {
+        var container = $('#tip-buttons');
+        var section = $('#tip-section');
+        if (!container || !section) return;
+
+        // Hide tip section if no options
+        if (!tipOptions || tipOptions.length === 0) {
+            section.style.display = 'none';
+            return;
+        }
+        section.style.display = 'block';
+
+        var html = '';
+
+        // Preset tip buttons
+        for (var i = 0; i < tipOptions.length; i++) {
+            var cents = tipOptions[i];
+            html += '<button class="tip-btn" data-tip="' + cents + '" style="' +
+                'flex:1;min-width:70px;max-width:120px;padding:12px 8px;' +
+                'border:2px solid var(--glass-border);border-radius:12px;' +
+                'background:rgba(255,255,255,0.05);color:var(--text-primary);' +
+                'font-size:18px;font-weight:700;cursor:pointer;' +
+                'transition:all 0.2s ease;text-align:center;">' +
+                fmtCents(cents) +
+                '</button>';
+        }
+
+        // "Anders" button
+        html += '<button class="tip-btn tip-btn-custom" data-tip="custom" style="' +
+            'flex:1;min-width:70px;max-width:120px;padding:12px 8px;' +
+            'border:2px solid var(--glass-border);border-radius:12px;' +
+            'background:rgba(255,255,255,0.05);color:var(--text-secondary);' +
+            'font-size:14px;font-weight:500;cursor:pointer;' +
+            'transition:all 0.2s ease;text-align:center;">' +
+            'Anders' +
+            '</button>';
+
+        container.innerHTML = html;
+
+        // Wire up tip buttons
+        var buttons = container.querySelectorAll('.tip-btn');
+        for (var j = 0; j < buttons.length; j++) {
+            buttons[j].addEventListener('click', function() {
+                var tipVal = this.getAttribute('data-tip');
+                if (tipVal === 'custom') {
+                    showCustomTipInput();
+                } else {
+                    selectTip(parseInt(tipVal, 10));
+                }
+            });
+        }
+    }
+
+    function showCustomTipInput() {
+        var customDiv = $('#tip-custom');
+        if (customDiv) customDiv.style.display = 'block';
+        var input = $('#tip-custom-input');
+        if (input) input.focus();
+        // Highlight the "Anders" button
+        highlightTipButton('custom');
+    }
+
+    function confirmCustomTip() {
+        var input = $('#tip-custom-input');
+        if (!input) return;
+        var val = parseFloat(input.value);
+        if (isNaN(val) || val < 0.50) {
+            input.style.borderColor = '#F44336';
+            return;
+        }
+        if (val > 100) {
+            input.style.borderColor = '#F44336';
+            return;
+        }
+        input.style.borderColor = '';
+        var cents = Math.round(val * 100);
+        selectTip(cents);
+    }
+
+    function selectTip(cents) {
+        selectedTipCents = cents;
+
+        // Hide custom input
+        var customDiv = $('#tip-custom');
+        if (customDiv) customDiv.style.display = 'none';
+
+        // Update tip line and grand total in the amounts card
+        var tipLine = $('#confirm-tip-line');
+        var tipValue = $('#confirm-tip-value');
+        var grandTotalLine = $('#confirm-grand-total-line');
+        var grandTotalValue = $('#confirm-grand-total-value');
+
+        if (cents > 0) {
+            if (tipLine) tipLine.style.display = 'block';
+            if (tipValue) tipValue.textContent = fmtCents(cents);
+            if (grandTotalLine) grandTotalLine.style.display = 'block';
+            if (grandTotalValue) grandTotalValue.textContent = fmtCents(paymentData.final_total_cents + cents);
+        } else {
+            if (tipLine) tipLine.style.display = 'none';
+            if (grandTotalLine) grandTotalLine.style.display = 'none';
+        }
+
+        // Highlight selected button
+        highlightTipButton(cents);
+
+        // Update balance display
+        updateBalanceDisplay();
+    }
+
+    function highlightTipButton(value) {
+        var buttons = document.querySelectorAll('.tip-btn');
+        for (var i = 0; i < buttons.length; i++) {
+            var btn = buttons[i];
+            var btnVal = btn.getAttribute('data-tip');
+            var isSelected = (btnVal === String(value)) || (value === 'custom' && btnVal === 'custom');
+            if (isSelected) {
+                btn.style.borderColor = 'var(--accent-primary)';
+                btn.style.background = 'rgba(255,193,7,0.15)';
+                btn.style.color = 'var(--accent-primary)';
+            } else {
+                btn.style.borderColor = 'var(--glass-border)';
+                btn.style.background = 'rgba(255,255,255,0.05)';
+                // Restore original colors based on type
+                if (btn.classList.contains('tip-btn-custom')) {
+                    btn.style.color = 'var(--text-secondary)';
+                } else {
+                    btn.style.color = 'var(--text-primary)';
+                }
+            }
+        }
+    }
+
+    function updateBalanceDisplay() {
+        if (!paymentData) return;
+        var d = paymentData;
         var balance = d.balance_cents;
-        var afterBalance = balance - d.final_total_cents;
-        var sufficient = d.sufficient_balance;
+        var grandTotal = d.final_total_cents + selectedTipCents;
+        var afterBalance = balance - grandTotal;
+        var sufficient = balance >= grandTotal;
 
         $('#confirm-balance').textContent = fmtCents(balance);
         $('#confirm-balance').style.color = 'var(--text-primary)';
@@ -373,7 +543,7 @@ require __DIR__ . '/../shared/header.php';
 
         // Insufficient balance warning
         if (!sufficient) {
-            var shortage = d.final_total_cents - balance;
+            var shortage = grandTotal - balance;
             show('#confirm-insufficient');
             $('#confirm-shortage').textContent = 'Je hebt nog \u20AC ' + (shortage / 100).toFixed(2).replace('.', ',') + ' te weinig. Laad eerst je wallet op.';
             $('#btn-confirm-pay').disabled = true;
@@ -381,8 +551,6 @@ require __DIR__ . '/../shared/header.php';
             hide('#confirm-insufficient');
             $('#btn-confirm-pay').disabled = false;
         }
-
-        switchState('confirm');
     }
 
     // --- Confirm payment ---
@@ -400,7 +568,7 @@ require __DIR__ . '/../shared/header.php';
                 'X-CSRF-Token': getCSRF()
             },
             credentials: 'same-origin',
-            body: JSON.stringify({ session_token: sessionToken })
+            body: JSON.stringify({ session_token: sessionToken, tip_cents: selectedTipCents })
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
@@ -442,32 +610,18 @@ require __DIR__ . '/../shared/header.php';
 
     // --- Success / Failed ---
     function showSuccess(data) {
-        $('#success-total').textContent = fmtCents(data.final_total || 0);
-        $('#success-points').textContent = data.points_earned > 0 ? ('+' + data.points_earned + ' punten verdiend') : '';
+        var totalWithTip = (data.final_total || 0);
+        $('#success-total').textContent = fmtCents(totalWithTip);
+        var parts = [];
+        if (selectedTipCents > 0) parts.push('Fooi: ' + fmtCents(selectedTipCents));
+        if (data.points_earned > 0) parts.push('+' + data.points_earned + ' punten verdiend');
+        $('#success-points').textContent = parts.join(' • ');
         switchState('success');
     }
 
     function showFailed(reason) {
         $('#fail-reason').textContent = reason || 'Onbekende fout';
         switchState('failed');
-    }
-
-    // --- Manual QR input ---
-    function setupManualQR() {
-        var btn = $('#manual-qr-btn');
-        var input = $('#manual-qr-input');
-        if (!btn || !input) return;
-        btn.addEventListener('click', function() {
-            var val = input.value.trim();
-            if (val) {
-                stopScanner();
-                processScan(val);
-                input.value = '';
-            }
-        });
-        input.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') btn.click();
-        });
     }
 
     // --- Button wiring ---
@@ -477,11 +631,20 @@ require __DIR__ . '/../shared/header.php';
 
         var cancelBtn = $('#btn-cancel');
         if (cancelBtn) cancelBtn.addEventListener('click', cancelPayment);
+
+        // Custom tip confirm button
+        var customConfirmBtn = $('#tip-custom-confirm');
+        if (customConfirmBtn) customConfirmBtn.addEventListener('click', confirmCustomTip);
+
+        // Custom tip Enter key
+        var customInput = $('#tip-custom-input');
+        if (customInput) customInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') confirmCustomTip();
+        });
     }
 
     // --- Init ---
     function init() {
-        setupManualQR();
         setupButtons();
         // Retry camera button
         var retryBtn = document.getElementById('btn-retry-camera');

@@ -416,7 +416,7 @@ document.addEventListener('DOMContentLoaded', () => {
             age--;
         }
 
-        if (age < 15) {
+        if (age < 18) {
             showError('Je moet minimaal 18 jaar oud zijn om alcohol te bestellen.');
             return;
         }
@@ -494,7 +494,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Set max date for birthdate picker to today minus 18 years
     const birthdateInput = document.getElementById('birthdate');
     const maxDate = new Date();
-    maxDate.setFullYear(maxDate.getFullYear() - 15);
+    maxDate.setFullYear(maxDate.getFullYear() - 18);
     birthdateInput.max = maxDate.toISOString().split('T')[0];
 
     // Set default date to 25 years ago for convenience

@@ -131,13 +131,17 @@ if (!empty($user['email_verified_at'])) {
 
         .code-input-group {
             display: flex;
-            gap: 8px;
+            gap: 6px;
             justify-content: center;
             margin: var(--space-lg) 0;
+            max-width: 100%;
+            padding: 0 4px;
         }
 
         .code-input {
-            width: 48px;
+            flex: 1;
+            max-width: 48px;
+            min-width: 32px;
             height: 56px;
             text-align: center;
             font-size: 24px;

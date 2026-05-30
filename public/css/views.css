@@ -790,6 +790,31 @@
     color: var(--text-secondary);
 }
 
+/* --- Transaction icon colors per type --- */
+.transaction-icon.icon-payment {
+    background: rgba(244, 67, 54, 0.15);
+    border-color: rgba(244, 67, 54, 0.25);
+    color: #F44336;
+}
+
+.transaction-icon.icon-deposit {
+    background: rgba(76, 175, 80, 0.15);
+    border-color: rgba(76, 175, 80, 0.25);
+    color: #4CAF50;
+}
+
+.transaction-icon.icon-bonus {
+    background: rgba(255, 193, 7, 0.15);
+    border-color: rgba(255, 193, 7, 0.25);
+    color: #FFC107;
+}
+
+.transaction-icon.icon-correction {
+    background: rgba(33, 150, 243, 0.15);
+    border-color: rgba(33, 150, 243, 0.25);
+    color: #2196F3;
+}
+
 /* --- Empty state --- */
 .empty-state {
     display: flex;

@@ -190,6 +190,38 @@ if (!$tenant) {
             </div>
         </div>
 
+        <!-- Fooi Instellingen -->
+        <div style="margin-bottom: var(--space-xl);">
+            <h2 style="margin-bottom: var(--space-md); color: var(--accent-primary);">Fooi 💸</h2>
+            <p class="text-sm" style="color: var(--text-secondary); margin-bottom: var(--space-md);">
+                Stel 3 fooi-bedragen in die gasten kunnen kiezen bij het betalen. De fooi wordt van het wallet-saldo afgeschreven samen met de betaling.
+            </p>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--space-md);">
+                <div class="form-group">
+                    <label for="tip-amount-1">Fooi 1</label>
+                    <div style="display: flex; align-items: center; gap: 4px;">
+                        <span style="color: var(--text-secondary);">€</span>
+                        <input type="number" id="tip-amount-1" class="form-input" value="<?= number_format(($tenant['tip_amount_1_cents'] ?? 100) / 100, 2, '.', '') ?>" min="0" max="100" step="0.01" style="flex:1;">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="tip-amount-2">Fooi 2</label>
+                    <div style="display: flex; align-items: center; gap: 4px;">
+                        <span style="color: var(--text-secondary);">€</span>
+                        <input type="number" id="tip-amount-2" class="form-input" value="<?= number_format(($tenant['tip_amount_2_cents'] ?? 250) / 100, 2, '.', '') ?>" min="0" max="100" step="0.01" style="flex:1;">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="tip-amount-3">Fooi 3</label>
+                    <div style="display: flex; align-items: center; gap: 4px;">
+                        <span style="color: var(--text-secondary);">€</span>
+                        <input type="number" id="tip-amount-3" class="form-input" value="<?= number_format(($tenant['tip_amount_3_cents'] ?? 500) / 100, 2, '.', '') ?>" min="0" max="100" step="0.01" style="flex:1;">
+                    </div>
+                </div>
+            </div>
+            <p class="text-sm" style="color: var(--text-secondary); margin-top: var(--space-xs);">Tip: de gast kan altijd ook zelf een bedrag invullen of geen fooi geven.</p>
+        </div>
+
         <!-- Features (READ-ONLY — bepaald door platform beheerder) -->
         <div style="margin-bottom: var(--space-xl);">
             <h2 style="margin-bottom: var(--space-md); color: var(--accent-primary);">Modules

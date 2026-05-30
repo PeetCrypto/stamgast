@@ -131,13 +131,22 @@ try {
     $wallet = $walletModel->findByUserAndTenant($userId, $tenantId);
     $balanceCents = $wallet ? (int) $wallet['balance_cents'] : 0;
 
-    // Step 9: Get tenant name (for new short QR format that doesn't embed it)
+    // Step 9: Get tenant name + tip options (for new short QR format that doesn't embed it)
     $tenantName = $validation['tenant_name'] ?? '';
+    $tenantModel = new Tenant($db);
+    $tenantRow = $tenantModel->findById($tenantId);
     if (empty($tenantName)) {
-        $tenantModel = new Tenant($db);
-        $tenantRow = $tenantModel->findById($tenantId);
         $tenantName = $tenantRow ? ($tenantRow['name'] ?? '') : '';
     }
+
+    // Step 10: Get tip options from tenant config
+    $tipOptions = [
+        (int) ($tenantRow['tip_amount_1_cents'] ?? 100),
+        (int) ($tenantRow['tip_amount_2_cents'] ?? 250),
+        (int) ($tenantRow['tip_amount_3_cents'] ?? 500),
+    ];
+    // Filter out zero amounts (disabled tips)
+    $tipOptions = array_values(array_filter($tipOptions, function($v) { return $v > 0; }));
 
     // Audit
     $audit = new Audit($db);
@@ -163,6 +172,7 @@ try {
         'sufficient_balance'  => $balanceCents >= $finalTotal,
         'guest_name'          => $guestName,
         'tier_name'           => $tier['name'],
+        'tip_options_cents'   => $tipOptions,
     ]);
 } catch (\Throwable $e) {
     if (APP_DEBUG) {

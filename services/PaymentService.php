@@ -36,7 +36,8 @@ class PaymentService
      * @param int $bartenderId   Bartender processing the payment
      * @param int $amountAlcCents  Alcohol total in cents
      * @param int $amountFoodCents Food total in cents
-     * @return array{success: true, transaction_id: int, final_total: int, discount_applied: int, points_earned: int}
+     * @param int $tipCents       Tip amount in cents (default 0)
+     * @return array{success: true, transaction_id: int, final_total: int, discount_applied: int, points_earned: int, tip_cents: int}
      * @throws \InvalidArgumentException on validation errors
      * @throws \RuntimeException on insufficient balance or DB errors
      */
@@ -45,7 +46,8 @@ class PaymentService
         int $tenantId,
         int $bartenderId,
         int $amountAlcCents,
-        int $amountFoodCents
+        int $amountFoodCents,
+        int $tipCents = 0
     ): array {
         // ── STAP 1: INPUT VALIDATIE ──────────────────────────────────
         if ($amountAlcCents < 0 || $amountFoodCents < 0) {
@@ -53,6 +55,12 @@ class PaymentService
         }
         if ($amountAlcCents === 0 && $amountFoodCents === 0) {
             throw new \InvalidArgumentException('Er moet minimaal één bedrag ingevuld zijn');
+        }
+        if ($tipCents < 0) {
+            throw new \InvalidArgumentException('Fooi mag niet negatief zijn');
+        }
+        if ($tipCents > 10000) {
+            throw new \InvalidArgumentException('Fooi mag maximaal €100,00 zijn');
         }
 
         // ── STAP 1b: IDEMPOTENTIE CHECK (dubbele betaling voorkomen) ─
@@ -131,7 +139,7 @@ class PaymentService
         $discountAlcCents = (int) floor($amountAlcCents * $alcDiscountPerc / 100);
         $discountFoodCents = (int) floor($amountFoodCents * $foodDiscountPerc / 100);
 
-        $finalTotal = ($amountAlcCents - $discountAlcCents) + ($amountFoodCents - $discountFoodCents);
+        $finalTotal = ($amountAlcCents - $discountAlcCents) + ($amountFoodCents - $discountFoodCents) + $tipCents;
         $discountTotal = $discountAlcCents + $discountFoodCents;
 
         // BTW berekening over NETTO bedrag (na korting)
@@ -197,9 +205,10 @@ class PaymentService
                 'btw_alc_cents'       => $btwAlcCents,
                 'btw_food_cents'      => $btwFoodCents,
                 'btw_total_cents'     => $btwTotalCents,
+                'tip_cents'           => $tipCents,
                 'points_earned'       => $pointsEarned,
                 'ip_address'          => getClientIP(),
-                'description'         => 'Betaling via POS',
+                'description'         => 'Betaling via POS' . ($tipCents > 0 ? ' (+fooi)' : ''),
             ]);
 
             // d) Audit trail
@@ -214,6 +223,7 @@ class PaymentService
                     'user_id'           => $userId,
                     'final_total_cents' => $finalTotal,
                     'discount_cents'    => $discountTotal,
+                    'tip_cents'         => $tipCents,
                     'points_earned'     => $pointsEarned,
                     'tier_name'         => $tier['name'],
                 ]
@@ -250,6 +260,7 @@ class PaymentService
             'final_total'       => $finalTotal,
             'discount_applied'  => $discountTotal,
             'points_earned'     => $pointsEarned,
+            'tip_cents'         => $tipCents,
         ];
     }
 }

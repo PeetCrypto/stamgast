@@ -49,6 +49,9 @@ if ($method === 'GET') {
         'verification_hard_limit'   => (int) ($tenant['verification_hard_limit'] ?? 30),
         'verification_cooldown_sec' => (int) ($tenant['verification_cooldown_sec'] ?? 180),
         'verification_max_attempts' => (int) ($tenant['verification_max_attempts'] ?? 2),
+        'tip_amount_1_cents'        => (int) ($tenant['tip_amount_1_cents'] ?? 100),
+        'tip_amount_2_cents'        => (int) ($tenant['tip_amount_2_cents'] ?? 250),
+        'tip_amount_3_cents'        => (int) ($tenant['tip_amount_3_cents'] ?? 500),
     ]);
 
 } elseif ($method === 'POST') {
@@ -177,6 +180,21 @@ if ($method === 'GET') {
     // Points toggle (admin-editable — controls whether guests earn points)
     if (isset($input['points_enabled'])) {
         $data['points_enabled'] = (int) (bool) $input['points_enabled'];
+    }
+
+    // Tip amounts (admin-editable — 3 preset tip amounts in cents)
+    $tipFields = ['tip_amount_1_cents', 'tip_amount_2_cents', 'tip_amount_3_cents'];
+    foreach ($tipFields as $field) {
+        if (isset($input[$field])) {
+            $val = (int) $input[$field];
+            if ($val < 0) {
+                Response::error($field . ' moet een positief getal zijn', 'VALIDATION_ERROR', 422);
+            }
+            if ($val > 10000) {
+                Response::error($field . ' mag maximaal €100,00 zijn', 'VALIDATION_ERROR', 422);
+            }
+            $data[$field] = $val;
+        }
     }
 
     if (empty($data)) {

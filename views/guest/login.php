@@ -135,6 +135,8 @@ $sessionTenantName = $_SESSION['tenant_name'] ?? APP_NAME;
 </head>
 <body class="auth-page">
 
+<?php require VIEWS_PATH . 'shared/pwa-install-banner.php'; ?>
+
 <div class="auth-container">
 
     <div class="glass-card animate-in">

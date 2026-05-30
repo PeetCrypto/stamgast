@@ -103,7 +103,8 @@ function getReportData(PDO $db, int $tenantId, string $from, string $to): array
             COALESCE(SUM(btw_alc_cents), 0)    AS btw_alc_cents,
             COALESCE(SUM(btw_food_cents), 0)   AS btw_food_cents,
             COALESCE(SUM(btw_total_cents), 0)  AS btw_total_cents,
-            COALESCE(SUM(points_earned), 0)    AS points_earned
+            COALESCE(SUM(points_earned), 0)    AS points_earned,
+            COALESCE(SUM(tip_cents), 0)        AS tip_total_cents
          FROM `transactions`
          WHERE `tenant_id` = :tenant_id
            AND `type` = 'payment'
@@ -157,7 +158,8 @@ function getReportData(PDO $db, int $tenantId, string $from, string $to): array
             b.last_name,
             COUNT(t.id) AS transaction_count,
             COALESCE(SUM(t.final_total_cents), 0) AS revenue_cents,
-            COALESCE(SUM(t.btw_total_cents), 0) AS btw_cents
+            COALESCE(SUM(t.btw_total_cents), 0) AS btw_cents,
+            COALESCE(SUM(t.tip_cents), 0) AS tip_cents
          FROM `transactions` t
          LEFT JOIN `users` b ON b.id = t.bartender_id
          WHERE t.`tenant_id` = :tenant_id
@@ -196,6 +198,7 @@ function getReportData(PDO $db, int $tenantId, string $from, string $to): array
             'btw_food_cents'      => (int) $payments['btw_food_cents'],
             'btw_total_cents'     => (int) $payments['btw_total_cents'],
             'points_earned'       => (int) $payments['points_earned'],
+            'tip_total_cents'     => (int) ($payments['tip_total_cents'] ?? 0),
         ],
         'deposits' => [
             'deposit_count'       => (int) $deposits['deposit_count'],
@@ -215,6 +218,7 @@ function getReportData(PDO $db, int $tenantId, string $from, string $to): array
                 'transaction_count' => (int) $row['transaction_count'],
                 'revenue_cents'     => (int) $row['revenue_cents'],
                 'btw_cents'         => (int) $row['btw_cents'],
+                'tip_cents'         => (int) ($row['tip_cents'] ?? 0),
             ];
         }, $bartenderBreakdown),
     ];
@@ -260,7 +264,7 @@ function getTransactionList(PDO $db, int $tenantId, string $from, string $to, in
             t.amount_alc_cents, t.amount_food_cents,
             t.discount_alc_cents, t.discount_food_cents,
             t.btw_alc_cents, t.btw_food_cents,
-            t.points_earned, t.created_at,
+            t.points_earned, t.tip_cents, t.created_at,
             u.first_name, u.last_name
          FROM `transactions` t
          LEFT JOIN `users` u ON u.id = t.user_id
@@ -290,6 +294,7 @@ function getTransactionList(PDO $db, int $tenantId, string $from, string $to, in
                 'btw_food_cents'      => (int) $row['btw_food_cents'],
                 'btw_total_cents'     => (int) $row['btw_total_cents'],
                 'points_earned'       => (int) $row['points_earned'],
+                'tip_cents'           => (int) ($row['tip_cents'] ?? 0),
                 'created_at'          => $row['created_at'],
             ];
         }, $transactions),
@@ -314,7 +319,7 @@ function exportCsv(PDO $db, int $tenantId, string $dateFrom, string $dateTo): vo
     // Header
     fputcsv($output, [
         'Datum', 'Tijd', 'Type', 'Gast', 'Alcohol (€)', 'Food (€)',
-        'Korting Alc (€)', 'Korting Food (€)', 'Totaal (€)',
+        'Korting Alc (€)', 'Korting Food (€)', 'Fooi (€)', 'Totaal (€)',
         'BTW Alc 21% (€)', 'BTW Food 9% (€)', 'BTW Totaal (€)',
         'Punten',
     ], ';');
@@ -330,6 +335,7 @@ function exportCsv(PDO $db, int $tenantId, string $dateFrom, string $dateTo): vo
             number_format($tx['amount_food_cents'] / 100, 2, ',', '.'),
             number_format($tx['discount_alc_cents'] / 100, 2, ',', '.'),
             number_format($tx['discount_food_cents'] / 100, 2, ',', '.'),
+            number_format(($tx['tip_cents'] ?? 0) / 100, 2, ',', '.'),
             number_format($tx['final_total_cents'] / 100, 2, ',', '.'),
             number_format($tx['btw_alc_cents'] / 100, 2, ',', '.'),
             number_format($tx['btw_food_cents'] / 100, 2, ',', '.'),

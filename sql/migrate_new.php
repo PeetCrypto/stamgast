@@ -340,27 +340,46 @@ $migrations = [
             $stmt->execute();
             return (int) $stmt->fetchColumn() === 0;
         },
-        'run'    => function (PDO $db): bool {
-            // Backfill BTW for existing payment transactions
-            // Alcohol: 21% | Food: 9% — berekend over netto (na korting)
-            $stmt = $db->prepare(
-                "UPDATE `transactions`
-                 SET 
-                     `btw_alc_cents`  = FLOOR((`amount_alc_cents` - `discount_alc_cents`) / 121 * 21),
-                     `btw_food_cents` = FLOOR((`amount_food_cents` - `discount_food_cents`) / 109 * 9),
-                     `btw_total_cents` = FLOOR((`amount_alc_cents` - `discount_alc_cents`) / 121 * 21)
-                                      + FLOOR((`amount_food_cents` - `discount_food_cents`) / 109 * 9)
-                 WHERE `type` = 'payment'
-                   AND `btw_alc_cents` = 0 AND `btw_food_cents` = 0
-                   AND (`amount_alc_cents` + `amount_food_cents`) > 0"
-            );
-            $stmt->execute();
-            $count = $stmt->rowCount();
-            error_log("BTW Backfill: updated {$count} transactions");
-            return true;
-        },
-    ],
-];
+         'run'    => function (PDO $db): bool {
+             // Backfill BTW for existing payment transactions
+             // Alcohol: 21% | Food: 9% — berekend over netto (na korting)
+             $stmt = $db->prepare(
+                 "UPDATE `transactions`
+                  SET 
+                      `btw_alc_cents`  = FLOOR((`amount_alc_cents` - `discount_alc_cents`) / 121 * 21),
+                      `btw_food_cents` = FLOOR((`amount_food_cents` - `discount_food_cents`) / 109 * 9),
+                      `btw_total_cents` = FLOOR((`amount_alc_cents` - `discount_alc_cents`) / 121 * 21)
+                                       + FLOOR((`amount_food_cents` - `discount_food_cents`) / 109 * 9)
+                  WHERE `type` = 'payment'
+                    AND `btw_alc_cents` = 0 AND `btw_food_cents` = 0
+                    AND (`amount_alc_cents` + `amount_food_cents`) > 0"
+             );
+             $stmt->execute();
+             $count = $stmt->rowCount();
+             error_log("BTW Backfill: updated {$count} transactions");
+             return true;
+         },
+     ],
+     [
+     'name'   => 'Email Verification (code + verified_at)',
+     'file'   => 'email_verification_migration.sql',
+     'type'   => 'alter',
+     'check'  => function (PDO $db): bool {
+     return columnExists($db, 'users', 'email_verification_code')
+     && columnExists($db, 'users', 'email_verified_at');
+     },
+     ],
+         [
+         'name'   => 'Tip/Fooi Feature (tenant tip amounts + transaction tip tracking)',
+         'file'   => 'tip_migration.sql',
+         'type'   => 'alter',
+         'check'  => function (PDO $db): bool {
+             return columnExists($db, 'tenants', 'tip_amount_1_cents')
+                 && columnExists($db, 'transactions', 'tip_cents')
+                 && columnExists($db, 'pos_payment_sessions', 'tip_cents');
+         },
+     ],
+ ];
 
 // ── Helper functions ────────────────────────────────────────────────────────
 
@@ -594,6 +613,8 @@ function runVerification(PDO $db): void
             'is_test',
             // Tier model lock migration
             'tier_model_type',
+            // Tip migration
+            'tip_amount_1_cents', 'tip_amount_2_cents', 'tip_amount_3_cents',
         ],
         'users' => [
             'tenant_id', 'email', 'password_hash', 'role', 'first_name', 'last_name',
@@ -603,6 +624,8 @@ function runVerification(PDO $db): void
             'verified_birthdate', 'suspended_reason', 'suspended_at', 'suspended_by',
             // FCM & profile columns migration (fcm_token replaces legacy push_token)
             'fcm_token', 'phone', 'street', 'house_number', 'postal_code', 'city',
+            // Email verification migration
+            'email_verification_code', 'email_verified_at',
         ],
         'loyalty_tiers' => [
             'id', 'tenant_id', 'name', 'min_deposit_cents',
@@ -622,6 +645,8 @@ function runVerification(PDO $db): void
             'performed_by', 'admin_reason',
             // BTW columns migration
             'btw_alc_cents', 'btw_food_cents', 'btw_total_cents',
+            // Tip migration
+            'tip_cents',
         ],
     ];
 

@@ -917,6 +917,14 @@ async function deleteTier(tierId) {
         if (hardLimit) hardLimit.value = data.verification_hard_limit ?? 30;
         if (cooldown) cooldown.value = data.verification_cooldown_sec ?? 180;
         if (maxAttempts) maxAttempts.value = data.verification_max_attempts ?? 2;
+
+        // Tip amounts
+        var tip1 = document.getElementById('tip-amount-1');
+        var tip2 = document.getElementById('tip-amount-2');
+        var tip3 = document.getElementById('tip-amount-3');
+        if (tip1) tip1.value = ((data.tip_amount_1_cents ?? 100) / 100).toFixed(2);
+        if (tip2) tip2.value = ((data.tip_amount_2_cents ?? 250) / 100).toFixed(2);
+        if (tip3) tip3.value = ((data.tip_amount_3_cents ?? 500) / 100).toFixed(2);
     }
 
     async function saveSettings() {
@@ -1023,6 +1031,9 @@ async function deleteTier(tierId) {
             verification_hard_limit: parseInt(document.getElementById('verification-hard-limit')?.value) || 30,
             verification_cooldown_sec: parseInt(document.getElementById('verification-cooldown-sec')?.value) || 180,
             verification_max_attempts: parseInt(document.getElementById('verification-max-attempts')?.value) || 2,
+            tip_amount_1_cents: Math.round(parseFloat(document.getElementById('tip-amount-1')?.value || '1') * 100),
+            tip_amount_2_cents: Math.round(parseFloat(document.getElementById('tip-amount-2')?.value || '2.5') * 100),
+            tip_amount_3_cents: Math.round(parseFloat(document.getElementById('tip-amount-3')?.value || '5') * 100),
         };
 
         // NOTE: feature_push/feature_marketing are controlled by Super-Admin only.

@@ -227,6 +227,19 @@
         }
     }
 
+    function getTransactionIcon(type) {
+        var icons = {
+            payment:    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>',
+            deposit:    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 010-4h14v4"/><path d="M3 5v14a2 2 0 002 2h16v-5"/><path d="M18 12a2 2 0 100 4 2 2 0 000-4z"/><line x1="12" y1="2" x2="12" y2="7"/><line x1="9" y1="4.5" x2="15" y2="4.5"/></svg>',
+            bonus:      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
+            correction: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
+        };
+        return {
+            svg: icons[type] || icons.correction,
+            cls: 'icon-' + (type || 'correction')
+        };
+    }
+
     function renderTransactionHistory(transactions) {
         const container = document.getElementById('transaction-list');
         if (!container) return;
@@ -246,9 +259,11 @@
                 minute: '2-digit'
             });
 
+            var icon = getTransactionIcon(tx.type);
+
             return '<div class="transaction-item">' +
-                '<div class="transaction-icon">' +
-                    '<i class="icon-' + tx.type + '"></i>' +
+                '<div class="transaction-icon ' + icon.cls + '">' +
+                    icon.svg +
                 '</div>' +
                 '<div class="transaction-details">' +
                     '<div class="transaction-type">' + getTransactionLabel(tx.type) + '</div>' +
@@ -284,11 +299,8 @@
             return;
         }
         
-        // Load wallet data and packages in parallel
-        await Promise.all([
-            loadWalletData(),
-            loadPackages()
-        ]);
+        // Load wallet data
+        await loadWalletData();
         
         // Load transaction history
         var historyData = await loadTransactionHistory();

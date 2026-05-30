@@ -154,48 +154,6 @@ $isUnverified = ($accountStatus !== 'active' && $verificationRequired);
     </div>
     <?php endif; ?>
 
-    <!-- PWA Install Banner — ALTIJD zichtbaar als niet in standalone/PWA mode -->
-    <div id="pwa-install-banner" class="glass-card" style="padding: var(--space-lg); margin-bottom: var(--space-lg); border: 2px solid rgba(33,150,243,0.4); background: rgba(33,150,243,0.06); text-align: center; display: none;">
-        <!-- Android/Chrome: automatische install -->
-        <div id="pwa-auto-install" style="display:none;">
-            <p style="font-size: 36px; margin-bottom: var(--space-sm);">📲</p>
-            <p style="font-size: 18px; font-weight: 600; margin-bottom: 0.5rem;">Installeer de app</p>
-            <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 1rem;">
-                Voeg <strong><?= sanitize($tenant['name'] ?? APP_NAME) ?></strong> toe aan je thuisscherm voor de beste ervaring met FaceID en push berichten.
-            </p>
-            <button id="pwa-install-btn" class="btn btn-primary" style="margin-right: 8px;">Installeren</button>
-            <button id="pwa-dismiss-btn" class="btn btn-secondary btn-sm">Later</button>
-        </div>
-
-        <!-- iOS Safari: handmatige instructie -->
-        <div id="pwa-ios-install" style="display:none;">
-            <p style="font-size: 36px; margin-bottom: var(--space-sm);">📲</p>
-            <p style="font-size: 18px; font-weight: 600; margin-bottom: 0.5rem;">Zet op je thuisscherm</p>
-            <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 1rem;">
-                Voor FaceID en de beste ervaring, voeg <strong><?= sanitize($tenant['name'] ?? APP_NAME) ?></strong> toe als app:
-            </p>
-            <div style="text-align:left;background:rgba(255,255,255,0.05);border-radius:12px;padding:var(--space-md);margin-bottom:var(--space-md);font-size:14px;line-height:2;">
-                <p>1. Tik op het <strong>deel-icoon</strong>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle;"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
-                    onderaan je scherm
-                </p>
-                <p>2. Scroll naar <strong>"Zet op beginscherm"</strong></p>
-                <p>3. Tik op <strong>"Toevoegen"</strong></p>
-            </div>
-            <button id="pwa-ios-dismiss" class="btn btn-secondary btn-sm">Begrepen</button>
-        </div>
-
-        <!-- Desktop browser: hint dat PWA beschikbaar is -->
-        <div id="pwa-desktop-install" style="display:none;">
-            <p style="font-size: 36px; margin-bottom: var(--space-sm);">📲</p>
-            <p style="font-size: 18px; font-weight: 600; margin-bottom: 0.5rem;">Installeer als app</p>
-            <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 1rem;">
-                Open deze pagina op je <strong>telefoon</strong> en voeg hem toe aan je thuisscherm voor FaceID en push berichten.
-            </p>
-            <button id="pwa-desktop-dismiss" class="btn btn-secondary btn-sm">Begrepen</button>
-        </div>
-    </div>
-
     <?php if (!$hasFcmToken && $emailVerified): ?>
     <!-- Push Notificaties VERPLICHT — blokkeert dashboard tot ingeschakeld (only after email verified) -->
     <div id="push-mandatory-overlay" style="position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;padding:var(--space-lg);">
@@ -211,132 +169,34 @@ $isUnverified = ($accountStatus !== 'active' && $verificationRequired);
                 Notificaties zijn geblokkeerd in je apparaatinstellingen. Open je browser- of apparaatinstellingen om notificaties toe te staan voor deze app.
             </p>
             <p id="push-unsupported-msg" style="display:none;color:#F44336;font-size:13px;margin-top:var(--space-sm);">
-                Je browser ondersteunt geen push notificaties. Gebruik Chrome, Safari of een andere moderne browser.
+                Push notificaties zijn momenteel niet beschikbaar. Je kunt de app gewoon gebruiken — probeer het later opnieuw via je profiel.
             </p>
+            <button id="push-skip-btn" style="width:100%;margin-top:var(--space-md);background:none;border:none;color:var(--text-secondary);font-size:13px;cursor:pointer;text-decoration:underline;">Later instellen</button>
         </div>
     </div>
     <?php endif; ?>
 
-    <!-- Quick Actions -->
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-md); margin-bottom: var(--space-xl);">
-        <a href="<?= BASE_URL ?>/pay" class="glass-card silver-action-card" style="padding: var(--space-lg); text-align: center; text-decoration: none; color: inherit;">
-            <p style="font-size: 24px; margin-bottom: var(--space-xs);">&#128247;</p>
-            <p class="text-sm">Scan &amp; Betaal</p>
-        </a>
-        <a href="<?= BASE_URL ?>/wallet" class="glass-card silver-action-card" style="padding: var(--space-lg); text-align: center; text-decoration: none; color: inherit;">
-            <img src="<?= BASE_URL ?>/public/icons/wallet.svg" alt="Wallet" style="width: 86px; height: auto; margin: 0 auto var(--space-xs); display: block;">
-            <p class="text-sm">Wallet</p>
-        </a>
-        <a href="<?= BASE_URL ?>/inbox" class="glass-card silver-action-card" style="padding: var(--space-lg); text-align: center; text-decoration: none; color: inherit; position: relative;">
-            <p style="font-size: 24px; margin-bottom: var(--space-xs);">&#128233;</p>
-            <p class="text-sm">Inbox</p>
-            <span class="notif-badge" id="inbox-badge" style="display:none;position:absolute;top:8px;right:8px;background:#4CAF50;color:#fff;font-size:11px;font-weight:700;min-width:20px;height:20px;border-radius:10px;align-items:center;justify-content:center;padding:0 5px;">0</span>
-        </a>
-        <a href="<?= BASE_URL ?>/profile" class="glass-card silver-action-card" style="padding: var(--space-lg); text-align: center; text-decoration: none; color: inherit;">
-            <p style="font-size: 24px; margin-bottom: var(--space-xs);">&#128100;</p>
-            <p class="text-sm">Profiel</p>
-        </a>
-    </div>
+     <!-- Quick Actions -->
+     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-md); margin-bottom: var(--space-xl);">
+         <a href="<?= BASE_URL ?>/wallet" class="glass-card silver-action-card" style="padding: var(--space-lg); text-align: center; text-decoration: none; color: inherit;">
+             <img src="<?= BASE_URL ?>/public/icons/wallet.svg" alt="Wallet" style="width: 86px; height: auto; margin: 0 auto var(--space-xs); display: block;">
+             <p class="text-sm">Wallet</p>
+         </a>
+          <a href="<?= BASE_URL ?>/benefits" class="glass-card silver-action-card" style="padding: var(--space-lg); text-align: center; text-decoration: none; color: inherit;">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="48" height="48" style="margin: 0 auto var(--space-xs); display: block;"><defs><linearGradient id="silverGradient" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#A6AFB8"/><stop offset="25%" stop-color="#ffffff"/><stop offset="45%" stop-color="#E1E5E9"/><stop offset="55%" stop-color="#B5BDC4"/><stop offset="80%" stop-color="#ffffff"/><stop offset="100%" stop-color="#8E969E"/></linearGradient><filter id="softShadow" x="-10%" y="-10%" width="120%" height="120%"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.4"/></filter></defs><g filter="url(#softShadow)"><path d="M60,34 C48,16 34,22 41,34 C44,39 52,38 60,37" fill="none" stroke="url(#silverGradient)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M60,34 C72,16 86,22 79,34 C76,39 68,38 60,37" fill="none" stroke="url(#silverGradient)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="60" cy="35.5" r="2.5" fill="url(#silverGradient)"/><rect x="25" y="38" width="70" height="15" rx="4" fill="none" stroke="url(#silverGradient)" stroke-width="4.5" stroke-linejoin="round"/><path d="M30,53 L30,88 C30,93 34,97 39,97 L81,97 C86,97 90,93 90,88 L90,53" fill="none" stroke="url(#silverGradient)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="51" y="38" width="18" height="15" fill="url(#silverGradient)"/><rect x="51" y="53.5" width="18" height="41.5" fill="url(#silverGradient)"/></g></svg>
+              <p class="text-sm">Mijn voordelen</p>
+          </a>
+         <a href="<?= BASE_URL ?>/inbox" class="glass-card silver-action-card" style="padding: var(--space-lg); text-align: center; text-decoration: none; color: inherit; position: relative;">
+             <p style="font-size: 24px; margin-bottom: var(--space-xs);">&#128233;</p>
+             <p class="text-sm">Inbox</p>
+             <span class="notif-badge" id="inbox-badge" style="display:none;position:absolute;top:8px;right:8px;background:#4CAF50;color:#fff;font-size:11px;font-weight:700;min-width:20px;height:20px;border-radius:10px;align-items:center;justify-content:center;padding:0 5px;">0</span>
+         </a>
+         <a href="<?= BASE_URL ?>/profile" class="glass-card silver-action-card" style="padding: var(--space-lg); text-align: center; text-decoration: none; color: inherit;">
+             <p style="font-size: 24px; margin-bottom: var(--space-xs);">&#128100;</p>
+             <p class="text-sm">Profiel</p>
+         </a>
+     </div>
 </div>
-
-<!-- PWA Install Prompt Logic — detecteert standalone mode -->
-<script>
-(function() {
-    // ── Detect standalone / PWA mode ──
-    var isStandalone = false;
-    try {
-        isStandalone = window.matchMedia('(display-mode: standalone)').matches
-            || window.navigator.standalone === true
-            || document.referrer.indexOf('android-app://') === 0;
-    } catch(_) {}
-
-    // Als al in PWA mode → geen banner tonen
-    if (isStandalone) return;
-
-    // Dismissed onthouden voor 7 dagen
-    var DISMISS_KEY = 'pwa_install_dismissed';
-    var DISMISS_DAYS = 7;
-    try {
-        var dismissed = localStorage.getItem(DISMISS_KEY);
-        if (dismissed) {
-            var elapsed = (Date.now() - parseInt(dismissed, 10)) / (1000 * 60 * 60 * 24);
-            if (elapsed < DISMISS_DAYS) return;
-            localStorage.removeItem(DISMISS_KEY);
-        }
-    } catch(_) {}
-
-    function dismissBanner() {
-        var banner = document.getElementById('pwa-install-banner');
-        if (banner) banner.style.display = 'none';
-        try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch(_) {}
-    }
-
-    var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-    var isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-    var isMobile = /Mobi|Android/i.test(navigator.userAgent);
-
-    var banner = document.getElementById('pwa-install-banner');
-    if (!banner) return;
-
-    // ── iOS Safari: handmatige instructie ──
-    if (isIOS && isSafari) {
-        var iosEl = document.getElementById('pwa-ios-install');
-        if (iosEl) iosEl.style.display = 'block';
-        banner.style.display = 'block';
-
-        var iosDismiss = document.getElementById('pwa-ios-dismiss');
-        if (iosDismiss) iosDismiss.addEventListener('click', dismissBanner);
-        return;
-    }
-
-    // ── Android/Chrome: beforeinstallprompt ──
-    var deferredPrompt = null;
-
-    window.addEventListener('beforeinstallprompt', function(e) {
-        e.preventDefault();
-        deferredPrompt = e;
-        var autoEl = document.getElementById('pwa-auto-install');
-        if (autoEl) autoEl.style.display = 'block';
-        banner.style.display = 'block';
-    });
-
-    var installBtn = document.getElementById('pwa-install-btn');
-    if (installBtn) installBtn.addEventListener('click', function() {
-        if (!deferredPrompt) return;
-        deferredPrompt.prompt();
-        deferredPrompt.userChoice.then(function() {
-            deferredPrompt = null;
-            dismissBanner();
-        });
-    });
-
-    var dismissBtn = document.getElementById('pwa-dismiss-btn');
-    if (dismissBtn) dismissBtn.addEventListener('click', dismissBanner);
-
-    // ── Als geen beforeinstallprompt na 3s → desktop of niet-ondersteunde browser ──
-    setTimeout(function() {
-        if (deferredPrompt) return; // Android/Chrome heeft het al afgehandeld
-        if (isIOS) return; // iOS heeft het al afgehandeld
-
-        // Mobile maar geen beforeinstallprompt → toon iOS-achtige hint
-        if (isMobile) {
-            var iosEl = document.getElementById('pwa-ios-install');
-            if (iosEl) iosEl.style.display = 'block';
-            banner.style.display = 'block';
-            var iosDismiss = document.getElementById('pwa-ios-dismiss');
-            if (iosDismiss) iosDismiss.addEventListener('click', dismissBanner);
-            return;
-        }
-
-        // Desktop browser → toon desktop hint
-        var desktopEl = document.getElementById('pwa-desktop-install');
-        if (desktopEl) desktopEl.style.display = 'block';
-        banner.style.display = 'block';
-        var desktopDismiss = document.getElementById('pwa-desktop-dismiss');
-        if (desktopDismiss) desktopDismiss.addEventListener('click', dismissBanner);
-    }, 3000);
-})();
-</script>
 
 <script src="<?= BASE_URL ?>/public/js/app.js?v=<?= filemtime(PUBLIC_PATH . 'js/app.js') ?>"></script>
 <script src="<?= BASE_URL ?>/public/js/push.js"></script>
@@ -362,34 +222,69 @@ fetch((window.__BASE_URL || '') + '/api/notification/check', {
 <!-- Push Mandatory Overlay — NA push.js zodat iOS Notification API beschikbaar is -->
 <script>
 (function() {
-    // Wacht even zodat iOS de Notification API beschikbaar maakt in PWA mode
-    setTimeout(function() {
-        var overlay = document.getElementById('push-mandatory-overlay');
-        if (!overlay) return; // PHP heeft overlay niet gerenderd (push al actief)
+    var overlay = document.getElementById('push-mandatory-overlay');
+    if (!overlay) return; // PHP heeft overlay niet gerenderd (push al actief)
 
-        var btn = document.getElementById('push-enable-btn');
-        var deniedMsg = document.getElementById('push-denied-msg');
-        var unsupportedMsg = document.getElementById('push-unsupported-msg');
-
-        // Geen Notification support? Toon unsupported bericht
-        if (typeof Notification === 'undefined') {
-            if (unsupportedMsg) unsupportedMsg.style.display = 'block';
-            if (btn) btn.disabled = true;
+    // Al overgeslagen in deze sessie? Verberg direct
+    try {
+        if (sessionStorage.getItem('push_overlay_skipped') === '1') {
+            overlay.style.display = 'none';
             return;
         }
+    } catch(_) {}
 
+    var btn = document.getElementById('push-enable-btn');
+    var skipBtn = document.getElementById('push-skip-btn');
+    var deniedMsg = document.getElementById('push-denied-msg');
+    var unsupportedMsg = document.getElementById('push-unsupported-msg');
+
+    // ── Skip / Later handler — altijd beschikbaar ──
+    function dismissOverlay() {
+        overlay.style.display = 'none';
+        // Onthoud voor deze sessie dat de gebruiker heeft overgeslagen
+        try { sessionStorage.setItem('push_overlay_skipped', '1'); } catch(_) {}
+    }
+
+    if (skipBtn) skipBtn.addEventListener('click', dismissOverlay);
+
+    // ── Retry-logica: iOS PWA kan Notification API met vertraging beschikbaar maken ──
+    var MAX_RETRIES = 5;
+    var RETRY_DELAY = 1000; // ms
+    var retryCount = 0;
+
+    function tryInitPush() {
         // Al geaccepteerd? Overlay verbergen (token wordt door push.js afgehandeld)
-        if (Notification.permission === 'granted') {
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
             overlay.style.display = 'none';
             return;
         }
 
+        // Notification API beschikbaar? Toon juiste UI
+        if (typeof Notification !== 'undefined') {
+            setupPushUI();
+            return;
+        }
+
+        // Notification API nog niet beschikbaar — retry op iOS PWA
+        retryCount++;
+        if (retryCount < MAX_RETRIES) {
+            console.log('[Push Overlay] Notification API nog niet beschikbaar, retry ' + retryCount + '/' + MAX_RETRIES);
+            setTimeout(tryInitPush, RETRY_DELAY);
+        } else {
+            // Na alle retries: toon unsupported maar laat skip-knop zichtbaar
+            console.warn('[Push Overlay] Notification API niet beschikbaar na ' + MAX_RETRIES + ' retries');
+            if (unsupportedMsg) unsupportedMsg.style.display = 'block';
+            if (btn) btn.style.display = 'none';
+        }
+    }
+
+    function setupPushUI() {
         // Geblokkeerd door gebruiker? Toon instructie
         if (Notification.permission === 'denied') {
             if (deniedMsg) deniedMsg.style.display = 'block';
             if (btn) {
                 btn.textContent = 'Notificaties inschakelen';
-                btn.disabled = false; // Keep clickable for retry attempt
+                btn.disabled = false;
             }
         }
 
@@ -401,9 +296,7 @@ fetch((window.__BASE_URL || '') + '/api/notification/check', {
             if (window.FCMHandler && window.FCMHandler.subscribe) {
                 window.FCMHandler.subscribe().then(function(result) {
                     if (result.granted) {
-                        // Success — verberg overlay
                         overlay.style.display = 'none';
-                        // Clear oude flags
                         try { localStorage.removeItem('push_banner_dismissed'); } catch(_) {}
                         try { localStorage.removeItem('push_disabled'); } catch(_) {}
                     } else {
@@ -429,7 +322,10 @@ fetch((window.__BASE_URL || '') + '/api/notification/check', {
                 });
             }
         });
-    }, 1000);
+    }
+
+    // Start na korte delay zodat push.js en SW eerst kunnen initialiseren
+    setTimeout(tryInitPush, 1000);
 })();
 </script>
 

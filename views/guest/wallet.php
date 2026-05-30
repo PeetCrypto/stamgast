@@ -64,42 +64,6 @@ require __DIR__ . '/../shared/header.php';
         <?php endif; ?>
     </div>
 
-    <!-- Deposit Section -->
-    <?php if (!$isUnverified): ?>
-    <div class="info-card glass-card">
-        <h3>Opwaarderen</h3>
-
-        <div id="packages-container">
-            <div class="empty-state" style="padding: var(--space-lg); text-align: center; opacity: 0.5;">
-                <p>Pakketten laden...</p>
-            </div>
-        </div>
-
-        <div class="security-note">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                <path d="M7 11V7a5 5 0 0110 0v4"/>
-            </svg>
-            <span>Betaling via Mollie. Kies een pakket om op te waarderen.</span>
-        </div>
-    </div>
-    <?php else: ?>
-    <!-- Unverified Account - Verification Banner -->
-    <div class="info-card glass-card" style="border: 2px solid rgba(255,193,7,0.3); background: rgba(255,193,7,0.06);">
-        <h3 style="color: #FFC107;">⚠️ Wallet niet actief</h3>
-        <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 1rem;">
-            Hoi! Om je wallet te activeren en saldo te storten, moet je eenmalig je ID laten zien bij de bar. Zo houden we het veilig en legaal.
-        </p>
-        <a href="<?= BASE_URL ?>/pay" class="btn btn-outline" style="border-color: #FFC107; color: #FFC107;">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px;">
-                <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
-                <polyline points="9 22 9 12 15 12 15 22"/>
-            </svg>
-            Ga naar de bar
-        </a>
-    </div>
-    <?php endif; ?>
-
     <!-- Transaction History -->
     <div class="info-card glass-card">
         <h3>Transactiegeschiedenis</h3>

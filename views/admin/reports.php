@@ -393,6 +393,28 @@ $featureMarketing = (bool) ($_tenant['feature_marketing'] ?? true);
         </div>
     </section>
 
+    <!-- Sectie 2b: FOOI -->
+    <section style="margin-bottom: var(--space-xl);">
+        <h2 class="section-title"><span class="section-icon">💸</span> Fooi</h2>
+        <div class="report-grid">
+            <div class="report-card">
+                <div class="report-value" style="color: var(--accent-primary);" id="r-tip-total">--</div>
+                <div class="report-label">Totale fooi ontvangen</div>
+                <div class="report-sub" id="r-tip-info">--</div>
+            </div>
+            <div class="report-card">
+                <div class="report-value" id="r-tip-avg">--</div>
+                <div class="report-label">Gemiddelde fooi per betaling</div>
+                <div class="report-sub" id="r-tip-pct">--</div>
+            </div>
+            <div class="report-card">
+                <div class="report-value" id="r-tip-count">--</div>
+                <div class="report-label">Betalingen met fooi</div>
+                <div class="report-sub" id="r-tip-pct-payments">--</div>
+            </div>
+        </div>
+    </section>
+
     <!-- Sectie 3: BARTENDER BREAKDOWN -->
     <section style="margin-bottom: var(--space-xl);">
         <h2 class="section-title"><span class="section-icon">🍸</span> Omzet per Bartender</h2>
@@ -418,14 +440,15 @@ $featureMarketing = (bool) ($_tenant['feature_marketing'] ?? true);
                         <th>Alcohol</th>
                         <th>Food</th>
                         <th>Korting</th>
+                        <th>Fooi</th>
                         <th>Totaal</th>
                         <th>BTW</th>
                     </tr>
                 </thead>
                 <tbody id="tx-body">
-                    <tr><td colspan="8"><div class="skeleton" style="height: 30px;"></div></td></tr>
-                    <tr><td colspan="8"><div class="skeleton" style="height: 30px;"></div></td></tr>
-                    <tr><td colspan="8"><div class="skeleton" style="height: 30px;"></div></td></tr>
+                    <tr><td colspan="9"><div class="skeleton" style="height: 30px;"></div></td></tr>
+                    <tr><td colspan="9"><div class="skeleton" style="height: 30px;"></div></td></tr>
+                    <tr><td colspan="9"><div class="skeleton" style="height: 30px;"></div></td></tr>
                 </tbody>
             </table>
         </div>
@@ -536,6 +559,18 @@ $featureMarketing = (bool) ($_tenant['feature_marketing'] ?? true);
         document.getElementById('r-outstanding').textContent = fmt(data.wallets.outstanding_balance_cents);
         document.getElementById('r-wallet-count').textContent = `${data.wallets.wallet_count} actieve wallets`;
 
+        // Tip section
+        var tipTotal = data.payments.tip_total_cents || 0;
+        var txCount = data.payments.transaction_count || 0;
+        var revenueCents = data.payments.revenue_cents || 0;
+        document.getElementById('r-tip-total').textContent = fmt(tipTotal);
+        document.getElementById('r-tip-info').textContent = `Over ${txCount} betaling${txCount !== 1 ? 'en' : ''}`;
+        document.getElementById('r-tip-avg').textContent = txCount > 0 ? fmt(Math.round(tipTotal / txCount)) : '€0,00';
+        var tipPct = revenueCents > 0 ? (tipTotal / (revenueCents - tipTotal) * 100).toFixed(1) : '0.0';
+        document.getElementById('r-tip-pct').textContent = `${tipPct}% van omzet`;
+        document.getElementById('r-tip-count').textContent = '--'; // Updated from transactions
+        document.getElementById('r-tip-pct-payments').textContent = '--';
+
         // Bartender breakdown
         renderBartenders(data.bartender_breakdown);
     }
@@ -547,26 +582,35 @@ $featureMarketing = (bool) ($_tenant['feature_marketing'] ?? true);
             return;
         }
         const maxRev = Math.max(...bartenders.map(b => b.revenue_cents), 1);
-        el.innerHTML = bartenders.map(b => `
+        el.innerHTML = bartenders.map(b => {
+            const tipStr = b.tip_cents > 0 ? ' <span style="font-size:12px;color:var(--accent-primary);">(💸 ' + fmt(b.tip_cents) + ' fooi)</span>' : '';
+            return `
             <div class="bar-item">
                 <span class="bar-name">${b.name}</span>
                 <div class="bar-track">
                     <div class="bar-fill" style="width: ${(b.revenue_cents / maxRev * 100).toFixed(1)}%;"></div>
                 </div>
-                <span class="bar-amount">${fmt(b.revenue_cents)}</span>
-            </div>
-        `).join('');
+                <span class="bar-amount">${fmt(b.revenue_cents)}${tipStr}</span>
+            </div>`;
+        }).join('');
     }
 
     // ── Render transactielijst ──
     function renderTransactions(data) {
         const tbody = document.getElementById('tx-body');
         if (!data || !data.transactions || data.transactions.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" style="color: var(--text-secondary); text-align: center; padding: var(--space-xl);">Geen transacties gevonden</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" style="color: var(--text-secondary); text-align: center; padding: var(--space-xl);">Geen transacties gevonden</td></tr>';
             return;
         }
+        var tipPayments = 0;
+        var totalPayments = 0;
         tbody.innerHTML = data.transactions.map(tx => {
             const discount = tx.discount_alc_cents + tx.discount_food_cents;
+            const tip = tx.tip_cents || 0;
+            if (tx.type === 'payment') {
+                totalPayments++;
+                if (tip > 0) tipPayments++;
+            }
             return `<tr>
                 <td>${formatTime(tx.created_at)}</td>
                 <td><span class="tx-type ${tx.type}">${typeLabels[tx.type] || tx.type}</span></td>
@@ -574,10 +618,16 @@ $featureMarketing = (bool) ($_tenant['feature_marketing'] ?? true);
                 <td>${tx.amount_alc_cents > 0 ? fmt(tx.amount_alc_cents) : '-'}</td>
                 <td>${tx.amount_food_cents > 0 ? fmt(tx.amount_food_cents) : '-'}</td>
                 <td style="${discount > 0 ? 'color: var(--error);' : ''}">${discount > 0 ? '- ' + fmt(discount) : '-'}</td>
+                <td style="${tip > 0 ? 'color: var(--accent-primary); font-weight: 600;' : ''}">${tip > 0 ? fmt(tip) : '-'}</td>
                 <td style="font-weight: 600;">${fmt(tx.final_total_cents)}</td>
                 <td>${tx.btw_total_cents > 0 ? fmt(tx.btw_total_cents) : '-'}</td>
             </tr>`;
         }).join('');
+
+        // Update tip count cards after transactions are rendered
+        document.getElementById('r-tip-count').textContent = tipPayments;
+        var tipPctPayments = totalPayments > 0 ? (tipPayments / totalPayments * 100).toFixed(0) : '0';
+        document.getElementById('r-tip-pct-payments').textContent = `${tipPctPayments}% van ${totalPayments} betalingen`;
     }
 
     // ── Load everything ──

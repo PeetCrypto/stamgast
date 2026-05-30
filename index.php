@@ -713,6 +713,7 @@ function handleViewRoute(string $route, string $method): void
         'qr'        => 'guest/qr.php',
         'pay'       => 'guest/scan.php',
         'inbox'     => 'guest/inbox.php',
+        'benefits'  => 'guest/benefits.php',
         'profile'   => 'guest/profile/index.php',
         'pin-setup' => 'guest/pin-setup.php',
 
@@ -828,6 +829,7 @@ function handleViewRoute(string $route, string $method): void
             'guest/qr.php',
             'guest/scan.php',
             'guest/inbox.php',
+            'guest/benefits.php',
             'guest/profile/index.php',
             'guest/pin-setup.php',
         ];

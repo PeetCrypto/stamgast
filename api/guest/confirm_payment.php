@@ -22,9 +22,16 @@ if ($method !== 'POST') {
 
 $input = getJsonInput();
 $sessionToken = trim($input['session_token'] ?? '');
+$tipCents = (int) ($input['tip_cents'] ?? 0);
 
 if ($sessionToken === '') {
     Response::error('session_token is vereist', 'VALIDATION_ERROR', 422);
+}
+if ($tipCents < 0) {
+    Response::error('tip_cents mag niet negatief zijn', 'VALIDATION_ERROR', 422);
+}
+if ($tipCents > 10000) {
+    Response::error('Fooi mag maximaal €100,00 zijn', 'VALIDATION_ERROR', 422);
 }
 
 $userId   = currentUserId();
@@ -72,7 +79,8 @@ try {
         $tenantId,
         (int) $session['bartender_id'],
         (int) $session['amount_alc_cents'],
-        (int) $session['amount_food_cents']
+        (int) $session['amount_food_cents'],
+        $tipCents
     );
 
     // Step 6: Mark session as confirmed

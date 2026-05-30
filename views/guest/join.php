@@ -174,6 +174,8 @@ $sessionTenantName = $_SESSION['tenant_name'] ?? APP_NAME;
 </head>
 <body class="auth-page">
 
+<?php require VIEWS_PATH . 'shared/pwa-install-banner.php'; ?>
+
 <div class="auth-container">
 
     <div class="glass-card animate-in">
@@ -409,7 +411,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
             age--;
         }
-        if (age < 15) {
+        if (age < 18) {
             showError('Je moet minimaal 18 jaar oud zijn om alcohol te bestellen.');
             return;
         }
@@ -485,7 +487,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Birthdate: max = today - 18y, default = 25y ago
     const birthdateInput = document.getElementById('birthdate');
     const maxDate = new Date();
-    maxDate.setFullYear(maxDate.getFullYear() - 15);
+    maxDate.setFullYear(maxDate.getFullYear() - 18);
     birthdateInput.max = maxDate.toISOString().split('T')[0];
 
     const defaultDate = new Date();

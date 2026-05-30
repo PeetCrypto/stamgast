@@ -108,6 +108,8 @@ $tenantLogo = $_SESSION['tenant_logo'] ?? ''; // Tenant uploaded logo URL
 </head>
 <body class="<?= isset($bodyClass) ? sanitize($bodyClass) : '' ?>">
 
+<?php require VIEWS_PATH . 'shared/pwa-install-banner.php'; ?>
+
 <?php if (isLoggedIn()): ?>
 <nav class="nav-top">
     <div style="display:flex;align-items:center;width:100%;">
