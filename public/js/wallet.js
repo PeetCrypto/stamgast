@@ -250,7 +250,8 @@
         }
 
         container.innerHTML = transactions.map(function(tx) {
-            const isPositive = tx.type === 'deposit' || tx.type === 'bonus';
+            const isPositive = tx.type === 'deposit' || tx.type === 'bonus'
+                || (tx.type === 'correction' && tx.final_total_cents > 0);
             const amount = isPositive ? tx.final_total_cents : -tx.final_total_cents;
             const date = new Date(tx.created_at).toLocaleDateString('nl-NL', {
                 day: 'numeric',

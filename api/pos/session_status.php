@@ -76,6 +76,7 @@ try {
         'status'            => $status,
         'guest_name'        => $session['guest_name'],
         'final_total_cents' => (int) $session['final_total_cents'],
+        'tip_cents'         => (int) ($session['tip_cents'] ?? 0),
         'transaction_id'    => $session['transaction_id'] ? (int) $session['transaction_id'] : null,
         'error_message'     => $session['error_message'],
         'tier'              => $tierInfo,

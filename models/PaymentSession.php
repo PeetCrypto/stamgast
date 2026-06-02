@@ -114,19 +114,22 @@ class PaymentSession
 
     /**
      * Mark session as confirmed (payment successful)
+     * Also stores tip_cents so the bartender polling endpoint can show the tip.
      */
-    public function markConfirmed(int $id, int $transactionId): bool
+    public function markConfirmed(int $id, int $transactionId, int $tipCents = 0): bool
     {
         $stmt = $this->db->prepare(
             'UPDATE `pos_payment_sessions`
              SET `status` = \'confirmed\',
                  `transaction_id` = :tx_id,
+                 `tip_cents` = :tip_cents,
                  `confirmed_at` = NOW()
              WHERE `id` = :id AND `status` = \'scanned\''
         );
         $stmt->execute([
-            ':tx_id' => $transactionId,
-            ':id'    => $id,
+            ':tx_id'     => $transactionId,
+            ':tip_cents' => $tipCents,
+            ':id'        => $id,
         ]);
         return $stmt->rowCount() === 1;
     }

@@ -29,7 +29,7 @@ $firstName = $_SESSION['first_name'] ?? 'Bartender';
          <div class="payment-page" style="padding:1rem;">
             <!-- Alcohol amount -->
             <div class="payment-field glass-card" style="padding:1rem;margin-bottom:0.75rem;">
-                <div class="payment-field__label">Alcohol</div>
+                <div class="payment-field__label">Alcohol (21%)</div>
                 <input type="number" id="alc-input" inputmode="decimal" class="form-input" placeholder="0.00" step="0.01" min="0"
                     style="text-align:center;font-size:28px;font-weight:700;color:var(--accent-primary);background:transparent;border:1px dashed var(--border-color);border-radius:8px;padding:0.25rem 0.5rem;width:100%;">
                 <div style="display:flex;gap:0.25rem;margin-top:0.5rem;flex-wrap:wrap;justify-content:center;">
@@ -42,7 +42,7 @@ $firstName = $_SESSION['first_name'] ?? 'Bartender';
 
             <!-- Food amount -->
             <div class="payment-field glass-card" style="padding:1rem;margin-bottom:0.75rem;">
-                <div class="payment-field__label">Eten</div>
+                <div class="payment-field__label">Non-Alcohol (9%)</div>
                 <input type="number" id="food-input" inputmode="decimal" class="form-input" placeholder="0.00" step="0.01" min="0"
                     style="text-align:center;font-size:28px;font-weight:700;color:var(--accent-primary);background:transparent;border:1px dashed var(--border-color);border-radius:8px;padding:0.25rem 0.5rem;width:100%;">
                 <div style="display:flex;gap:0.25rem;margin-top:0.5rem;flex-wrap:wrap;justify-content:center;">
@@ -109,12 +109,41 @@ $firstName = $_SESSION['first_name'] ?? 'Bartender';
 
     <!-- ============ STATE: SUCCESS ============ -->
     <div id="state-success" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,0.95);flex-direction:column;align-items:center;justify-content:center;padding:2rem;">
-        <div style="font-size:120px;line-height:1;">&#10003;</div>
-        <h2 style="color:#4CAF50;font-size:32px;margin-bottom:0.5rem;">BETALING GELUKT!</h2>
-        <p id="success-amount" style="color:var(--text-secondary);font-size:24px;font-weight:600;margin-bottom:0.25rem;"></p>
-        <p id="success-guest" style="color:var(--text-muted);font-size:16px;margin-bottom:2rem;"></p>
-        <button class="btn btn-primary" id="btn-next-guest" style="font-size:18px;padding:1rem 2rem;">Volgende gast</button>
+        <!-- Confetti canvas -->
+        <canvas id="confetti-canvas" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;"></canvas>
+        <!-- Golden glow flash -->
+        <div id="tip-glow" style="display:none;position:absolute;inset:0;pointer-events:none;z-index:0;
+            box-shadow:inset 0 0 120px 40px rgba(255,215,0,0.25);animation:tipGlowFade 1.8s ease-out forwards;"></div>
+
+        <div style="position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+            <div style="font-size:120px;line-height:1;color:#4CAF50;font-weight:900;">&#10003;</div>
+            <h2 style="color:#4CAF50;font-size:32px;margin-bottom:0.5rem;">BETALING GELUKT!</h2>
+            <p id="success-amount" style="color:var(--text-secondary);font-size:24px;font-weight:600;margin-bottom:0.25rem;"></p>
+
+            <!-- FOOI CELEBRATION BADGE -->
+            <div id="tip-badge" style="display:none;margin:0.75rem 0 0.25rem;text-align:center;">
+                <div style="font-size:14px;color:#FFD700;text-transform:uppercase;letter-spacing:3px;font-weight:700;margin-bottom:0.15rem;">Fooi</div>
+                <div id="tip-amount" style="font-size:42px;font-weight:800;color:#FFD700;text-shadow:0 0 30px rgba(255,215,0,0.5),0 0 60px rgba(255,215,0,0.25);"></div>
+                <div style="font-size:20px;margin-top:0.35rem;">🎉</div>
+            </div>
+
+            <p id="success-guest" style="color:var(--text-muted);font-size:16px;margin-bottom:2rem;"></p>
+            <button class="btn btn-primary" id="btn-next-guest" style="font-size:18px;padding:1rem 2rem;">Volgende gast</button>
+        </div>
     </div>
+
+    <style>
+        @keyframes tipBadgeIn {
+            0%   { opacity:0; transform:scale(0.2); }
+            50%  { opacity:1; transform:scale(1.15); }
+            70%  { transform:scale(0.95); }
+            100% { opacity:1; transform:scale(1); }
+        }
+        @keyframes tipGlowFade {
+            0%   { opacity:1; }
+            100% { opacity:0; }
+        }
+    </style>
 
     <!-- ============ STATE: FAILED ============ -->
     <div id="state-failed" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,0.95);flex-direction:column;align-items:center;justify-content:center;padding:2rem;">
@@ -447,10 +476,95 @@ $firstName = $_SESSION['first_name'] ?? 'Bartender';
         }
     }
 
+    // --- Confetti celebration (no external library) ---
+    function launchConfetti() {
+        var canvas = document.getElementById('confetti-canvas');
+        if (!canvas) return;
+        var ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        var particles = [];
+        var colors = ['#FFD700','#FFA500','#FF6347','#4CAF50','#FFFFFF','#FF69B4','#00CED1'];
+        var totalFrames = 180;
+        var frame = 0;
+
+        for (var i = 0; i < 120; i++) {
+            var angle = Math.random() * Math.PI * 2;
+            var speed = 4 + Math.random() * 8;
+            particles.push({
+                x: canvas.width / 2,
+                y: canvas.height / 2,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed - 3,
+                size: 3 + Math.random() * 5,
+                color: colors[Math.floor(Math.random() * colors.length)],
+                rotation: Math.random() * 360,
+                rotSpeed: (Math.random() - 0.5) * 12,
+                gravity: 0.12 + Math.random() * 0.08,
+                opacity: 1,
+                shape: Math.random() > 0.5 ? 'rect' : 'circle'
+            });
+        }
+
+        function tick() {
+            if (frame >= totalFrames) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                return;
+            }
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            for (var i = 0; i < particles.length; i++) {
+                var p = particles[i];
+                p.x += p.vx;
+                p.vy += p.gravity;
+                p.y += p.vy;
+                p.vx *= 0.99;
+                p.rotation += p.rotSpeed;
+                p.opacity = Math.max(0, 1 - (frame / totalFrames));
+
+                ctx.save();
+                ctx.translate(p.x, p.y);
+                ctx.rotate(p.rotation * Math.PI / 180);
+                ctx.globalAlpha = p.opacity;
+                ctx.fillStyle = p.color;
+
+                if (p.shape === 'rect') {
+                    ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+                } else {
+                    ctx.beginPath();
+                    ctx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.restore();
+            }
+
+            frame++;
+            requestAnimationFrame(tick);
+        }
+        tick();
+    }
+
     // --- Success / Failed ---
     function showSuccess(data) {
         $('#success-amount').textContent = fmtCents(data.final_total_cents || 0);
         $('#success-guest').textContent = data.guest_name || '';
+
+        var tipCents = data.tip_cents || 0;
+        var tipBadge = document.getElementById('tip-badge');
+        var tipGlow = document.getElementById('tip-glow');
+
+        if (tipCents > 0 && tipBadge) {
+            document.getElementById('tip-amount').textContent = fmtCents(tipCents);
+            tipBadge.style.display = 'block';
+            tipBadge.style.animation = 'tipBadgeIn 0.6s cubic-bezier(0.34,1.56,0.64,1) forwards';
+            if (tipGlow) tipGlow.style.display = 'block';
+            launchConfetti();
+        } else {
+            if (tipBadge) { tipBadge.style.display = 'none'; tipBadge.style.animation = ''; }
+            if (tipGlow) tipGlow.style.display = 'none';
+        }
+
         switchState('success');
     }
 
@@ -478,6 +592,18 @@ $firstName = $_SESSION['first_name'] ?? 'Bartender';
         if (qrLoading) qrLoading.style.display = 'flex';
         var btn = $('#btn-generate-qr');
         if (btn) btn.disabled = false;
+
+        // Reset confetti & tip celebration
+        var confettiCanvas = document.getElementById('confetti-canvas');
+        if (confettiCanvas) {
+            var cctx = confettiCanvas.getContext('2d');
+            cctx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+        }
+        var tipBadge = document.getElementById('tip-badge');
+        if (tipBadge) { tipBadge.style.display = 'none'; tipBadge.style.animation = ''; }
+        var tipGlow = document.getElementById('tip-glow');
+        if (tipGlow) tipGlow.style.display = 'none';
+
         switchState('amount');
     }
 

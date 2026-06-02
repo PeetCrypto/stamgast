@@ -83,8 +83,8 @@ try {
         $tipCents
     );
 
-    // Step 6: Mark session as confirmed
-    $sessionModel->markConfirmed((int) $session['id'], $result['transaction_id']);
+    // Step 6: Mark session as confirmed (including tip_cents for bartender polling)
+    $sessionModel->markConfirmed((int) $session['id'], $result['transaction_id'], $tipCents);
 
     Response::success([
         'transaction_id'   => $result['transaction_id'],
