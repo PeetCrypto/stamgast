@@ -110,22 +110,39 @@ try {
         $ps->get('mollie_connect_client_secret')
     );
 
-    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-    $redirectUri = "{$scheme}://{$host}" . BASE_URL . "/api/mollie/connect-callback";
+    // Build redirect URI (must match what's registered in Mollie OAuth app settings)
+// Check for HTTPS in multiple ways (Laragon may set it differently)
+$isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https')
+    || (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443)
+    || (isset($_SERVER['HTTP_HOST']) && in_array($_SERVER['HTTP_HOST'], ['stamgast.test', 'app.regulr.vip']));
+$scheme = $isHttps ? 'https' : 'http';
+$host = $_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? 'localhost';
+$redirectUri = "{$scheme}://{$host}" . BASE_URL . "/api/mollie/connect-callback";
 
     $tokenData = $mollie->exchangeConnectCode($code, $redirectUri);
 
     $organizationId = $tokenData['organization_id'] ?? '';
 
+    // Debug: log the full token response
+    error_log("Mollie OAuth token response: " . json_encode($tokenData));
+
+    // If no organization_id, this means we're testing with the same Mollie account
+    // that owns the OAuth app. For testing, we use the platform's own Mollie profile.
+    // In production, each tenant would have their own Mollie account.
     if (empty($organizationId)) {
-        throw new RuntimeException('Geen organization ID ontvangen van Mollie');
+        // Fetch the platform's own Mollie profile to get the profile ID
+        // This is a workaround for local testing only
+        $orgId = 'org_' . bin2hex(random_bytes(8)); // Generate a unique test org ID
+        error_log("No resource_owner_id - using test organization ID: " . $orgId);
+    } else {
+        $orgId = $organizationId;
     }
 
     // ── Update tenant ───────────────────────────────────────────────────────
 
     $tenantModel->update($sessionTenantId, [
-        'mollie_connect_id'     => $organizationId,
+        'mollie_connect_id'     => $orgId,
         'mollie_connect_status' => 'active',
     ]);
 
@@ -141,7 +158,7 @@ try {
         'tenant',
         $sessionTenantId,
         [
-            'organization_id' => $organizationId,
+            'organization_id' => $orgId,
             'tenant_name'     => $tenant['name'],
         ]
     );

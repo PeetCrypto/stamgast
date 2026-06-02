@@ -290,11 +290,14 @@ if (!empty($user['email_verified_at'])) {
                 </button>
             </form>
 
-            <div class="resend-section">
-                <p>Geen code ontvangen?</p>
-                <button id="resend-btn" class="resend-btn">Code opnieuw versturen</button>
-                <p id="resend-timer" style="display:none; color: var(--text-muted); font-size: 13px;"></p>
-            </div>
+        <div class="resend-section">
+            <p>Geen code ontvangen?</p>
+            <button id="resend-btn" class="resend-btn">Code opnieuw versturen</button>
+            <p id="resend-timer" style="display:none; color: var(--text-muted); font-size: 13px;"></p>
+            <p style="margin-top: 1rem;">
+                <a href="/j/<?= sanitize($tenantSlug) ?>/register" style="color: var(--text-secondary); font-size: 13px; text-decoration: underline;">Verkeerad e-mailadres? Opnieuw registreren</a>
+            </p>
+        </div>
         </div>
 
     </div>

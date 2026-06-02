@@ -1,0 +1,383 @@
+# Mollie Connect Testhandleiding
+# REGULR.vip Loyalty Platform
+# Laatst bijgewerkt: 30 mei 2026
+
+================================================================================
+DEZE FILE BESCHRIJFT HOE JE DE MOLLIE CONNECT INTEGRATIE KUNT TESTEN
+VAN BEGIN TOT EIND, ZOWEL LOKAAL ALS OP PRODUCTIE.
+================================================================================
+
+
+================================================================================
+STAP 0: VOORBEREIDING BIJ MOLLIE
+================================================================================
+
+1. Maak een Mollie account aan op https://www.mollie.com
+
+2. Maak een OAuth App aan via:
+   Mollie Dashboard → Developers → OAuth Apps → Nieuwe app
+
+   Vul in:
+   - Naam: REGULR.vip (Test)
+   - Redirect URI:
+     * Lokaal:    http://stamgast.test/api/mollie/connect-callback
+     * Productie: https://app.regulr.vip/api/mollie/connect-callback
+   - Scopes aanvinken:
+     * organizations.read
+     * payments.read
+
+3. Noteer na aanmaken:
+   - Client ID    (begint met app_)
+   - Client Secret
+
+4. Maak een API key aan via:
+   Mollie Dashboard → Developers → API keys
+
+   - Voor testen: gebruik de TEST key (begint met test_)
+   - Voor live:    gebruik de LIVE key (begint met live_)
+
+
+================================================================================
+STAP 1: PLATFORM INSTELLINGEN CONFIGUREREN (als superadmin)
+================================================================================
+
+1. Log in als superadmin op het platform
+
+2. Ga naar Platform Instellingen:
+   Lokaal:    http://stamgast.test/superadmin/settings
+   Productie: https://app.regulr.vip/superadmin/settings
+
+3. Tab "Platform Instellingen" → vul in onder "Mollie Connect":
+
+   ┌─────────────────────────────┬──────────────────────────────────┐
+   │ Veld                        │ Waarde                           │
+   ├─────────────────────────────┼──────────────────────────────────┤
+   │ Mollie Modus (standaard)    │ Test                             │
+   │ OAuth Client ID             │ app_xxxxxxxxxxxxxxxx             │
+   │ OAuth Client Secret         │ (je secret van Mollie)           │
+   │ Platform API Key            │ test_xxxxxxxxxxxxxxxxxxxxxxxx    │
+   └─────────────────────────────┴──────────────────────────────────┘
+
+4. Klik "Instellingen Opslaan"
+
+5. CONTROLE: Alle 4 velden moeten nu ✓ tonen in het status overzicht:
+   - Client ID:        ✓ Ingesteld
+   - Client Secret:    ✓ Ingesteld
+   - Platform API Key: ✓ Ingesteld
+   - Bericht: "Mollie Connect is volledig geconfigureerd"
+
+
+================================================================================
+STAP 2: TENANT KOPPELEN VIA MOLLIE CONNECT (als superadmin)
+================================================================================
+
+1. Ga naar Tenants:
+   /superadmin/tenants
+
+2. Klik op je test-tenant
+
+3. Scroll naar "Platform Fee & Mollie Connect"
+
+4. Stel de fee in:
+   ┌─────────────────────────────┬──────────────────────────────────┐
+   │ Veld                        │ Waarde                           │
+   ├─────────────────────────────┼──────────────────────────────────┤
+   │ Fee Percentage (%)          │ 1.00 (1%)                        │
+   │ Minimum Fee (cents)         │ 25 (€0.25)                       │
+   │ Factuur Periode             │ Maandelijks                      │
+   │ BTW Nummer                  │ (optioneel)                      │
+   │ Factuur E-mail              │ (optioneel)                      │
+   └─────────────────────────────┴──────────────────────────────────┘
+
+5. Klik "Fee Config Opslaan"
+
+6. Onder "Mollie Connect" → klik "Koppel Mollie Connect"
+
+7. Je wordt nu doorgestuurd naar Mollie's OAuth autorisatie pagina
+
+8. Log in met je Mollie account en klik "Toestaan"
+
+9. Na autorisatie kom je terug op de tenant detail pagina met:
+   "Mollie Connect succesvol gekoppeld!"
+
+10. CONTROLE:
+    - Status badge: "Actief" (groen)
+    - Org ID zichtbaar (bijv. org_12345678)
+    - Knop veranderd naar "Ontkoppelen"
+
+
+================================================================================
+STAP 3: TENANT MOLLIE MODUS INSTELLEN (als superadmin)
+================================================================================
+
+1. Blijf op de tenant detail pagina
+
+2. Bij "NAW Gegevens" → zet "Mollie Status" op "Test"
+
+3. Klik "Opslaan" onderaan het NAW formulier
+
+4. CONTROLE: "✓ Opgeslagen" verschijnt
+
+
+================================================================================
+STAP 4: TEST BETALING UITVOEREN (als gast)
+================================================================================
+
+1. Log in als gast op de tenant
+
+2. Zorg dat het account status "active" heeft:
+   - Als verification_required AAN staat: laat barman je ID verifieren
+   - Als verification_required UIT staat: account is direct actief
+
+3. Ga naar Wallet
+
+4. Kies een pakket en klik om op te waarderen
+
+5. Je wordt nu doorgestuurd naar de MOLLIE TEST CHECKOUT pagina
+
+6. Op de Mollie test pagina:
+   - Kies betaalmethode (bijv. iDEAL)
+   - Kies je bank
+   - Mollie toont test-betaalgegevens
+   - Klik "Betaal" of "Simuleer succes"
+
+7. Na betaling kom je terug op de wallet pagina
+
+8. CONTROLE:
+   - Saldo is bijgewerkt met het gestorte bedrag
+   - Eventuele bonus is toegevoegd
+   - Transactie verschijnt in de geschiedenis
+
+
+================================================================================
+STAP 5: FEE VERIFICEREN (als superadmin)
+================================================================================
+
+1. Log in als superadmin
+
+2. Ga naar Fees dashboard:
+   /superadmin/fees
+
+3. CONTROLEER per transactie:
+   ┌─────────────────────────────┬──────────────────────────────────┐
+   │ Veld                        │ Verwachte waarde                 │
+   ├─────────────────────────────┼──────────────────────────────────┤
+   │ Gross amount                │ Het gestorte bedrag (bijv. €100) │
+   │ Fee amount                  │ Berekend percentage (bijv. €1)   │
+   │ Net amount                  │ Gross - Fee (bijv. €99)          │
+   │ Fee percentage              │ 1.00 (snapshot)                  │
+   │ Status                      │ collected                        │
+   └─────────────────────────────┴──────────────────────────────────┘
+
+4. Ga naar Tenants → tenant detail → Fee Statistieken
+
+5. CONTROLE:
+   - "Vandaag" toont correcte fee totaal
+   - "Deze Maand" toont correcte fee totaal
+
+
+================================================================================
+STAP 6: VERIFIEREN IN MOLLIE DASHBOARD
+================================================================================
+
+1. Log in op https://www.mollie.com/dashboard
+
+2. Ga naar "Betalingen"
+
+3. CONTROLE:
+   - Je ziet de test betaling
+   - In de betalingsdetails staat "Application fee"
+   - Het bedrag van de application fee klopt
+
+4. Ga naar "Uitbetalingen" (als beschikbaar in test)
+
+5. CONTROLE:
+   - Het bedrag (minus fee) gaat naar het gekoppelde Mollie account
+   - De fee gaat naar het platform Mollie account
+
+
+================================================================================
+GELDSTROOM DIAGRAM
+================================================================================
+
+  Gast stort €100 via Mollie Checkout
+         │
+         ▼
+  ┌─────────────────────────────────────────────┐
+  │           MOLLIE VERWERKT BETALING           │
+  │                                              │
+  │  €100 binnen                                │
+  │    ├── applicationFee: €1.00 (1%)            │
+  │    │   → direct naar REGULR.vip platform     │
+  │    │                                         │
+  │    └── €99.00                                │
+  │        → direct naar tenant's Mollie account │
+  └─────────────────────────────────────────────┘
+         │
+         ▼
+  Webhook bevestigt betaling
+         │
+         ▼
+  Gast wallet +€100 (volledige storting als credit)
+  Platform fee record aangemaakt (€1.00)
+
+
+================================================================================
+LOKAAL TESTEN ZONDER ECHTE MOLLIE (MOCK MODUS)
+================================================================================
+
+Als je lokaal wilt testen ZONDER Mollie API calls:
+
+1. Zet de tenant op "Mock" modus (via superadmin → tenant detail → Mollie Status)
+
+2. Gast stort → betaling wordt DIRECT gesimuleerd:
+   - Geen redirect naar Mollie
+   - Wallet wordt direct bijgewerkt
+   - Fee wordt lokaal berekend
+
+3. Dit is de snelste manier om de wallet + fee flow te testen
+
+
+================================================================================
+TEST SCENARIO'S OVERZICHT
+================================================================================
+
+┌────┬──────────────────────────────────────────┬───────────────────────────────┐
+│ #  │ Scenario                                  │ Verwacht Resultaat            │
+├────┼──────────────────────────────────────────┼───────────────────────────────┤
+│ 1  │ Mock modus storting                       │ Direct verwerkt, geen Mollie  │
+│    │                                           │ redirect                      │
+├────┼──────────────────────────────────────────┼───────────────────────────────┤
+│ 2  │ Test modus ZONDER Connect                 │ Fout: "Tenant heeft geen      │
+│    │                                           │ actieve Mollie Connect"       │
+├────┼──────────────────────────────────────────┼───────────────────────────────┤
+│ 3  │ Test modus MET Connect                    │ Redirect naar Mollie checkout │
+├────┼──────────────────────────────────────────┼───────────────────────────────┤
+│ 4  │ Fee berekening: €100 @ 1%                 │ €1.00 fee (boven min €0.25)  │
+├────┼──────────────────────────────────────────┼───────────────────────────────┤
+│ 5  │ Fee berekening: €10 @ 1%                  │ €0.25 fee (minimum toegepast)│
+├────┼──────────────────────────────────────────┼───────────────────────────────┤
+│ 6  │ Dubbele webhook voorzelfde betaling       │ Idempotent: wallet NIET       │
+│    │                                           │ dubbel gecrediteerd           │
+├────┼──────────────────────────────────────────┼───────────────────────────────┤
+│ 7  │ Connect ontkoppelen                       │ Status → none, betalingen     │
+│    │                                           │ geblokkeerd in test/live      │
+├────┼──────────────────────────────────────────┼───────────────────────────────┤
+│ 8  │ Gast met account_status unverified        │ Fout: "Je account is nog      │
+│    │ probeert te storten                       │ niet geactiveerd"             │
+├────┼──────────────────────────────────────────┼───────────────────────────────┤
+│ 9  │ Storting onder minimum (€100)             │ Fout: "Minimum opwaardering   │
+│    │                                           │ is €100"                      │
+├────┼──────────────────────────────────────────┼───────────────────────────────┤
+│ 10 │ Storting boven maximum (€500)             │ Fout: "Maximum opwaardering   │
+│    │                                           │ is €500"                      │
+├────┼──────────────────────────────────────────┼───────────────────────────────┤
+│ 11 │ Platform API key niet ingesteld           │ Fout: "Platform Mollie        │
+│    │                                           │ Connect API key niet          │
+│    │                                           │ geconfigureerd"               │
+├────┼──────────────────────────────────────────┼───────────────────────────────┤
+│ 12 │ OAuth Client ID niet ingesteld            │ Fout bij klikken "Koppel      │
+│    │                                           │ Mollie Connect"               │
+└────┴──────────────────────────────────────────┴───────────────────────────────┘
+
+
+================================================================================
+BELANGRIJKE BESTANDEN IN DE CODEBASE
+================================================================================
+
+Services:
+  services/MollieService.php        - Mollie API wrapper (createPayment, getPaymentStatus, OAuth)
+  services/WalletService.php        - Deposit orchestration (createDeposit, processDeposit)
+  services/PlatformFeeService.php   - Fee berekening, facturatie, statistieken
+
+API Endpoints:
+  api/mollie/webhook.php            - Mollie webhook (server-to-server, geen auth)
+  api/mollie/connect-callback.php   - OAuth callback (na Mollie autorisatie)
+  api/superadmin/connect_mollie.php - OAuth initiation (start connect flow)
+  api/wallet/deposit.php            - Gast start storting
+  api/admin/settings.php            - Admin instellingen (mollie_status)
+  api/superadmin/tenants.php        - Superadmin tenant beheer + fee config
+  api/superadmin/fees.php           - Fee dashboard data
+
+Modellen:
+  models/MollieService.php          - (zelfde als services/)
+  models/PlatformFee.php            - Fee ledger CRUD
+  models/PlatformSetting.php        - Platform key-value store
+  models/PlatformInvoice.php        - Verzamelfacturen
+  models/Tenant.php                 - Tenant CRUD (isConnectActive, getFeeConfig)
+  models/Transaction.php            - Transactie ledger
+  models/Wallet.php                 - Atomic balance operations
+
+Views:
+  views/superadmin/settings.php     - Platform Mollie Connect credentials
+  views/superadmin/tenant_detail.php - Per-tenant fee + connect beheer
+  views/superadmin/fees.php         - Fee dashboard
+  views/admin/settings.php          - Admin betaalmodus selectie
+
+Config:
+  config/app.php                    - Constants: MOLLIE_CONNECT_*, PLATFORM_FEE_*
+
+Database tabellen:
+  tenants                           - mollie_status, mollie_connect_id, mollie_connect_status,
+                                       platform_fee_percentage, platform_fee_min_cents
+  transactions                      - mollie_payment_id, type, final_total_cents
+  platform_fees                     - Fee ledger per transactie
+  platform_invoices                 - Verzamelfacturen
+  platform_settings                 - mollie_connect_api_key, client_id, client_secret
+
+
+================================================================================
+VAN TEST NAAR LIVE
+================================================================================
+
+Als alles werkt in test modus:
+
+1. Verander Platform API Key naar je LIVE key (live_xxx)
+   via Superadmin → Platform Instellingen
+
+2. Verander tenant Mollie Status naar "Live"
+   via Superadmin → Tenant detail → NAW → Mollie Status
+
+3. LET OP: De OAuth Connect koppeling hoeft NIET opnieuw
+   (dezelfde Mollie account werkt voor zowel test als live)
+
+4. Test met een KLEIN bedrag (bijv. €1.01) om te bevestigen
+   dat echte betalingen werken
+
+5. Controleer in Mollie Dashboard dat de betaling binnenkomt
+   en de applicationFee correct wordt afgetrokken
+
+
+================================================================================
+PROBLEMEN OPLOSSEN
+================================================================================
+
+Probleem: "Tenant heeft geen actieve Mollie Connect account"
+Oplossing: Ga naar superadmin → tenant detail → klik "Koppel Mollie Connect"
+
+Probleem: "Platform Mollie Connect API key niet geconfigureerd"
+Oplossing: Ga naar superadmin → Platform Instellingen → vul Platform API Key in
+
+Probleem: "Mollie Connect Client ID niet geconfigureerd"
+Oplossing: Ga naar superadmin → Platform Instellingen → vul OAuth Client ID in
+
+Probleem: Webhook wordt niet aangeroepen door Mollie
+Oplossing: Controleer dat de webhook URL bereikbaar is vanaf internet
+           (lokaal testen met mock modus, of gebruik ngrok voor test modus)
+
+Probleem: OAuth redirect faalt (state mismatch)
+Oplossing: Zorg dat je niet meerdere tabs/sessies tegelijk gebruikt
+           De state is eenmalig en wordt na gebruik uit de session verwijderd
+
+Probleem: Fee bedrag klopt niet
+Oplossing: De fee wordt door MOLLIE bepaald (applicationFee), niet herberekend
+           Controleer de fee_percentage en fee_min_cents in de tenant config
+           De webhook update het fee bedrag vanuit Mollie's autoritaire waarde
+
+Probleem: "Geen organization ID ontvangen van Mollie" bij koppelen
+Oorzaak: Je gebruikt hetzelfde Mollie account om de OAuth app te maken EN de tenant te koppelen.
+         Mollie Connect is bedoeld voor marketplaces waar elke tenant een EIGEN Mollie account heeft.
+Oplossingen:
+  1. Lokaal testen: De code genereert nu automatisch een test organization ID
+  2. Echte test: Maak een TWEEDE Mollie test account aan en gebruik dat om de tenant te koppelen
+  3. Productie: Elke klant koppelt zijn EIGEN Mollie account (werkt automatisch)

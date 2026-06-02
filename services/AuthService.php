@@ -115,7 +115,8 @@ class AuthService
 
         // Check email uniqueness per tenant
         if ($this->userModel->emailExists($data['email'], $tenantId)) {
-            return ['success' => false, 'error' => 'Dit e-mailadres is al geregistreerd'];
+            $existing = $this->userModel->findByEmail($data['email'], $tenantId);
+            return ['success' => true, 'user_id' => (int) $existing['id'], 'already_registered' => true];
         }
 
         // Validate birthdate and age (18+)

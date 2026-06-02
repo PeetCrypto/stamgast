@@ -15,7 +15,8 @@ class EmailTemplate
     public const TYPE_BARTENDER_INVITE     = 'bartender_invite';
     public const TYPE_GUEST_CONFIRMATION   = 'guest_confirmation';
     public const TYPE_GUEST_PASSWORD_RESET = 'guest_password_reset';
-    public const TYPE_MARKETING            = 'marketing';
+    public const TYPE_MARKETING              = 'marketing';
+    public const TYPE_GUEST_ALREADY_REGISTERED = 'guest_already_registered';
 
     public function __construct(PDO $db)
     {
@@ -145,6 +146,7 @@ class EmailTemplate
                 self::TYPE_TENANT_WELCOME, self::TYPE_ADMIN_INVITE,
                 self::TYPE_BARTENDER_INVITE,
                 self::TYPE_GUEST_CONFIRMATION, self::TYPE_GUEST_PASSWORD_RESET,
+                self::TYPE_GUEST_ALREADY_REGISTERED,
                 self::TYPE_MARKETING,
             ];
             if (!in_array($data['type'], $validTypes, true)) {
@@ -276,6 +278,7 @@ class EmailTemplate
                 self::TYPE_BARTENDER_INVITE,
                 self::TYPE_GUEST_CONFIRMATION,
                 self::TYPE_GUEST_PASSWORD_RESET,
+                self::TYPE_GUEST_ALREADY_REGISTERED,
                 self::TYPE_MARKETING,
             ], true);
         }

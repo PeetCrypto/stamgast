@@ -119,20 +119,41 @@ if (!$tenant) {
         <!-- Betalingen -->
         <div style="margin-bottom: var(--space-xl);">
             <h2 style="margin-bottom: var(--space-md); color: var(--accent-primary);">Betalingen</h2>
-            
-            <div class="form-group">
-                <label for="mollie-api-key">Mollie API Key</label>
-                <input type="password" id="mollie-api-key" class="form-input" value="<?= htmlspecialchars(substr($tenant['mollie_api_key'] ?? '', 0, 20) . '...') ?>" placeholder="test_...">
-                <small class="help-text">Begint met test_ of live_</small>
+
+            <?php
+            $connectStatus = $tenant['mollie_connect_status'] ?? 'none';
+            $isMock = ($tenant['mollie_status'] ?? 'mock') === 'mock';
+            ?>
+
+            <!-- Mollie Connect Status -->
+            <div class="form-group" style="padding: var(--space-md); border-radius: var(--radius-md); background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); margin-bottom: var(--space-md);">
+                <label style="display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-xs);">
+                    <span>Mollie Connect</span>
+                    <?php if ($connectStatus === 'active'): ?>
+                        <span style="font-size: 12px; background: rgba(76,175,80,0.2); color: #4CAF50; padding: 2px 8px; border-radius: var(--radius-sm);">Actief</span>
+                    <?php elseif ($isMock): ?>
+                        <span style="font-size: 12px; background: rgba(158,158,158,0.2); color: #9e9e9e; padding: 2px 8px; border-radius: var(--radius-sm);">Mock modus</span>
+                    <?php else: ?>
+                        <span style="font-size: 12px; background: rgba(244,67,54,0.2); color: #f44336; padding: 2px 8px; border-radius: var(--radius-sm);">Niet gekoppeld</span>
+                    <?php endif; ?>
+                </label>
+                <?php if ($connectStatus === 'active'): ?>
+                    <p class="text-sm text-secondary">Je Mollie account is gekoppeld via REGULR.vip Connect. Betalingen worden automatisch verwerkt en uitbetaald.</p>
+                <?php elseif ($isMock): ?>
+                    <p class="text-sm text-secondary">Mock modus: betalingen worden gesimuleerd (geen echt geld). Vraag de platform beheerder om Mollie Connect te activeren voor echte betalingen.</p>
+                <?php else: ?>
+                    <p class="text-sm text-secondary" style="color: #FF9800;">Mollie Connect is niet gekoppeld. Neem contact op met de platform beheerder (REGULR.vip) om je Mollie account te koppelen.</p>
+                <?php endif; ?>
             </div>
-            
+
             <div class="form-group">
-                <label for="mollie-status">Modus</label>
+                <label for="mollie-status">Betaalmodus</label>
                 <select id="mollie-status" class="form-input">
-                    <option value="mock" <?= ($tenant['mollie_status'] ?? 'mock') === 'mock' ? 'selected' : '' ?>>Mock (test)</option>
-                    <option value="test" <?= ($tenant['mollie_status'] ?? '') === 'test' ? 'selected' : '' ?>>Test</option>
-                    <option value="live" <?= ($tenant['mollie_status'] ?? '') === 'live' ? 'selected' : '' ?>>Live</option>
+                    <option value="mock" <?= ($tenant['mollie_status'] ?? 'mock') === 'mock' ? 'selected' : '' ?>>Mock (simulatie, geen echte betalingen)</option>
+                    <option value="test" <?= ($tenant['mollie_status'] ?? '') === 'test' ? 'selected' : '' ?>>Test (Mollie test omgeving)</option>
+                    <option value="live" <?= ($tenant['mollie_status'] ?? '') === 'live' ? 'selected' : '' ?>>Live (echte betalingen)</option>
                 </select>
+                <small class="help-text">Mock = gesimuleerd. Test/Live vereist Mollie Connect koppeling door de platform beheerder.</small>
             </div>
         </div>
 

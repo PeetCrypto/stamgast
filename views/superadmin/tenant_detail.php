@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../models/Tenant.php';
 require_once __DIR__ . '/../../services/PlatformFeeService.php';
+require_once __DIR__ . '/../../models/PlatformSetting.php';
 
 $db = Database::getInstance()->getConnection();
 $tenantModel = new Tenant($db);
@@ -41,6 +42,12 @@ $users = $tenantModel->getUsersWithWallets($tenantId);
 $feeConfig = $tenantModel->getFeeConfig($tenantId);
 $feeService = new PlatformFeeService($db);
 $feeStats = $feeService->getTenantFeeStats($tenantId);
+
+// Check if Mollie Connect credentials are configured at platform level
+$ps = new PlatformSetting($db);
+$platformClientId = $ps->get('mollie_connect_client_id') ?: (defined('MOLLIE_CONNECT_CLIENT_ID') ? MOLLIE_CONNECT_CLIENT_ID : '');
+$platformApiKey = $ps->get('mollie_connect_api_key') ?: (defined('MOLLIE_CONNECT_API_KEY') ? MOLLIE_CONNECT_API_KEY : '');
+$mollieCredentialsConfigured = !empty($platformClientId) && !empty($platformApiKey);
 
 // Connect success message
 $connectSuccess = isset($_GET['connect']) && $_GET['connect'] === 'success';
@@ -278,8 +285,20 @@ $connectSuccess = isset($_GET['connect']) && $_GET['connect'] === 'success';
                     <?php if (!empty($tenant['mollie_connect_id'])): ?>
                         <p class="text-sm text-secondary">Org ID: <code><?= sanitize($tenant['mollie_connect_id']) ?></code></p>
                     <?php endif; ?>
+
                     <?php if ($connectStatus !== 'active'): ?>
-                        <button id="btn-connect-mollie" class="btn btn-secondary" style="width:100%;margin-top:var(--space-sm);">Koppel Mollie Connect</button>
+                        <?php if (!$mollieCredentialsConfigured): ?>
+                            <!-- Platform credentials not configured - show setup link -->
+                            <div style="padding: var(--space-md); border-radius: var(--radius-md); background: rgba(255,152,0,0.1); border: 1px solid rgba(255,152,0,0.3); margin-top: var(--space-sm);">
+                                <p class="text-sm" style="margin: 0; color: #FF9800;">
+                                    <strong>Mollie Connect niet geconfigureerd</strong><br>
+                                    Configureer eerst de OAuth credentials via
+                                    <a href="<?= BASE_URL ?>/superadmin/settings" style="color: var(--accent-primary); text-decoration: underline;">Platform Instellingen</a>.
+                                </p>
+                            </div>
+                        <?php else: ?>
+                            <button id="btn-connect-mollie" class="btn btn-secondary" style="width:100%;margin-top:var(--space-sm);">Koppel Mollie Connect</button>
+                        <?php endif; ?>
                     <?php else: ?>
                         <button id="btn-disconnect-mollie" class="btn btn-secondary" style="width:100%;margin-top:var(--space-sm);background:rgba(244,67,54,0.15);color:#f44336;">Ontkoppelen (zet naar none)</button>
                     <?php endif; ?>
@@ -715,49 +734,32 @@ document.getElementById('fee-form')?.addEventListener('submit', async (e) => {
     setTimeout(() => { statusEl.textContent = ''; }, 3000);
 });
 
-// Connect Mollie — initiate OAuth flow
+// Connect Mollie — initiate OAuth flow via server-side endpoint
 document.getElementById('btn-connect-mollie')?.addEventListener('click', async () => {
     const statusEl = document.getElementById('connect-status');
     statusEl.textContent = 'Koppelen voorbereiden...';
     statusEl.style.color = 'var(--text-secondary)';
 
     try {
-        // Set status to pending first
-        const res = await fetch((window.__BASE_URL || '') + '/api/superadmin/tenants', {
+        // Call server-side endpoint to generate OAuth URL with proper state
+        const res = await fetch((window.__BASE_URL || '') + '/api/superadmin/connect-mollie', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
-            body: JSON.stringify({ action: 'update', tenant_id: TENANT_ID, mollie_connect_status: 'pending' })
+            body: JSON.stringify({ tenant_id: TENANT_ID })
         });
         const result = await res.json();
-        if (result.success) {
-            // Generate OAuth state and redirect to Mollie
-            const state = crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(36).substr(2) + Date.now().toString(36));
-            // Store state + tenant_id in session via a quick API call pattern
-            // For now: construct OAuth URL and redirect
-            const clientId = ''; // Must be configured in config/app.php
-            if (!clientId) {
-                statusEl.textContent = 'Configureer MOLLIE_CONNECT_CLIENT_ID in config/app.php om OAuth te gebruiken';
-                statusEl.style.color = '#FF9800';
-                // Revert status
-                await fetch((window.__BASE_URL || '') + '/api/superadmin/tenants', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
-                    body: JSON.stringify({ action: 'update', tenant_id: TENANT_ID, mollie_connect_status: 'none' })
-                });
-                return;
-            }
-            // Redirect to Mollie OAuth
-            const redirectUri = window.location.origin + '/api/mollie/connect-callback';
-            const oauthUrl = 'https://my.mollie.com/oauth2/authorize?' + new URLSearchParams({
-                client_id: clientId,
-                redirect_uri: redirectUri,
-                response_type: 'code',
-                scope: 'organizations.read payments.read',
-                state: state
+
+        if (result.success && result.data && result.data.oauth_url) {
+            // Set status to pending before redirecting
+            await fetch((window.__BASE_URL || '') + '/api/superadmin/tenants', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+                body: JSON.stringify({ action: 'update', tenant_id: TENANT_ID, mollie_connect_status: 'pending' })
             });
-            window.location.href = oauthUrl;
+            // Redirect to Mollie OAuth authorization page
+            window.location.href = result.data.oauth_url;
         } else {
-            statusEl.textContent = '✗ Actie mislukt';
+            statusEl.textContent = '✗ ' + (result.error || 'Actie mislukt. Controleer of Mollie Connect credentials zijn geconfigureerd in Platform Instellingen.');
             statusEl.style.color = '#f44336';
         }
     } catch (err) {

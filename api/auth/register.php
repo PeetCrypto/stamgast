@@ -94,6 +94,36 @@ if ($user !== null) {
     $authService->startSession($user);
 }
 
+// ── Already registered: send "you already have an account" email ──
+if (!empty($result['already_registered'])) {
+    try {
+        $tenantModel = new Tenant($db);
+        $tenant      = $tenantModel->findById($tenantId);
+        $tenantName  = $tenant ? $tenant['name'] : 'REGULR.vip';
+        $tenantSlug  = $tenant ? $tenant['slug'] : '';
+        $guestName   = trim($firstName . ' ' . $lastName);
+        $loginUrl    = $tenantSlug
+            ? FULL_BASE_URL . '/j/' . $tenantSlug . '/login'
+            : FULL_BASE_URL . '/login';
+        $forgotPasswordUrl = $tenantSlug
+            ? FULL_BASE_URL . '/j/' . $tenantSlug . '/forgot-password'
+            : FULL_BASE_URL . '/forgot-password';
+
+        sendGuestAlreadyRegisteredEmail($db, $email, $tenantName, $tenantSlug, $guestName, $loginUrl, $forgotPasswordUrl);
+    } catch (\Throwable $e) {
+        error_log('Guest already-registered email failed: ' . $e->getMessage());
+    }
+
+    // Redirect to tenant login page (user is already auto-logged in,
+    // so index.php will forward to /dashboard automatically)
+    $redirect = '/j/' . $tenantSlug;
+
+    Response::success([
+        'user_id'  => $result['user_id'],
+        'redirect' => $redirect,
+    ], 201);
+}
+
 // Log registration
 $audit = new Audit($db);
 $audit->log(

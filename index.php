@@ -560,6 +560,9 @@ function handleApiRoute(string $route, string $method): void
                 case 'admins':
                     require __DIR__ . '/api/superadmin/admins.php';
                     break;
+                case 'connect-mollie':
+                    require __DIR__ . '/api/superadmin/connect_mollie.php';
+                    break;
                 default:
                     Response::notFound('Super-admin endpoint not found');
             }

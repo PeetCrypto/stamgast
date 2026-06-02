@@ -96,9 +96,9 @@ if ($method === 'GET') {
     }
 
     // Mollie settings
-    if (isset($input['mollie_api_key'])) {
-        $data['mollie_api_key'] = trim($input['mollie_api_key']);
-    }
+    // NOTE: mollie_api_key is DEPRECATED — all payments go through Mollie Connect.
+    // The tenant's Mollie account is connected via OAuth by the superadmin.
+    // Only mollie_status (mock/test/live) is editable by the admin.
 
     if (isset($input['mollie_status'])) {
         $status = trim($input['mollie_status']);

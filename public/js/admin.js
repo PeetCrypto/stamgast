@@ -1024,7 +1024,6 @@ async function deleteTier(tierId) {
         const data = {
             brand_color: document.getElementById('brand-color').value,
             secondary_color: document.getElementById('secondary-color').value,
-            mollie_api_key: document.getElementById('mollie-api-key').value,
             mollie_status: document.getElementById('mollie-status').value,
             whitelisted_ips: document.getElementById('whitelisted-ips').value,
             verification_soft_limit: parseInt(document.getElementById('verification-soft-limit')?.value) || 15,

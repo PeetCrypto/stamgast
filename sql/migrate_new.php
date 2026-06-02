@@ -292,8 +292,17 @@ $migrations = [
                      $stmt = $db->prepare("UPDATE email_templates SET subject = :subject, content = :content, text_content = :text_content WHERE id = :id");
                      $stmt->execute([':subject' => $tpl['subject'], ':content' => $tpl['content'], ':text_content' => $tpl['text_content'], ':id' => $tt['id']]);
                  }
-             }
+              }
               return true;
+          },
+      ],
+      [
+          'name'   => 'Guest Already Registered Email Template',
+          'file'   => 'guest_already_registered_template.sql',
+          'check'  => function (PDO $db): bool {
+              $stmt = $db->prepare("SELECT COUNT(*) FROM email_templates WHERE type = 'guest_already_registered' AND tenant_id IS NULL AND language_code = 'nl'");
+              $stmt->execute();
+              return (int) $stmt->fetchColumn() >= 1;
           },
       ],
       [

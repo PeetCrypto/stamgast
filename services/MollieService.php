@@ -245,6 +245,12 @@ class MollieService
             $orgId = $data['resource_owner_id'];
         }
 
+        // Fallback for testing: if no resource_owner_id, use the app's own profile
+        // This happens when testing with the same Mollie account that owns the OAuth app
+        if (empty($orgId) && isset($data['app_profile_id'])) {
+            $orgId = $data['app_profile_id'];
+        }
+
         return [
             'access_token'   => $data['access_token'],
             'refresh_token'  => $data['refresh_token'] ?? '',

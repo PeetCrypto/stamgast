@@ -192,6 +192,37 @@ function sendGuestPasswordResetEmail($db, $email, $tenantName, $passwordResetLin
 }
 
 /**
+ * Send guest already-registered email
+ *
+ * Sent when someone tries to register with an email that already exists
+ * for this tenant. Informs them they already have an account and
+ * provides login + password-reset links.
+ *
+ * @param PDO    $db                Database connection
+ * @param string $email             Recipient email
+ * @param string $tenantName        Tenant name
+ * @param string $tenantSlug        Tenant slug (for branded URLs)
+ * @param string $guestName         Guest display name
+ * @param string $loginUrl          Full login URL
+ * @param string $forgotPasswordUrl Full forgot-password URL
+ * @return array Result with success status and message
+ */
+function sendGuestAlreadyRegisteredEmail($db, $email, $tenantName, $tenantSlug, $guestName, $loginUrl, $forgotPasswordUrl) {
+    try {
+        $variables = [
+            'guest_name'           => $guestName,
+            'tenant_name'          => $tenantName,
+            'login_url'            => $loginUrl,
+            'forgot_password_url'  => $forgotPasswordUrl,
+        ];
+
+        return sendEmailTemplate($db, $email, 'guest_already_registered', $variables, null, $tenantName);
+    } catch (Exception $e) {
+        return ['success' => false, 'message' => $e->getMessage()];
+    }
+}
+
+/**
  * Send marketing email
  * 
  * @param PDO $db Database connection
