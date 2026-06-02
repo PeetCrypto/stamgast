@@ -111,6 +111,36 @@
 
         return navigator.serviceWorker.register(swUrl, { scope: '/' })
             .then(function(reg) {
+                // Force update: als er een wachtende SW is, activeer deze direct
+                if (reg.waiting) {
+                    console.log('[Push] New SW waiting, forcing activation');
+                    reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                }
+                // Als er een installing SW is, wacht tot deze klaar is
+                if (reg.installing) {
+                    console.log('[Push] SW installing, waiting for activation...');
+                    return new Promise(function(resolve, reject) {
+                        reg.installing.addEventListener('statechange', function() {
+                            if (reg.installing && reg.installing.state === 'activated') {
+                                swRegistration = reg;
+                                console.log('[Push] SW activated after install');
+                                resolve(reg);
+                            } else if (reg.installing && reg.installing.state === 'redundant') {
+                                console.warn('[Push] SW became redundant, unregistering and retrying...');
+                                reg.unregister().then(function() {
+                                    // Retry registration once
+                                    navigator.serviceWorker.register(swUrl, { scope: '/' })
+                                        .then(function(reg2) {
+                                            swRegistration = reg2;
+                                            return navigator.serviceWorker.ready;
+                                        })
+                                        .then(resolve)
+                                        .catch(reject);
+                                }).catch(reject);
+                            }
+                        });
+                    });
+                }
                 swRegistration = reg;
                 console.log('[Push] SW registered, scope:', reg.scope);
                 return navigator.serviceWorker.ready;
@@ -119,6 +149,25 @@
                 swRegistration = reg;
                 console.log('[Push] SW ready');
                 return reg;
+            })
+            .catch(function(err) {
+                console.warn('[Push] SW registration failed, attempting cleanup and retry:', err.message);
+                // Try to unregister any broken SW and retry once
+                return navigator.serviceWorker.getRegistrations().then(function(regs) {
+                    var unregisterPromises = regs.map(function(r) { return r.unregister(); });
+                    return Promise.all(unregisterPromises);
+                }).then(function() {
+                    console.log('[Push] Old SWs unregistered, retrying...');
+                    return navigator.serviceWorker.register(swUrl, { scope: '/' });
+                }).then(function(reg) {
+                    swRegistration = reg;
+                    console.log('[Push] SW registered after cleanup, scope:', reg.scope);
+                    return navigator.serviceWorker.ready;
+                }).then(function(reg) {
+                    swRegistration = reg;
+                    console.log('[Push] SW ready after cleanup');
+                    return reg;
+                });
             });
     }
 

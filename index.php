@@ -65,6 +65,15 @@ if (session_status() === PHP_SESSION_NONE) {
     }
 }
 
+// --- Timezone Initialisation (per request, AFTER session_start) ---
+// Sets PHP date_default_timezone_set() + MySQL SET time_zone based on tenant.
+// Falls back to 'Europe/Amsterdam' if no tenant context available.
+// MUST be after session_start() because it reads $_SESSION['tenant_id'].
+require_once __DIR__ . '/services/TimezoneService.php';
+$db = Database::getInstance()->getConnection();
+$tzTenantId = $_SESSION['tenant_id'] ?? null;
+TimezoneService::init($db, $tzTenantId);
+
 // --- Get Route ---
 $route = trim($_GET['route'] ?? '', '/');
 $method = $_SERVER['REQUEST_METHOD'];

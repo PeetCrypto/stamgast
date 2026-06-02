@@ -42,6 +42,11 @@ class Database
 
         try {
             $this->pdo = new PDO($dsn, $this->username, $this->password, $options);
+
+            // Default: UTC (+00:00). TimezoneService::init() overrides per request.
+            // Uses numeric offset instead of named 'UTC' — works on all MySQL servers
+            // (Laragon local doesn't have timezone tables loaded).
+            $this->pdo->exec("SET time_zone = '+00:00'");
         } catch (\PDOException $e) {
             // Never expose DB credentials in production
             if (defined('APP_DEBUG') && APP_DEBUG === true) {

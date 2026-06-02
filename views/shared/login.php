@@ -164,7 +164,7 @@ $csrfToken  = generateCSRFToken();
                     id="email"
                     name="email"
                     class="form-input"
-                    placeholder="admin@regulr.vip"
+                    placeholder="platform@regulr.vip"
                     required
                     autocomplete="email"
                     autofocus

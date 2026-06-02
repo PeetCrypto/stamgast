@@ -214,6 +214,14 @@ $migrations = [
         },
     ],
     [
+        'name'   => 'Timezone per Tenant',
+        'file'   => 'timezone_migration.sql',
+        'type'   => 'alter',
+        'check'  => function (PDO $db): bool {
+            return columnExists($db, 'tenants', 'timezone');
+        },
+    ],
+    [
         'name'   => 'FCM Token & Profile Columns',
         'type'   => 'inline',
         'check'  => function (PDO $db): bool {

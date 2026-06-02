@@ -143,6 +143,21 @@ $connectSuccess = isset($_GET['connect']) && $_GET['connect'] === 'success';
                         <input type="text" id="naw-country" class="form-input" value="<?= sanitize($tenant['country'] ?? 'Nederland') ?>">
                     </div>
                     <div class="form-group">
+                        <label class="text-sm text-secondary">Tijdzone</label>
+                        <select id="naw-timezone" class="form-input">
+                            <?php
+                            require_once __DIR__ . '/../../services/TimezoneService.php';
+                            $currentTz = $tenant['timezone'] ?? 'Europe/Amsterdam';
+                            foreach (TimezoneService::getAllowedTimezones() as $tz):
+                                $selected = ($tz === $currentTz) ? 'selected' : '';
+                                // Leesbare label: vervang underscores en slashes
+                                $label = str_replace(['_', '/'], [' ', ' / '], $tz);
+                            ?>
+                                <option value="<?= $tz ?>" <?= $selected ?>><?= $label ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="form-group">
                         <label class="text-sm text-secondary">Mollie Status</label>
                         <select id="naw-mollie_status" class="form-input">
                             <option value="mock" <?= ($tenant['mollie_status'] ?? '') === 'mock' ? 'selected' : '' ?>>Mock</option>
@@ -601,7 +616,7 @@ document.getElementById('naw-form')?.addEventListener('submit', async (e) => {
     statusEl.textContent = 'Opslaan...';
     statusEl.style.color = 'var(--text-secondary)';
 
-    const fields = ['name','slug','contact_name','contact_email','phone','address','postal_code','city','country','mollie_status'];
+    const fields = ['name','slug','contact_name','contact_email','phone','address','postal_code','city','country','timezone','mollie_status'];
     const data = { action: 'update', tenant_id: TENANT_ID };
     fields.forEach(f => {
         const el = document.getElementById('naw-' + f);

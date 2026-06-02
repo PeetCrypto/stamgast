@@ -23,7 +23,7 @@ class Tenant
         'feature_push', 'feature_marketing', 'points_enabled', 'verification_required',
         // NAW fields
         'contact_name', 'contact_email', 'phone', 'address',
-        'postal_code', 'city', 'country',
+        'postal_code', 'city', 'country', 'timezone',
         // Platform fee configuration (super-admin only)
         'platform_fee_percentage', 'platform_fee_min_cents',
         'mollie_status', 'mollie_connect_id', 'mollie_connect_status',
@@ -128,14 +128,14 @@ class Tenant
               `platform_fee_percentage`, `platform_fee_min_cents`,
               `mollie_connect_status`, `invoice_period`,
               `contact_name`, `contact_email`, `phone`, `address`,
-              `postal_code`, `city`, `country`, `platform_fee_note`)
+              `postal_code`, `city`, `country`, `timezone`, `platform_fee_note`)
              VALUES
              (:uuid, :name, :slug, :brand_color, :secondary_color, :secret_key,
               :mollie_status, :whitelisted_ips,
               :platform_fee_percentage, :platform_fee_min_cents,
               :mollie_connect_status, :invoice_period,
               :contact_name, :contact_email, :phone, :address,
-              :postal_code, :city, :country, :platform_fee_note)'
+              :postal_code, :city, :country, :timezone, :platform_fee_note)'
         );
 
         $stmt->execute([

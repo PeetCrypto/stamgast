@@ -13,7 +13,7 @@
 importScripts('https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js');
 importScripts('https://www.gstatic.com/firebasejs/8.10.1/firebase-messaging.js');
 
-const CACHE_VERSION = 'regulr-shell-v7';
+const CACHE_VERSION = 'regulr-shell-v8';
 
 // ============================================
 // FIREBASE INITIALIZATION (v8 style)
@@ -225,7 +225,7 @@ async function cacheFirst(request) {
 
     try {
         const response = await fetch(request);
-        if (response.ok) {
+        if (response.ok && isValidResponse(request, response)) {
             const cache = await caches.open(CACHE_VERSION);
             cache.put(request, response.clone());
         }
@@ -243,7 +243,7 @@ async function cacheFirst(request) {
 async function networkFirst(request) {
     try {
         const response = await fetch(request);
-        if (response.ok) {
+        if (response.ok && isValidResponse(request, response)) {
             const cache = await caches.open(CACHE_VERSION);
             cache.put(request, response.clone());
         }
@@ -263,6 +263,27 @@ async function networkFirst(request) {
             headers: { 'Content-Type': 'application/json' },
         });
     }
+}
+
+/**
+ * Validate that a response has the correct MIME type for the request.
+ * Prevents caching HTML error pages as CSS/JS.
+ */
+function isValidResponse(request, response) {
+    const contentType = response.headers.get('Content-Type') || '';
+    const url = new URL(request.url);
+
+    // CSS files must have text/css content type
+    if (url.pathname.endsWith('.css') && !contentType.includes('text/css')) {
+        console.warn('[SW] Rejecting cached CSS with wrong MIME:', contentType, url.pathname);
+        return false;
+    }
+    // JS files must have javascript content type
+    if (url.pathname.endsWith('.js') && !contentType.includes('javascript')) {
+        console.warn('[SW] Rejecting cached JS with wrong MIME:', contentType, url.pathname);
+        return false;
+    }
+    return true;
 }
 
 /**

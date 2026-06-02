@@ -141,4 +141,6 @@ if (APP_DEBUG) {
 }
 
 // --- TIMEZONE ---
-date_default_timezone_set('Europe/Amsterdam');
+// Default fallback UTC (Hostinger shared hosting). TimezoneService::init()
+// overrides this per request based on tenant timezone setting.
+date_default_timezone_set('UTC');
