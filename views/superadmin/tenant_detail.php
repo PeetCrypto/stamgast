@@ -8,7 +8,6 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../models/Tenant.php';
 require_once __DIR__ . '/../../services/PlatformFeeService.php';
-require_once __DIR__ . '/../../models/PlatformSetting.php';
 
 $db = Database::getInstance()->getConnection();
 $tenantModel = new Tenant($db);
@@ -42,15 +41,6 @@ $users = $tenantModel->getUsersWithWallets($tenantId);
 $feeConfig = $tenantModel->getFeeConfig($tenantId);
 $feeService = new PlatformFeeService($db);
 $feeStats = $feeService->getTenantFeeStats($tenantId);
-
-// Check if Mollie Connect credentials are configured at platform level
-$ps = new PlatformSetting($db);
-$platformClientId = $ps->get('mollie_connect_client_id') ?: (defined('MOLLIE_CONNECT_CLIENT_ID') ? MOLLIE_CONNECT_CLIENT_ID : '');
-$platformApiKey = $ps->get('mollie_connect_api_key') ?: (defined('MOLLIE_CONNECT_API_KEY') ? MOLLIE_CONNECT_API_KEY : '');
-$mollieCredentialsConfigured = !empty($platformClientId) && !empty($platformApiKey);
-
-// Connect success message
-$connectSuccess = isset($_GET['connect']) && $_GET['connect'] === 'success';
 ?>
 
 <?php require VIEWS_PATH . 'shared/header.php'; ?>
@@ -89,12 +79,6 @@ $connectSuccess = isset($_GET['connect']) && $_GET['connect'] === 'success';
             <p style="font-size: 24px; font-weight: 700; color: var(--accent-primary);">&euro; <?= number_format($stats['today_revenue'] / 100, 2, ',', '.') ?></p>
         </div>
     </div>
-
-    <?php if ($connectSuccess): ?>
-    <div class="glass-card" style="padding: var(--space-md); margin-bottom: var(--space-lg); background: rgba(76,175,80,0.15); border: 1px solid rgba(76,175,80,0.3);">
-        <p style="color: #4CAF50; font-weight: 600;">Mollie Connect succesvol gekoppeld!</p>
-    </div>
-    <?php endif; ?>
 
     <!-- Two Column Layout -->
     <div style="display: grid; grid-template-columns: 1fr 2fr; gap: var(--space-lg);">
@@ -155,14 +139,6 @@ $connectSuccess = isset($_GET['connect']) && $_GET['connect'] === 'success';
                             ?>
                                 <option value="<?= $tz ?>" <?= $selected ?>><?= $label ?></option>
                             <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label class="text-sm text-secondary">Mollie Status</label>
-                        <select id="naw-mollie_status" class="form-input">
-                            <option value="mock" <?= ($tenant['mollie_status'] ?? '') === 'mock' ? 'selected' : '' ?>>Mock</option>
-                            <option value="test" <?= ($tenant['mollie_status'] ?? '') === 'test' ? 'selected' : '' ?>>Test</option>
-                            <option value="live" <?= ($tenant['mollie_status'] ?? '') === 'live' ? 'selected' : '' ?>>Live</option>
                         </select>
                     </div>
 
@@ -279,7 +255,7 @@ $connectSuccess = isset($_GET['connect']) && $_GET['connect'] === 'success';
                     <p id="fee-status" class="text-sm" style="margin-top:var(--space-sm);text-align:center;"></p>
                 </form>
 
-                <!-- Mollie Connect Status -->
+                <!-- Mollie Connect Status (read-only — koppelen gebeurt in admin omgeving) -->
                 <div style="border-top: 1px solid var(--glass-border); padding-top: var(--space-md); margin-top: var(--space-lg);">
                     <h3 style="font-size: 14px; font-weight: 600; margin-bottom: var(--space-sm); color: var(--accent-primary);">Mollie Connect</h3>
                     <?php
@@ -295,29 +271,23 @@ $connectSuccess = isset($_GET['connect']) && $_GET['connect'] === 'success';
                     $sc = $connectColors[$connectStatus] ?? $connectColors['none'];
                     ?>
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-sm);">
-                        <span>Status: <span class="badge" style="background:<?= $sc ?>;"><?= $connectLabels[$connectStatus] ?? $connectStatus ?></span></span>
+                        <span>Connect: <span class="badge" style="background:<?= $sc ?>;"><?= $connectLabels[$connectStatus] ?? $connectStatus ?></span></span>
                     </div>
                     <?php if (!empty($tenant['mollie_connect_id'])): ?>
                         <p class="text-sm text-secondary">Org ID: <code><?= sanitize($tenant['mollie_connect_id']) ?></code></p>
                     <?php endif; ?>
-
-                    <?php if ($connectStatus !== 'active'): ?>
-                        <?php if (!$mollieCredentialsConfigured): ?>
-                            <!-- Platform credentials not configured - show setup link -->
-                            <div style="padding: var(--space-md); border-radius: var(--radius-md); background: rgba(255,152,0,0.1); border: 1px solid rgba(255,152,0,0.3); margin-top: var(--space-sm);">
-                                <p class="text-sm" style="margin: 0; color: #FF9800;">
-                                    <strong>Mollie Connect niet geconfigureerd</strong><br>
-                                    Configureer eerst de OAuth credentials via
-                                    <a href="<?= BASE_URL ?>/superadmin/settings" style="color: var(--accent-primary); text-decoration: underline;">Platform Instellingen</a>.
-                                </p>
-                            </div>
-                        <?php else: ?>
-                            <button id="btn-connect-mollie" class="btn btn-secondary" style="width:100%;margin-top:var(--space-sm);">Koppel Mollie Connect</button>
-                        <?php endif; ?>
-                    <?php else: ?>
-                        <button id="btn-disconnect-mollie" class="btn btn-secondary" style="width:100%;margin-top:var(--space-sm);background:rgba(244,67,54,0.15);color:#f44336;">Ontkoppelen (zet naar none)</button>
-                    <?php endif; ?>
-                    <p id="connect-status" class="text-sm" style="margin-top:var(--space-sm);text-align:center;"></p>
+                    <div class="form-group" style="margin-top: var(--space-sm);">
+                        <label class="text-sm text-secondary">Betaalmodus</label>
+                        <select id="mollie-mode-select" class="form-input">
+                            <option value="mock" <?= ($tenant['mollie_status'] ?? 'mock') === 'mock' ? 'selected' : '' ?>>Mock (gesimuleerd)</option>
+                            <option value="test" <?= ($tenant['mollie_status'] ?? '') === 'test' ? 'selected' : '' ?>>Test (Mollie test omgeving)</option>
+                            <option value="live" <?= ($tenant['mollie_status'] ?? '') === 'live' ? 'selected' : '' ?>>Live (echte betalingen)</option>
+                        </select>
+                        <p id="mollie-mode-status" class="text-sm" style="margin-top:var(--space-xs);text-align:center;"></p>
+                    </div>
+                    <p class="text-sm text-secondary" style="margin-top: var(--space-sm);">
+                        De Mollie Connect koppeling wordt beheerd door de admin in de tenant omgeving (Instellingen → Betalingen).
+                    </p>
                 </div>
 
                 <!-- Fee Stats -->
@@ -616,7 +586,7 @@ document.getElementById('naw-form')?.addEventListener('submit', async (e) => {
     statusEl.textContent = 'Opslaan...';
     statusEl.style.color = 'var(--text-secondary)';
 
-    const fields = ['name','slug','contact_name','contact_email','phone','address','postal_code','city','country','timezone','mollie_status'];
+    const fields = ['name','slug','contact_name','contact_email','phone','address','postal_code','city','country','timezone'];
     const data = { action: 'update', tenant_id: TENANT_ID };
     fields.forEach(f => {
         const el = document.getElementById('naw-' + f);
@@ -749,56 +719,22 @@ document.getElementById('fee-form')?.addEventListener('submit', async (e) => {
     setTimeout(() => { statusEl.textContent = ''; }, 3000);
 });
 
-// Connect Mollie — initiate OAuth flow via server-side endpoint
-document.getElementById('btn-connect-mollie')?.addEventListener('click', async () => {
-    const statusEl = document.getElementById('connect-status');
-    statusEl.textContent = 'Koppelen voorbereiden...';
+// Mollie mode change — save via superadmin tenants API
+document.getElementById('mollie-mode-select')?.addEventListener('change', async function() {
+    const statusEl = document.getElementById('mollie-mode-status');
+    const newMode = this.value;
+    statusEl.textContent = 'Opslaan...';
     statusEl.style.color = 'var(--text-secondary)';
-
-    try {
-        // Call server-side endpoint to generate OAuth URL with proper state
-        const res = await fetch((window.__BASE_URL || '') + '/api/superadmin/connect-mollie', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
-            body: JSON.stringify({ tenant_id: TENANT_ID })
-        });
-        const result = await res.json();
-
-        if (result.success && result.data && result.data.oauth_url) {
-            // Set status to pending before redirecting
-            await fetch((window.__BASE_URL || '') + '/api/superadmin/tenants', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
-                body: JSON.stringify({ action: 'update', tenant_id: TENANT_ID, mollie_connect_status: 'pending' })
-            });
-            // Redirect to Mollie OAuth authorization page
-            window.location.href = result.data.oauth_url;
-        } else {
-            statusEl.textContent = '✗ ' + (result.error || 'Actie mislukt. Controleer of Mollie Connect credentials zijn geconfigureerd in Platform Instellingen.');
-            statusEl.style.color = '#f44336';
-        }
-    } catch (err) {
-        statusEl.textContent = '✗ Netwerkfout';
-        statusEl.style.color = '#f44336';
-    }
-});
-
-// Disconnect Mollie
-document.getElementById('btn-disconnect-mollie')?.addEventListener('click', async () => {
-    if (!confirm('Mollie Connect ontkoppelen? Betalingen zijn dan niet meer mogelijk voor deze tenant.')) return;
-    const statusEl = document.getElementById('connect-status');
-    statusEl.textContent = 'Ontkoppelen...';
-    statusEl.style.color = 'var(--text-secondary)';
-
     try {
         const res = await fetch((window.__BASE_URL || '') + '/api/superadmin/tenants', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
-            body: JSON.stringify({ action: 'update', tenant_id: TENANT_ID, mollie_connect_status: 'none', mollie_connect_id: '' })
+            body: JSON.stringify({ action: 'update', tenant_id: TENANT_ID, mollie_status: newMode })
         });
         const result = await res.json();
         if (result.success) {
-            window.location.reload();
+            statusEl.textContent = '✓ Opgeslagen';
+            statusEl.style.color = '#4CAF50';
         } else {
             statusEl.textContent = '✗ Actie mislukt';
             statusEl.style.color = '#f44336';
@@ -807,6 +743,7 @@ document.getElementById('btn-disconnect-mollie')?.addEventListener('click', asyn
         statusEl.textContent = '✗ Netwerkfout';
         statusEl.style.color = '#f44336';
     }
+    setTimeout(() => { statusEl.textContent = ''; }, 3000);
 });
 
 // === TEST TENANT PURGE ACTIONS ===

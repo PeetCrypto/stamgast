@@ -524,6 +524,9 @@ function handleApiRoute(string $route, string $method): void
                 case 'reports':
                     require __DIR__ . '/api/admin/reports.php';
                     break;
+                case 'connect-mollie':
+                    require __DIR__ . '/api/admin/connect_mollie.php';
+                    break;
                 default:
             }
             break;

@@ -382,6 +382,12 @@ function handleUpdate(Tenant $model, array $input, PDO $db): void
             if (!in_array($input['mollie_connect_status'], ['none', 'pending', 'active', 'suspended', 'revoked'], true)) {
                 Response::error('Ongeldige Connect status', 'INVALID_CONNECT_STATUS', 400);
             }
+            // When disconnecting, also clear the token and profile ID
+            if ($input['mollie_connect_status'] === 'none') {
+                $input['mollie_connect_id'] = '';
+                $input['mollie_connect_access_token'] = '';
+                $input['mollie_connect_profile_id'] = '';
+            }
         }
 
         $v->validate();

@@ -33,6 +33,8 @@ if ($method === 'GET') {
         'secondary_color'    => $tenant['secondary_color'],
         'logo_path'          => $tenant['logo_path'],
         'mollie_status'      => $tenant['mollie_status'],
+        'mollie_connect_status' => $tenant['mollie_connect_status'] ?? 'none',
+        'mollie_connect_id'     => $tenant['mollie_connect_id'] ?? '',
         'whitelisted_ips'    => $tenant['whitelisted_ips'],
         'feature_push'           => (bool) ($tenant['feature_push'] ?? true),
         'feature_marketing'      => (bool) ($tenant['feature_marketing'] ?? true),
@@ -96,16 +98,21 @@ if ($method === 'GET') {
     }
 
     // Mollie settings
-    // NOTE: mollie_api_key is DEPRECATED — all payments go through Mollie Connect.
-    // The tenant's Mollie account is connected via OAuth by the superadmin.
-    // Only mollie_status (mock/test/live) is editable by the admin.
+    // NOTE: mollie_status (mock/test/live) is ONLY editable by the superadmin via /api/superadmin/tenants.
+    // The admin can only view the current mode (read-only badge in settings view).
+    // Admin can disconnect Mollie Connect (set to 'none'), but connecting goes through OAuth.
 
-    if (isset($input['mollie_status'])) {
-        $status = trim($input['mollie_status']);
-        if (!in_array($status, ['mock', 'test', 'live'], true)) {
-            Response::error('Ongeldige Mollie status. Gebruik: mock, test, live', 'VALIDATION_ERROR', 422);
+    // Mollie Connect disconnect (admin can set to 'none'; connecting goes through OAuth flow)
+    if (isset($input['mollie_connect_status'])) {
+        $status = trim($input['mollie_connect_status']);
+        if (in_array($status, ['none', 'pending'], true)) {
+            $data['mollie_connect_status'] = $status;
+            if ($status === 'none') {
+                $data['mollie_connect_id'] = '';
+                $data['mollie_connect_access_token'] = '';
+                $data['mollie_connect_profile_id'] = '';
+            }
         }
-        $data['mollie_status'] = $status;
     }
 
     // Whitelisted IPs

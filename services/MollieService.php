@@ -7,12 +7,16 @@ declare(strict_types=1);
  *
  * Modes:
  * - mock:  simulates successful payments (no real API calls)
- * - test:  real Mollie API, test keys
- * - live:  real Mollie API, live keys
+ * - test:  real Mollie API, test mode (sends testmode=true)
+ * - live:  real Mollie API, live mode
  *
  * Connect support:
  * - onBehalfOf: payments created on behalf of connected tenant
  * - applicationFee: platform fee deducted automatically by Mollie
+ *
+ * IMPORTANT: When using Connect (onBehalfOf), the testmode parameter is
+ * required for test payments. Mollie uses organization-level credentials
+ * that need explicit testmode=true to create test payments.
  *
  * SECURITY: Platform API key only in server env, NEVER in database.
  * Tenant Mollie keys are DEPRECATED — all payments go through Mollie Connect.
@@ -54,7 +58,8 @@ class MollieService
         string $webhookUrl,
         string $metadata = '',
         ?string $connectedOrganizationId = null,
-        int    $applicationFeeCents = 0
+        int    $applicationFeeCents = 0,
+        ?string $profileId = null
     ): array {
         // Mock mode: simulate a successful payment
         if ($this->mode === 'mock') {
@@ -78,6 +83,19 @@ class MollieService
             unset($payload['metadata']);
         } else {
             $payload['metadata'] = $metadata; // Send as raw string
+        }
+
+        // Website profile ID — required by Mollie for payment creation.
+        // Without this, Mollie returns 422: "A website profile is required for payments."
+        if ($profileId !== null && $profileId !== '') {
+            $payload['profileId'] = $profileId;
+        }
+
+        // Test mode: required for Connect (organization-level credentials)
+        // When using onBehalfOf with Connect, Mollie needs explicit testmode=true
+        // to create test payments on the connected merchant's account.
+        if ($this->mode === 'test') {
+            $payload['testmode'] = true;
         }
 
         // Mollie Connect: create payment on behalf of tenant
@@ -123,7 +141,10 @@ class MollieService
         }
 
         // Request settlements embedded to get Mollie's fee
-        $response = $this->apiCall('GET', "/payments/{$paymentId}?embed=settlements");
+        // Test mode: must include testmode=true for Connect test payments,
+        // otherwise Mollie returns 404 (looks in live namespace instead of test)
+        $testmode = ($this->mode === 'test') ? '&testmode=true' : '';
+        $response = $this->apiCall('GET', "/payments/{$paymentId}?embed=settlements{$testmode}");
 
         $amountCents = 0;
         if (isset($response['amount']['value'])) {
@@ -132,10 +153,15 @@ class MollieService
 
         // Extract applicationFee from Mollie Connect response (THE TRUTH)
         // ⚠️ NEVER recalculate — use Mollie's authoritative value
+        // Try _embedded first (documented path), then top-level fallback
         $applicationFeeCents = 0;
         if (isset($response['_embedded']['applicationFee']['amount']['value'])) {
             $applicationFeeCents = (int) round(
                 (float) $response['_embedded']['applicationFee']['amount']['value'] * 100
+            );
+        } elseif (isset($response['applicationFee']['amount']['value'])) {
+            $applicationFeeCents = (int) round(
+                (float) $response['applicationFee']['amount']['value'] * 100
             );
         }
 
@@ -181,7 +207,7 @@ class MollieService
             'client_id'     => $clientId,
             'redirect_uri'  => $redirectUri,
             'response_type' => 'code',
-            'scope'         => 'organizations.read payments.read',
+            'scope'         => 'organizations.read payments.write profiles.read',
             'state'         => $state,
         ]);
 
@@ -239,22 +265,45 @@ class MollieService
             throw new \RuntimeException("Mollie OAuth error: {$error}");
         }
 
-        // Fetch organization details to get the organization ID
+        // Fetch organization ID using the access token.
+        // Mollie does NOT always return resource_owner_id in the token response.
+        // We must call /v2/organizations/me to get the real organization ID.
         $orgId = '';
-        if (isset($data['resource_owner_id'])) {
+        $accessToken = $data['access_token'];
+
+        $ch = curl_init('https://api.mollie.com/v2/organizations/me');
+        if ($ch !== false) {
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT        => 15,
+                CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_HTTPHEADER     => [
+                    'Authorization: Bearer ' . $accessToken,
+                    'Accept: application/json',
+                ],
+            ]);
+
+            $orgResponse = curl_exec($ch);
+            $orgHttpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            if ($orgResponse !== false && $orgHttpCode < 400) {
+                $orgData = json_decode($orgResponse, true);
+                if (isset($orgData['id'])) {
+                    $orgId = $orgData['id'];
+                }
+            }
+        }
+
+        // Fallback: try resource_owner_id from token response
+        if (empty($orgId) && isset($data['resource_owner_id'])) {
             $orgId = $data['resource_owner_id'];
         }
 
-        // Fallback for testing: if no resource_owner_id, use the app's own profile
-        // This happens when testing with the same Mollie account that owns the OAuth app
-        if (empty($orgId) && isset($data['app_profile_id'])) {
-            $orgId = $data['app_profile_id'];
-        }
-
         return [
-            'access_token'   => $data['access_token'],
-            'refresh_token'  => $data['refresh_token'] ?? '',
-            'expires_at'     => $data['expires_at'] ?? '',
+            'access_token'    => $accessToken,
+            'refresh_token'   => $data['refresh_token'] ?? '',
+            'expires_at'      => $data['expires_at'] ?? '',
             'organization_id' => $orgId,
         ];
     }
@@ -310,13 +359,20 @@ class MollieService
             'Accept: application/json',
         ];
 
-        curl_setopt_array($ch, [
+        $curlOptions = [
             CURLOPT_CUSTOMREQUEST  => $method,
             CURLOPT_HTTPHEADER     => $headers,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT        => 30,
-            CURLOPT_SSL_VERIFYPEER => true,
-        ]);
+            CURLOPT_SSL_VERIFYPEER => !$this->isLocalDev(),
+        ];
+
+        $caBundle = $this->getCaBundle();
+        if ($caBundle && $curlOptions[CURLOPT_SSL_VERIFYPEER]) {
+            $curlOptions[CURLOPT_CAINFO] = $caBundle;
+        }
+
+        curl_setopt_array($ch, $curlOptions);
 
         if ($method === 'POST' && !empty($payload)) {
             curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload, JSON_THROW_ON_ERROR));
@@ -343,5 +399,49 @@ class MollieService
         }
 
         return $data;
+    }
+
+    /**
+     * Check if running in local development environment.
+     * In local dev, SSL verification may fail due to incomplete CA bundles (e.g. Laragon).
+     */
+    private function isLocalDev(): bool
+    {
+        // CLI always counts as local dev (no HTTP_HOST, often incomplete CA bundle)
+        if (php_sapi_name() === 'cli') {
+            return true;
+        }
+        $host = $_SERVER['HTTP_HOST'] ?? '';
+        return str_contains($host, '.test')
+            || str_contains($host, '.local')
+            || str_contains($host, 'localhost')
+            || $host === '127.0.0.1';
+    }
+
+    /**
+     * Get the CA bundle path for SSL verification.
+     * Falls back to the PHP installation's cacert.pem if available.
+     */
+    private function getCaBundle(): ?string
+    {
+        // Check common locations for the CA bundle
+        $candidates = [
+            // PHP's configured curl.cainfo
+            ini_get('curl.cainfo') ?: '',
+            // PHP's configured openssl.cafile
+            ini_get('openssl.cafile') ?: '',
+            // Common Laragon location (same dir as php.exe)
+            dirname(PHP_BINARY) . '/cacert.pem',
+            // Common Laragon extras location
+            dirname(PHP_BINARY) . '/extras/ssl/cacert.pem',
+        ];
+
+        foreach ($candidates as $path) {
+            if (!empty($path) && file_exists($path)) {
+                return $path;
+            }
+        }
+
+        return null;
     }
 }

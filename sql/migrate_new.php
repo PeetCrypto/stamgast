@@ -386,17 +386,33 @@ $migrations = [
      && columnExists($db, 'users', 'email_verified_at');
      },
      ],
-         [
-         'name'   => 'Tip/Fooi Feature (tenant tip amounts + transaction tip tracking)',
-         'file'   => 'tip_migration.sql',
-         'type'   => 'alter',
-         'check'  => function (PDO $db): bool {
-             return columnExists($db, 'tenants', 'tip_amount_1_cents')
-                 && columnExists($db, 'transactions', 'tip_cents')
-                 && columnExists($db, 'pos_payment_sessions', 'tip_cents');
-         },
-     ],
- ];
+    [
+        'name'   => 'Tip/Fooi Feature (tenant tip amounts + transaction tip tracking)',
+        'file'   => 'tip_migration.sql',
+        'type'   => 'alter',
+        'check'  => function (PDO $db): bool {
+            return columnExists($db, 'tenants', 'tip_amount_1_cents')
+                && columnExists($db, 'transactions', 'tip_cents')
+                && columnExists($db, 'pos_payment_sessions', 'tip_cents');
+        },
+    ],
+    [
+        'name'   => 'Mollie Connect Access Token per Tenant',
+        'file'   => 'mollie_connect_token_migration.sql',
+        'type'   => 'alter',
+        'check'  => function (PDO $db): bool {
+            return columnExists($db, 'tenants', 'mollie_connect_access_token');
+        },
+    ],
+    [
+        'name'   => 'Mollie Connect Profile ID per Tenant',
+        'file'   => 'mollie_profile_id_migration.sql',
+        'type'   => 'alter',
+        'check'  => function (PDO $db): bool {
+            return columnExists($db, 'tenants', 'mollie_connect_profile_id');
+        },
+    ],
+];
 
 // ── Helper functions ────────────────────────────────────────────────────────
 
@@ -619,6 +635,10 @@ function runVerification(PDO $db): void
             'platform_fee_percentage', 'platform_fee_min_cents',
             'mollie_connect_status', 'invoice_period', 'btw_number',
             'invoice_email', 'platform_fee_note',
+            // Mollie Connect token migration
+            'mollie_connect_access_token',
+            // Mollie Connect profile ID migration
+            'mollie_connect_profile_id',
             // Gated onboarding migration
             'verification_soft_limit', 'verification_hard_limit',
             'verification_cooldown_sec', 'verification_max_attempts',

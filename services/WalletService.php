@@ -169,16 +169,43 @@ class WalletService
         $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
         $baseUrl = "{$scheme}://{$host}";
 
-        $redirectUrl = $baseUrl . '/wallet';
+        // Redirect back to wallet with from_payment flag so the frontend knows to
+        // poll for balance updates (race condition: webhook may not have processed yet)
+        $redirectUrl = $baseUrl . '/wallet?from_payment=1';
         $webhookUrl = $baseUrl . '/api/mollie/webhook';
 
-        // Get platform API key: try DB first, fall back to constant
-        $platformApiKey = $this->getPlatformApiKey();
-        if (!$isMock && empty($platformApiKey)) {
-            throw new \RuntimeException('Platform Mollie Connect API key niet geconfigureerd. Configureer via Superadmin > Platform Instellingen.');
+        // Local dev (.test/.local/localhost): Mollie can't reach local URLs.
+        // Omit webhookUrl — Mollie accepts payments without it (webhookUrl is optional).
+        // On production, webhookUrl is always included for automatic payment confirmation.
+        $isLocal = preg_match('/\.(test|local)$/', $host) || $host === 'localhost' || $host === '127.0.0.1';
+        if ($isLocal) {
+            $webhookUrl = null;
         }
 
-        $mollie = new MollieService($platformApiKey, $mollieMode);
+        // Get the Mollie API key for payment creation.
+        // For Connect payments (test/live), we use the tenant's OAuth access token.
+        // With an OAuth access token:
+        //   - Do NOT send onBehalfOf (token is already scoped to the tenant's org)
+        //   - DO send profileId (required by Mollie)
+        //   - DO send applicationFee (works with OAuth tokens)
+        $platformApiKey = $this->getPlatformApiKey();
+        $mollieApiKey = $platformApiKey;
+        if (!$isMock) {
+            $tenantAccessToken = $tenant['mollie_connect_access_token'] ?? '';
+            if (empty($tenantAccessToken)) {
+                throw new \RuntimeException(
+                    'Tenant heeft geen Mollie Connect access token. ' .
+                    'De tenant moet eerst opnieuw koppelen via Mollie Connect.'
+                );
+            }
+            $mollieApiKey = $tenantAccessToken;
+        }
+
+        if (!$isMock && empty($mollieApiKey)) {
+            throw new \RuntimeException('Geen Mollie API key beschikbaar voor payment creatie.');
+        }
+
+        $mollie = new MollieService($mollieApiKey, $mollieMode);
 
         $payment = $mollie->createPayment(
             $amountCents,
@@ -186,8 +213,9 @@ class WalletService
             $redirectUrl,
             $webhookUrl,
             (string) $userId,
-            $isMock ? null : $tenant['mollie_connect_id'], // onBehalfOf: only for real Mollie
-            $isMock ? 0 : $feeCents                        // applicationFee: only for real Mollie
+            null, // onBehalfOf: NOT used with tenant OAuth token (token is already scoped)
+            $isMock ? 0 : $feeCents,                       // applicationFee: only for real Mollie
+            $isMock ? null : ($tenant['mollie_connect_profile_id'] ?? null) // profileId: required for real Mollie
         );
 
         // Create pending transaction (deposit)

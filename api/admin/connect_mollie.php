@@ -2,23 +2,23 @@
 declare(strict_types=1);
 
 /**
- * POST /api/superadmin/connect-mollie
- * Server-side Mollie Connect OAuth initiation endpoint.
+ * POST /api/admin/connect-mollie
+ * Server-side Mollie Connect OAuth initiation endpoint for admin (tenant manager).
  *
- * This endpoint is called by the superadmin to start the Mollie Connect
- * OAuth flow for a specific tenant. It:
- * 1. Validates the superadmin session
+ * This endpoint is called by the admin (kroegbaas) to start the Mollie Connect
+ * OAuth flow for their own tenant. It:
+ * 1. Validates the admin session and gets tenant_id from session
  * 2. Generates a CSRF-protected random state
- * 3. Stores state + tenant_id in the PHP session
+ * 3. Stores state + tenant_id + source in the PHP session
  * 4. Gets the OAuth Client ID from platform_settings
  * 5. Returns the Mollie OAuth authorization URL
  *
- * The tenant_detail.php JavaScript then redirects the browser to this URL.
+ * The admin/settings.php JavaScript then redirects the browser to this URL.
  * After authorization, Mollie redirects to connect-callback.php which
- * validates the state and exchanges the code for an access token.
+ * validates the state, exchanges the code, and redirects back to /admin/settings.
  *
- * Auth: superadmin only
- * Request: { tenant_id: int }
+ * Auth: admin only (enforced by routing middleware)
+ * Request: {} (no body needed — tenant_id comes from session)
  * Response: { oauth_url: string }
  */
 
@@ -28,11 +28,11 @@ if ($method !== 'POST') {
     Response::error('Method not allowed', 'METHOD_NOT_ALLOWED', 405);
 }
 
-$input = getJsonInput();
-$tenantId = (int) ($input['tenant_id'] ?? 0);
+// Get tenant_id from admin session (not from POST body — admin can only connect their own tenant)
+$tenantId = currentTenantId();
 
-if ($tenantId <= 0) {
-    Response::error('tenant_id is verplicht', 'MISSING_FIELD', 400);
+if (!$tenantId || $tenantId <= 0) {
+    Response::error('Geen tenant gevonden in sessie', 'NO_TENANT', 400);
 }
 
 // Verify tenant exists
@@ -55,7 +55,7 @@ if (empty($clientId)) {
 
 if (empty($clientId)) {
     Response::error(
-        'Mollie Connect Client ID niet geconfigureerd. Configureer via Superadmin > Platform Instellingen.',
+        'Mollie Connect is nog niet geconfigureerd door het platform. Neem contact op met REGULR.vip.',
         'MISSING_CLIENT_ID',
         422
     );
@@ -64,12 +64,12 @@ if (empty($clientId)) {
 // Generate cryptographically secure random state
 $state = bin2hex(random_bytes(32));
 
-// Store state + tenant_id in session (one-time use, validated in connect-callback.php)
+// Store state + tenant_id + source in session (one-time use, validated in connect-callback.php)
 $_SESSION['mollie_connect_state'] = $state;
-$_SESSION['mollie_connect_tenant_id'] = $tenantId;
+$_SESSION['mollie_connect_tenant_id'] = (int) $tenantId;
+$_SESSION['mollie_connect_source'] = 'admin';
 
 // Build redirect URI (must match what's registered in Mollie OAuth app settings)
-// Check for HTTPS in multiple ways (Laragon may set it differently)
 $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
     || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https')
     || (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443)
@@ -77,9 +77,6 @@ $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
 $scheme = $isHttps ? 'https' : 'http';
 $host = $_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? 'localhost';
 $redirectUri = "{$scheme}://{$host}" . BASE_URL . "/api/mollie/connect-callback";
-
-// Log for debugging (remove in production)
-error_log("Mollie Connect redirect URI generated: {$redirectUri} (HTTPS=" . ($isHttps ? 'yes' : 'no') . ", HTTP_HOST=" . $host . ", BASE_URL=" . BASE_URL . ")");
 
 // Build Mollie OAuth authorization URL
 $oauthParams = http_build_query([
@@ -95,19 +92,19 @@ $oauthUrl = 'https://my.mollie.com/oauth2/authorize?' . $oauthParams;
 // Audit log
 $audit = new Audit($db);
 $audit->log(
-    0,
+    (int) $tenantId,
     currentUserId(),
     'tenant.mollie_connect_initiated',
     'tenant',
-    $tenantId,
+    (int) $tenantId,
     [
         'tenant_name' => $tenant['name'],
-        'state'       => substr($state, 0, 8) . '...', // Don't log full state
+        'source'      => 'admin',
+        'state'       => substr($state, 0, 8) . '...',
     ]
 );
 
 Response::success([
     'oauth_url' => $oauthUrl,
-    'tenant_id' => $tenantId,
-    'debug_redirect_uri' => $redirectUri, // For debugging - remove in production
+    'tenant_id' => (int) $tenantId,
 ]);

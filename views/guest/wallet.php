@@ -64,6 +64,18 @@ require __DIR__ . '/../shared/header.php';
         <?php endif; ?>
     </div>
 
+    <?php if (!$isUnverified): ?>
+    <!-- Opwaarderen / Pakketten -->
+    <div class="info-card glass-card">
+        <h3>Opwaarderen</h3>
+        <div id="packages-container">
+            <div class="empty-state">
+                <p>Pakketten laden...</p>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
+
     <!-- Transaction History -->
     <div class="info-card glass-card">
         <h3>Transactiegeschiedenis</h3>

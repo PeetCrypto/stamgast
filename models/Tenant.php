@@ -26,7 +26,8 @@ class Tenant
         'postal_code', 'city', 'country', 'timezone',
         // Platform fee configuration (super-admin only)
         'platform_fee_percentage', 'platform_fee_min_cents',
-        'mollie_status', 'mollie_connect_id', 'mollie_connect_status',
+        'mollie_status',         'mollie_connect_id', 'mollie_connect_status',
+        'mollie_connect_access_token', 'mollie_connect_profile_id',
         'invoice_period', 'btw_number', 'invoice_email', 'platform_fee_note',
     ];
 

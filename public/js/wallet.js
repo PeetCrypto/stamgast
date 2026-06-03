@@ -288,6 +288,53 @@
     }
 
     // ============================================
+    // PAYMENT RETURN (race condition handling)
+    // ============================================
+
+    /**
+     * When guest returns from Mollie payment (URL has ?from_payment=1),
+     * the webhook may not have processed yet. Poll the balance every 2s
+     * for up to 10 seconds to detect the updated balance.
+     */
+    function handlePaymentReturn() {
+        var params = new URLSearchParams(window.location.search);
+        if (!params.get('from_payment')) return;
+
+        // Clean URL to avoid re-triggering on refresh
+        window.history.replaceState({}, document.title, window.location.pathname);
+
+        // Show processing message
+        window.REGULR.showSuccess('Betaling ontvangen! Je saldo wordt bijgewerkt...');
+
+        // Poll balance every 2 seconds, max 5 attempts
+        var attempts = 0;
+        var maxAttempts = 5;
+        var initialBalance = walletData ? walletData.balance_cents : 0;
+
+        var pollInterval = setInterval(async function() {
+            attempts++;
+            try {
+                var freshData = await loadWalletData();
+                if (freshData && freshData.balance_cents > initialBalance) {
+                    // Balance updated — webhook has processed
+                    clearInterval(pollInterval);
+                    window.REGULR.showSuccess('Saldo bijgewerkt!');
+                    // Reload history too
+                    var historyData = await loadTransactionHistory();
+                    if (historyData) renderTransactionHistory(historyData.transactions);
+                }
+            } catch (e) {
+                console.error('Poll error:', e);
+            }
+            if (attempts >= maxAttempts) {
+                clearInterval(pollInterval);
+                // Final refresh attempt
+                await loadWalletData();
+            }
+        }, 2000);
+    }
+
+    // ============================================
     // INITIALIZATION
     // ============================================
     async function initWallet() {
@@ -302,12 +349,21 @@
         
         // Load wallet data
         await loadWalletData();
+
+        // Load packages (if container exists on page)
+        var packagesContainer = document.getElementById('packages-container');
+        if (packagesContainer) {
+            await loadPackages();
+        }
         
         // Load transaction history
         var historyData = await loadTransactionHistory();
         if (historyData) {
             renderTransactionHistory(historyData.transactions);
         }
+
+        // Handle return from Mollie payment (race condition polling)
+        handlePaymentReturn();
         
         console.log('Wallet initialized');
     }

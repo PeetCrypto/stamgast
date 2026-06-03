@@ -1021,10 +1021,10 @@ async function deleteTier(tierId) {
         }
 
         // Save other settings
+        // NOTE: mollie_status is NOT included — only the superadmin can change the payment mode.
         const data = {
             brand_color: document.getElementById('brand-color').value,
             secondary_color: document.getElementById('secondary-color').value,
-            mollie_status: document.getElementById('mollie-status').value,
             whitelisted_ips: document.getElementById('whitelisted-ips').value,
             verification_soft_limit: parseInt(document.getElementById('verification-soft-limit')?.value) || 15,
             verification_hard_limit: parseInt(document.getElementById('verification-hard-limit')?.value) || 30,

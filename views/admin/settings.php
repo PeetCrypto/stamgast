@@ -5,6 +5,8 @@
  */
 declare(strict_types=1);
 
+require_once __DIR__ . '/../../models/PlatformSetting.php';
+
 $firstName      = $_SESSION['first_name'] ?? 'Admin';
 $tenantName     = $_SESSION['tenant_name'] ?? APP_NAME;
 $tenantId       = (int) ($_SESSION['tenant_id'] ?? 0);
@@ -27,12 +29,24 @@ if (!$tenant) {
         'feature_marketing' => true,
     ];
 }
+
+// Check if Mollie Connect credentials are configured at platform level
+$ps = new PlatformSetting($db);
+$platformClientId = $ps->get('mollie_connect_client_id') ?: (defined('MOLLIE_CONNECT_CLIENT_ID') ? MOLLIE_CONNECT_CLIENT_ID : '');
+$mollieCredentialsConfigured = !empty($platformClientId);
+$connectSuccess = isset($_GET['connect']) && $_GET['connect'] === 'success';
 ?>
 
 <?php require VIEWS_PATH . 'shared/header.php'; ?>
 
 <div class="container" style="padding: var(--space-lg);">
     <h1 style="margin-bottom: var(--space-lg); text-align: center;">Instellingen</h1>
+
+    <?php if ($connectSuccess): ?>
+    <div class="glass-card" style="padding: var(--space-md); margin-bottom: var(--space-lg); background: rgba(76,175,80,0.15); border: 1px solid rgba(76,175,80,0.3);">
+        <p style="color: #4CAF50; font-weight: 600;">Mollie Connect succesvol gekoppeld!</p>
+    </div>
+    <?php endif; ?>
 
     <!-- Settings Form -->
     <form class="glass-card" id="settings-form" style="padding: var(--space-lg); max-width: 800px; margin: 0 auto;">
@@ -129,31 +143,51 @@ if (!$tenant) {
             <div class="form-group" style="padding: var(--space-md); border-radius: var(--radius-md); background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); margin-bottom: var(--space-md);">
                 <label style="display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-xs);">
                     <span>Mollie Connect</span>
-                    <?php if ($connectStatus === 'active'): ?>
-                        <span style="font-size: 12px; background: rgba(76,175,80,0.2); color: #4CAF50; padding: 2px 8px; border-radius: var(--radius-sm);">Actief</span>
-                    <?php elseif ($isMock): ?>
-                        <span style="font-size: 12px; background: rgba(158,158,158,0.2); color: #9e9e9e; padding: 2px 8px; border-radius: var(--radius-sm);">Mock modus</span>
-                    <?php else: ?>
-                        <span style="font-size: 12px; background: rgba(244,67,54,0.2); color: #f44336; padding: 2px 8px; border-radius: var(--radius-sm);">Niet gekoppeld</span>
-                    <?php endif; ?>
+                    <?php
+                    $connectColors = [
+                        'none'     => 'rgba(158,158,158,0.2);color:#9e9e9e',
+                        'pending'  => 'rgba(255,152,0,0.2);color:#FF9800',
+                        'active'   => 'rgba(76,175,80,0.2);color:#4CAF50',
+                        'suspended'=> 'rgba(244,67,54,0.2);color:#f44336',
+                        'revoked'  => 'rgba(244,67,54,0.2);color:#f44336',
+                    ];
+                    $connectLabels = ['none' => 'Niet gekoppeld', 'pending' => 'In afwachting', 'active' => 'Actief', 'suspended' => 'Onderbroken', 'revoked' => 'Ingetrokken'];
+                    $sc = $connectColors[$connectStatus] ?? $connectColors['none'];
+                    ?>
+                    <span class="badge" style="background:<?= $sc ?>;"><?= $connectLabels[$connectStatus] ?? $connectStatus ?></span>
                 </label>
-                <?php if ($connectStatus === 'active'): ?>
-                    <p class="text-sm text-secondary">Je Mollie account is gekoppeld via REGULR.vip Connect. Betalingen worden automatisch verwerkt en uitbetaald.</p>
-                <?php elseif ($isMock): ?>
-                    <p class="text-sm text-secondary">Mock modus: betalingen worden gesimuleerd (geen echt geld). Vraag de platform beheerder om Mollie Connect te activeren voor echte betalingen.</p>
-                <?php else: ?>
-                    <p class="text-sm text-secondary" style="color: #FF9800;">Mollie Connect is niet gekoppeld. Neem contact op met de platform beheerder (REGULR.vip) om je Mollie account te koppelen.</p>
+                <?php if (!empty($tenant['mollie_connect_id'])): ?>
+                    <p class="text-sm text-secondary">Org ID: <code><?= sanitize($tenant['mollie_connect_id']) ?></code></p>
                 <?php endif; ?>
+
+                <?php if ($connectStatus === 'active'): ?>
+                    <p class="text-sm text-secondary">Je Mollie account is gekoppeld. Betalingen worden automatisch verwerkt.</p>
+                    <button type="button" id="btn-disconnect-mollie" class="btn btn-secondary" style="width:100%;margin-top:var(--space-sm);background:rgba(244,67,54,0.15);color:#f44336;">Ontkoppelen</button>
+                <?php elseif ($mollieCredentialsConfigured): ?>
+                    <p class="text-sm text-secondary">Koppel je Mollie account om echte betalingen te ontvangen.</p>
+                    <button type="button" id="btn-connect-mollie" class="btn btn-primary" style="width:100%;margin-top:var(--space-sm);">Koppel Mollie Connect</button>
+                <?php else: ?>
+                    <p class="text-sm" style="color: #FF9800;">Mollie Connect is nog niet geconfigureerd door het platform. Neem contact op met REGULR.vip.</p>
+                <?php endif; ?>
+                <p id="connect-status" class="text-sm" style="margin-top:var(--space-sm);text-align:center;"></p>
             </div>
 
             <div class="form-group">
-                <label for="mollie-status">Betaalmodus</label>
-                <select id="mollie-status" class="form-input">
-                    <option value="mock" <?= ($tenant['mollie_status'] ?? 'mock') === 'mock' ? 'selected' : '' ?>>Mock (simulatie, geen echte betalingen)</option>
-                    <option value="test" <?= ($tenant['mollie_status'] ?? '') === 'test' ? 'selected' : '' ?>>Test (Mollie test omgeving)</option>
-                    <option value="live" <?= ($tenant['mollie_status'] ?? '') === 'live' ? 'selected' : '' ?>>Live (echte betalingen)</option>
-                </select>
-                <small class="help-text">Mock = gesimuleerd. Test/Live vereist Mollie Connect koppeling door de platform beheerder.</small>
+                <label>Betaalmodus</label>
+                <?php
+                $mollieMode = $tenant['mollie_status'] ?? 'mock';
+                $modeColors = [
+                    'mock' => 'rgba(158,158,158,0.2);color:#9e9e9e',
+                    'test' => 'rgba(255,152,0,0.2);color:#FF9800',
+                    'live' => 'rgba(76,175,80,0.2);color:#4CAF50',
+                ];
+                $modeLabels = ['mock' => 'Mock (gesimuleerd)', 'test' => 'Test omgeving', 'live' => 'Live (echte betalingen)'];
+                $mc = $modeColors[$mollieMode] ?? $modeColors['mock'];
+                ?>
+                <div style="display:flex;align-items:center;gap:var(--space-sm);">
+                    <span class="badge" style="background:<?= $mc ?>;"><?= $modeLabels[$mollieMode] ?? $mollieMode ?></span>
+                    <span class="text-sm text-secondary">— Bepaald door platform beheerder</span>
+                </div>
             </div>
         </div>
 
@@ -484,6 +518,68 @@ function printQR() {
             btn.disabled = false;
         });
     });
+})();
+
+// Mollie Connect — initiate OAuth flow
+(function() {
+    var connectBtn = document.getElementById('btn-connect-mollie');
+    var disconnectBtn = document.getElementById('btn-disconnect-mollie');
+    var statusEl = document.getElementById('connect-status');
+    var csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+    if (connectBtn) {
+        connectBtn.addEventListener('click', async function() {
+            statusEl.textContent = 'Koppelen voorbereiden...';
+            statusEl.style.color = 'var(--text-secondary)';
+            try {
+                var res = await fetch((window.__BASE_URL || '') + '/api/admin/connect-mollie', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+                    body: JSON.stringify({})
+                });
+                var result = await res.json();
+                if (result.success && result.data && result.data.oauth_url) {
+                    await fetch((window.__BASE_URL || '') + '/api/admin/settings', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+                        body: JSON.stringify({ mollie_connect_status: 'pending' })
+                    });
+                    window.location.href = result.data.oauth_url;
+                } else {
+                    statusEl.textContent = '✗ ' + (result.error || 'Koppelen mislukt.');
+                    statusEl.style.color = '#f44336';
+                }
+            } catch (err) {
+                statusEl.textContent = '✗ Netwerkfout';
+                statusEl.style.color = '#f44336';
+            }
+        });
+    }
+
+    if (disconnectBtn) {
+        disconnectBtn.addEventListener('click', async function() {
+            if (!confirm('Mollie Connect ontkoppelen? Betalingen zijn dan niet meer mogelijk.')) return;
+            statusEl.textContent = 'Ontkoppelen...';
+            statusEl.style.color = 'var(--text-secondary)';
+            try {
+                var res = await fetch((window.__BASE_URL || '') + '/api/admin/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+                    body: JSON.stringify({ mollie_connect_status: 'none' })
+                });
+                var result = await res.json();
+                if (result.success) {
+                    window.location.reload();
+                } else {
+                    statusEl.textContent = '✗ Ontkoppelen mislukt';
+                    statusEl.style.color = '#f44336';
+                }
+            } catch (err) {
+                statusEl.textContent = '✗ Netwerkfout';
+                statusEl.style.color = '#f44336';
+            }
+        });
+    }
 })();
 </script>
 
