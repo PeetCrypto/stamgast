@@ -185,7 +185,7 @@ class PaymentService
             }
 
             // b) Deduct from wallet (SQL-level guard against negative balance)
-            $deducted = $walletModel->updateBalance($userId, -$finalTotal, $pointsEarned);
+            $deducted = $walletModel->updateBalance($userId, -$finalTotal, $pointsEarned, $tenantId);
             if (!$deducted) {
                 $this->db->rollBack();
                 throw new \RuntimeException('Onvoldoende saldo. Probeer opnieuw.');

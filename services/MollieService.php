@@ -55,7 +55,7 @@ class MollieService
         int    $amountCents,
         string $description,
         string $redirectUrl,
-        string $webhookUrl,
+        ?string $webhookUrl,
         string $metadata = '',
         ?string $connectedOrganizationId = null,
         int    $applicationFeeCents = 0,
@@ -74,9 +74,13 @@ class MollieService
             ],
             'description' => $description,
             'redirectUrl' => $redirectUrl,
-            'webhookUrl'  => $webhookUrl,
             'metadata'    => !empty($metadata) ? json_decode($metadata, true) : null,
         ];
+
+        // webhookUrl is optional — omit for local dev (Mollie can't reach local URLs)
+        if ($webhookUrl !== null) {
+            $payload['webhookUrl'] = $webhookUrl;
+        }
 
         // Remove null metadata — Mollie rejects null metadata
         if ($payload['metadata'] === null) {
@@ -207,7 +211,7 @@ class MollieService
             'client_id'     => $clientId,
             'redirect_uri'  => $redirectUri,
             'response_type' => 'code',
-            'scope'         => 'organizations.read payments.write profiles.read',
+            'scope'         => 'organizations.read payments.read payments.write profiles.read',
             'state'         => $state,
         ]);
 

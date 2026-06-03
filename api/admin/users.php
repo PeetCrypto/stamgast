@@ -613,7 +613,7 @@ if ($method === 'GET') {
             $balanceBefore = (int) $wallet['balance_cents'];
 
             // ── Credit wallet (positive delta only) ──
-            $updated = $walletModel->updateBalance($userId, $amountCents);
+            $updated = $walletModel->updateBalance($userId, $amountCents, 0, $tenantId);
             if (!$updated) {
                 $db->rollBack();
                 Response::error('Wallet kon niet worden bijgewerkt', 'WALLET_UPDATE_FAILED', 500);

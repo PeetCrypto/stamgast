@@ -73,23 +73,29 @@ try {
         webhookRespond(200, 'Tenant not found');
     }
 
-    // ⚠️ SECURITY: Use PLATFORM-level Mollie API key, NOT tenant key
-    // Try DB first (platform_settings), fall back to constant
-    $platformApiKey = '';
-    try {
-        $ps = new PlatformSetting($db);
-        $platformApiKey = $ps->get('mollie_connect_api_key') ?? '';
-    } catch (\Throwable $e) {
-        // Fall back to constant
-    }
-    if (empty($platformApiKey)) {
-        $platformApiKey = defined('MOLLIE_CONNECT_API_KEY') ? MOLLIE_CONNECT_API_KEY : '';
-    }
-    if (empty($platformApiKey)) {
-        webhookRespond(200, 'Platform Mollie API key not configured');
-    }
+    // ⚠️ IMPORTANT: Use the TENANT's OAuth access token to fetch payment status.
+    // The payment was created with the tenant's token, so only that token can read it.
+    // The platform API key cannot access tenant-scoped payments.
+    $tenantAccessToken = $tenant['mollie_connect_access_token'] ?? '';
+    $mollieMode = $tenant['mollie_status'] ?? 'mock';
 
-    $mollie = new MollieService($platformApiKey, $tenant['mollie_status'] ?? 'mock');
+    if ($mollieMode === 'mock') {
+        // Mock mode: use platform key (mock doesn't call Mollie API)
+        $platformApiKey = '';
+        try {
+            $ps = new PlatformSetting($db);
+            $platformApiKey = $ps->get('mollie_connect_api_key') ?? '';
+        } catch (\Throwable $e) {}
+        if (empty($platformApiKey)) {
+            $platformApiKey = defined('MOLLIE_CONNECT_API_KEY') ? MOLLIE_CONNECT_API_KEY : '';
+        }
+        $mollie = new MollieService($platformApiKey, 'mock');
+    } elseif (empty($tenantAccessToken)) {
+        // No tenant token — can't fetch payment status
+        webhookRespond(200, 'Tenant has no Mollie access token');
+    } else {
+        $mollie = new MollieService($tenantAccessToken, $mollieMode);
+    }
 
     $paymentStatus = $mollie->getPaymentStatus($paymentId);
 
@@ -119,7 +125,13 @@ try {
         $applicationFeeCents = (int) ($paymentStatus['application_fee_cents'] ?? 0);
         $mollieFeeCents     = (int) ($paymentStatus['mollie_fee_cents'] ?? 0);
 
-        // ⚠️ NEVER recalc — use Mollie's value
+        // Fallback: if Mollie returns 0 applicationFee (e.g. webhook without settlement data,
+        // or onBehalfOf not set), use the server-side calculated fee from the snapshot.
+        // The snapshot (fee_percentage + fee_min_cents) was stored at deposit creation time.
+        if ($applicationFeeCents === 0 && (int) $platformFee['fee_amount_cents'] > 0) {
+            $applicationFeeCents = (int) $platformFee['fee_amount_cents'];
+        }
+
         $platformFeeModel->updateFeeFromMollie(
             $platformFee['id'],
             $applicationFeeCents,

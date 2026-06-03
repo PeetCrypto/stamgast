@@ -86,8 +86,9 @@ $oauthParams = http_build_query([
     'client_id'     => $clientId,
     'redirect_uri'  => $redirectUri,
     'response_type' => 'code',
-    'scope'         => 'organizations.read payments.write profiles.read',
+    'scope'         => 'organizations.read payments.read payments.write profiles.read',
     'state'         => $state,
+    'force_approval_prompt' => 'true',
 ]);
 
 $oauthUrl = 'https://my.mollie.com/oauth2/authorize?' . $oauthParams;

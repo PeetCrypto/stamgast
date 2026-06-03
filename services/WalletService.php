@@ -209,7 +209,7 @@ class WalletService
 
         $payment = $mollie->createPayment(
             $amountCents,
-            'Opwaarderen REGULR.vip wallet',
+            'Opwaarderen ' . $tenant['name'] . ' wallet',
             $redirectUrl,
             $webhookUrl,
             (string) $userId,
@@ -238,8 +238,8 @@ class WalletService
             'user_id'             => $userId,
             'gross_amount_cents'  => $amountCents,
             'fee_percentage'      => $tenant['platform_fee_percentage'], // SNAPSHOT
-            'fee_amount_cents'    => $isMock ? $feeCents : 0, // Mock: use calculated fee; Real: filled by webhook
-            'net_amount_cents'    => $isMock ? ($amountCents - $feeCents) : 0,
+            'fee_amount_cents'    => $feeCents, // Always snapshot the calculated fee; webhook may update from Mollie's authoritative value
+            'net_amount_cents'    => ($amountCents - $feeCents),
             'fee_min_cents'       => $tenant['platform_fee_min_cents'],  // SNAPSHOT
             'status'              => 'collected',
         ]);
@@ -375,14 +375,18 @@ class WalletService
         try {
             $this->db->beginTransaction();
 
-            // Credit wallet (base amount)
-            $this->walletModel->updateBalance($userId, $amountCents, 0);
+            // Lock the wallet row to prevent concurrent modifications
+            $wallet = $this->walletModel->lockForUpdate($userId, $tenantId);
+            if ($wallet === null) {
+                throw new \RuntimeException('Wallet niet gevonden voor user ' . $userId . ' tenant ' . $tenantId);
+            }
 
-            // Credit bonus separately (if applicable)
+            // Credit wallet: base amount + bonus in a single atomic UPDATE
+            $totalCreditCents = $amountCents + $bonusCents;
+            $this->walletModel->updateBalance($userId, $totalCreditCents, 0, $tenantId);
+
+            // Create a separate bonus transaction record for transparency
             if ($bonusCents > 0) {
-                $this->walletModel->updateBalance($userId, $bonusCents, 0);
-
-                // Create a separate bonus transaction record for transparency
                 $this->transactionModel->create([
                     'tenant_id'          => $tenantId,
                     'user_id'            => $userId,

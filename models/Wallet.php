@@ -16,7 +16,9 @@ class Wallet
     }
 
     /**
-     * Find wallet by user ID
+     * Find wallet by user ID within a specific tenant
+     *
+     * @deprecated Use findByUserAndTenant() for multi-tenant safety
      */
     public function findByUserId(int $userId): ?array
     {
@@ -51,20 +53,33 @@ class Wallet
      * @param int $userId
      * @param int $balanceDelta  Positive = credit, negative = debit
      * @param int $pointsDelta
+     * @param int|null $tenantId  Optional tenant scoping — ALWAYS pass this in multi-tenant flows
      * @return bool True if row was updated, false if blocked (insufficient balance)
      */
-    public function updateBalance(int $userId, int $balanceDelta, int $pointsDelta = 0): bool
+    public function updateBalance(int $userId, int $balanceDelta, int $pointsDelta = 0, ?int $tenantId = null): bool
     {
+        // Build WHERE clause — always include tenant_id when provided for multi-tenant safety
+        $where = '`user_id` = :user_id';
+        $params = [
+            ':balance_delta' => $balanceDelta,
+            ':points_delta'  => $pointsDelta,
+            ':user_id'       => $userId,
+        ];
+
+        if ($tenantId !== null) {
+            $where .= ' AND `tenant_id` = :tenant_id';
+            $params[':tenant_id'] = $tenantId;
+        }
+
         // For credits (deposits), no balance guard needed
         if ($balanceDelta >= 0) {
             $stmt = $this->db->prepare(
-                'UPDATE `wallets` SET `balance_cents` = `balance_cents` + :balance_delta, `points_cents` = `points_cents` + :points_delta WHERE `user_id` = :user_id'
+                "UPDATE `wallets`
+                 SET `balance_cents` = `balance_cents` + :balance_delta,
+                     `points_cents` = `points_cents` + :points_delta
+                 WHERE {$where}"
             );
-            $stmt->execute([
-                ':balance_delta' => $balanceDelta,
-                ':points_delta'  => $pointsDelta,
-                ':user_id'       => $userId,
-            ]);
+            $stmt->execute($params);
             return $stmt->rowCount() === 1;
         }
 
@@ -72,14 +87,13 @@ class Wallet
         // abs() because delta is negative — we need the minimum required balance
         $minRequired = abs($balanceDelta);
         $stmt = $this->db->prepare(
-            'UPDATE `wallets` SET `balance_cents` = `balance_cents` + :balance_delta, `points_cents` = `points_cents` + :points_delta WHERE `user_id` = :user_id AND `balance_cents` >= :min_required'
+            "UPDATE `wallets`
+             SET `balance_cents` = `balance_cents` + :balance_delta,
+                 `points_cents` = `points_cents` + :points_delta
+             WHERE {$where} AND `balance_cents` >= :min_required"
         );
-        $stmt->execute([
-            ':balance_delta' => $balanceDelta,
-            ':points_delta'  => $pointsDelta,
-            ':user_id'       => $userId,
-            ':min_required'  => $minRequired,
-        ]);
+        $params[':min_required'] = $minRequired;
+        $stmt->execute($params);
         return $stmt->rowCount() === 1;
     }
 

@@ -754,6 +754,7 @@ function handleViewRoute(string $route, string $method): void
     'superadmin/invoices'         => 'superadmin/invoices.php',
     'superadmin/settings'         => 'superadmin/settings.php',
     'superadmin/migrate'          => 'superadmin/migrate.php',
+    'superadmin/repair-deposits'  => 'superadmin/repair_deposits.php',
     ];
 
     // Handle API routes first
@@ -880,7 +881,7 @@ function handleViewRoute(string $route, string $method): void
 
     // Enforce role-based access
     $roleViews = [
-        'superadmin' => ['superadmin/dashboard.php', 'superadmin/tenants.php', 'superadmin/tenant_detail.php', 'superadmin/fees.php', 'superadmin/invoices.php', 'superadmin/settings.php', 'superadmin/migrate.php'],
+        'superadmin' => ['superadmin/dashboard.php', 'superadmin/tenants.php', 'superadmin/tenant_detail.php', 'superadmin/fees.php', 'superadmin/invoices.php', 'superadmin/settings.php', 'superadmin/migrate.php', 'superadmin/repair_deposits.php'],
         'admin'      => ['admin/dashboard.php', 'admin/reports.php', 'admin/users.php', 'admin/tiers.php', 'admin/settings.php', 'admin/marketing.php', 'admin/push.php'],
         'bartender'  => ['bartender/scanner.php', 'bartender/payment.php'],
     ];
