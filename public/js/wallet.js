@@ -86,7 +86,13 @@
 
             if (response.success && response.data.status === 'mock') {
                 // Mock mode - deposit was processed instantly server-side
-                window.REGULR.showSuccess('€' + (amountCents / 100).toFixed(2) + ' toegevoegd!');
+                var totalCents = response.data.total_cents || amountCents;
+                var bonusCents = response.data.bonus_cents || 0;
+                var msg = '€' + (totalCents / 100).toFixed(2) + ' toegevoegd!';
+                if (bonusCents > 0) {
+                    msg += ' (incl. €' + (bonusCents / 100).toFixed(2) + ' bonus)';
+                }
+                window.REGULR.showSuccess(msg);
                 await loadWalletData();
             } else if (response.success && response.data.checkout_url) {
                 // Test/Live mode - redirect to Mollie checkout

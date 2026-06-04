@@ -101,15 +101,20 @@ define('MAX_PAGE_SIZE', 100);
 // --- BASE URL (auto-detect subdirectory) ---
 // Detect if running in a subdirectory (e.g., /stamgast/)
 $scriptDir = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? ''));
-define('BASE_URL', rtrim($scriptDir, '/'));
+$scriptDir = rtrim($scriptDir, '/');
+// Treat "." (root) as empty string
+if ($scriptDir === '.' || $scriptDir === '/') {
+    $scriptDir = '';
+}
+define('BASE_URL', $scriptDir);
 
-// --- FULL BASE URL (scheme + host + path, used in emails) ---
+// --- FULL BASE URL (scheme + host + path, used in emails and OAuth redirects) ---
 // Priority: APP_URL from .env > $_SERVER auto-detect
 $_appUrl = getenv('APP_URL');
 if (!empty($_appUrl)) {
     // APP_URL is set in .env (e.g. http://stamgast.test or https://app.regulr.vip)
-    // Append BASE_URL path if APP_URL doesn't already end with it
     $_appUrl = rtrim($_appUrl, '/');
+    // Append BASE_URL path if APP_URL doesn't already end with it and BASE_URL is not empty
     if (BASE_URL !== '' && !str_ends_with($_appUrl, BASE_URL)) {
         $_appUrl .= BASE_URL;
     }

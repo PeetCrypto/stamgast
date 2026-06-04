@@ -21,6 +21,7 @@ require_once __DIR__ . '/../../models/Tenant.php';
 require_once __DIR__ . '/../../models/Transaction.php';
 require_once __DIR__ . '/../../models/PlatformFee.php';
 require_once __DIR__ . '/../../models/PlatformSetting.php';
+require_once __DIR__ . '/../../utils/helpers.php';
 
 // Always return 200 to Mollie — we handle errors internally
 function webhookRespond(int $code, string $message): void
@@ -37,7 +38,13 @@ if ($method !== 'POST') {
 
 try {
     // Mollie sends form-encoded or JSON body with payment ID
-    $input = getJsonInput();
+    $input = [];
+    try {
+        $input = getJsonInput();
+    } catch (\Throwable $jsonError) {
+        // Not JSON — Mollie often sends form-encoded data
+        $input = [];
+    }
     if (empty($input)) {
         // Fallback: Mollie sometimes sends form-encoded data
         $paymentId = $_POST['id'] ?? null;
@@ -94,7 +101,39 @@ try {
         // No tenant token — can't fetch payment status
         webhookRespond(200, 'Tenant has no Mollie access token');
     } else {
-        $mollie = new MollieService($tenantAccessToken, $mollieMode);
+        // ── Proactive token refresh before API call ──────────────────────────
+        $mollieApiKey = $tenantAccessToken;
+        $tenantRefreshToken = $tenant['mollie_connect_refresh_token'] ?? '';
+
+        if (!empty($tenantRefreshToken)) {
+            try {
+                $tenantModel = new Tenant($db);
+                if ($tenantModel->isMollieTokenExpired($tenantId)) {
+                    $ps = new PlatformSetting($db);
+                    $refresher = new MollieService(
+                        '', 'live',
+                        $ps->get('mollie_connect_client_id'),
+                        $ps->get('mollie_connect_client_secret')
+                    );
+                    $newTokens = $refresher->refreshAccessToken($tenantRefreshToken);
+
+                    $tenantModel->updateMollieTokens(
+                        $tenantId,
+                        $newTokens['access_token'],
+                        $newTokens['refresh_token'],
+                        $newTokens['expires_at']
+                    );
+
+                    $mollieApiKey = $newTokens['access_token'];
+                    error_log("Webhook: Mollie token auto-refreshed for tenant {$tenantId}");
+                }
+            } catch (\Throwable $e) {
+                error_log("Webhook: Mollie token refresh failed for tenant {$tenantId}: " . $e->getMessage());
+                // Continue with old token — getPaymentStatus may still work
+            }
+        }
+
+        $mollie = new MollieService($mollieApiKey, $mollieMode);
     }
 
     $paymentStatus = $mollie->getPaymentStatus($paymentId);
@@ -202,6 +241,6 @@ try {
 
 } catch (\Throwable $e) {
     // Always return 200 to prevent Mollie retry storms
-    error_log('Webhook error: ' . $e->getMessage());
+    error_log('Webhook error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
     webhookRespond(200, 'Webhook received with internal error');
 }

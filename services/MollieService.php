@@ -2,6 +2,12 @@
 declare(strict_types=1);
 
 /**
+ * Exception thrown when a Mollie OAuth access token has expired or is invalid.
+ * Callers should catch this and attempt a token refresh.
+ */
+class MollieTokenExpiredException extends \RuntimeException {}
+
+/**
  * Mollie Service
  * API wrapper for Mollie payments with Connect (Marketplace) support
  *
@@ -304,11 +310,94 @@ class MollieService
             $orgId = $data['resource_owner_id'];
         }
 
+        // Mollie returns expires_in (seconds), not expires_at.
+        // Calculate expires_at as now + expires_in.
+        $expiresAt = '';
+        if (isset($data['expires_in']) && is_numeric($data['expires_in'])) {
+            $expiresAt = (new DateTime('now', new DateTimeZone('UTC')))
+                ->modify('+' . (int) $data['expires_in'] . ' seconds')
+                ->format('Y-m-d H:i:s');
+        }
+
         return [
             'access_token'    => $accessToken,
             'refresh_token'   => $data['refresh_token'] ?? '',
-            'expires_at'      => $data['expires_at'] ?? '',
+            'expires_at'      => $expiresAt,
             'organization_id' => $orgId,
+        ];
+    }
+
+    /**
+     * Refresh an expired Mollie Connect OAuth access token.
+     *
+     * @param string $refreshToken The refresh token from the original OAuth exchange
+     * @return array{access_token: string, refresh_token: string, expires_at: string}
+     * @throws \RuntimeException on failure
+     */
+    public function refreshAccessToken(string $refreshToken): array
+    {
+        $clientId     = $this->clientId ?? MOLLIE_CONNECT_CLIENT_ID;
+        $clientSecret = $this->clientSecret ?? MOLLIE_CONNECT_CLIENT_SECRET;
+
+        if (empty($clientId) || empty($clientSecret)) {
+            throw new \RuntimeException('Mollie Connect OAuth credentials not configured');
+        }
+
+        if (empty($refreshToken)) {
+            throw new \RuntimeException('No refresh token available — manual re-authorization required');
+        }
+
+        $ch = curl_init('https://api.mollie.com/oauth2/tokens');
+        if ($ch === false) {
+            throw new \RuntimeException('Failed to initialize cURL');
+        }
+
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => http_build_query([
+                'grant_type'    => 'refresh_token',
+                'refresh_token' => $refreshToken,
+                'client_id'     => $clientId,
+                'client_secret' => $clientSecret,
+            ]),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 30,
+            CURLOPT_SSL_VERIFYPEER => !$this->isLocalDev(),
+            CURLOPT_HTTPHEADER     => [
+                'Content-Type: application/x-www-form-urlencoded',
+                'Accept: application/json',
+            ],
+        ]);
+
+        $caBundle = $this->getCaBundle();
+        if ($caBundle) {
+            curl_setopt($ch, CURLOPT_CAINFO, $caBundle);
+        }
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
+        curl_close($ch);
+
+        if ($curlError) {
+            throw new \RuntimeException('Mollie OAuth refresh cURL error: ' . $curlError);
+        }
+
+        $data = json_decode($response, true, 512, JSON_THROW_ON_ERROR);
+
+        if ($httpCode >= 400 || !isset($data['access_token'])) {
+            $error = $data['error'] ?? $data['error_description'] ?? 'Unknown OAuth refresh error';
+            throw new \RuntimeException("Mollie OAuth refresh error: {$error}");
+        }
+
+        return [
+            'access_token'  => $data['access_token'],
+            'refresh_token' => $data['refresh_token'] ?? $refreshToken,
+            'expires_at'    => (isset($data['expires_in']) && is_numeric($data['expires_in']))
+                ? (new DateTime('now', new DateTimeZone('UTC')))
+                    ->modify('+' . (int) $data['expires_in'] . ' seconds')
+                    ->format('Y-m-d H:i:s')
+                : '',
         ];
     }
 
@@ -347,6 +436,7 @@ class MollieService
      * Make an API call to Mollie
      *
      * @throws \RuntimeException on cURL or API error
+     * @throws \MollieTokenExpiredException when the access token is expired/invalid (HTTP 401)
      */
     private function apiCall(string $method, string $endpoint, array $payload = []): array
     {
@@ -396,6 +486,10 @@ class MollieService
         }
 
         $data = json_decode($response, true, 512, JSON_THROW_ON_ERROR);
+
+        if ($httpCode === 401) {
+            throw new \MollieTokenExpiredException('Mollie access token expired or invalid');
+        }
 
         if ($httpCode >= 400) {
             $errorMsg = $data['detail'] ?? $data['title'] ?? 'Unknown Mollie error';

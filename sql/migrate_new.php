@@ -197,6 +197,40 @@ $migrations = [
         },
     ],
     [
+        'name'   => 'Bonus Tiers Configuration (model_type + bonus_cents)',
+        'file'   => 'bonus_tiers_config_migration.sql',
+        'type'   => 'inline',
+        'check'  => function (PDO $db): bool {
+            // Check that at least one tier has model_type='bonus' with bonus_cents > 0
+            if (!columnExists($db, 'loyalty_tiers', 'bonus_cents')) {
+                return false;
+            }
+            $stmt = $db->prepare("SELECT COUNT(*) FROM `loyalty_tiers` WHERE `model_type` = 'bonus' AND `bonus_cents` > 0");
+            $stmt->execute();
+            return (int) $stmt->fetchColumn() > 0;
+        },
+        'run'    => function (PDO $db): bool {
+            $sql = file_get_contents(__DIR__ . '/bonus_tiers_config_migration.sql');
+            if ($sql === false) return false;
+            // Strip comments and execute
+            $lines = explode("\n", $sql);
+            $cleanLines = [];
+            foreach ($lines as $line) {
+                $trimmed = trim($line);
+                if ($trimmed === '' || str_starts_with($trimmed, '--')) continue;
+                $cleanLines[] = $line;
+            }
+            $cleanSql = implode("\n", $cleanLines);
+            $statements = explode(";\n", $cleanSql);
+            foreach ($statements as $statement) {
+                $statement = trim($statement);
+                if (empty($statement)) continue;
+                try { $db->exec($statement); } catch (\PDOException $e) { /* idempotent */ }
+            }
+            return true;
+        },
+    ],
+    [
         'name'   => 'WebAuthn Credentials & Challenges',
         'file'   => 'webauthn_migration.sql',
         'type'   => 'table',
@@ -410,6 +444,15 @@ $migrations = [
         'type'   => 'alter',
         'check'  => function (PDO $db): bool {
             return columnExists($db, 'tenants', 'mollie_connect_profile_id');
+        },
+    ],
+    [
+        'name'   => 'Mollie Token Refresh (refresh_token + expires_at)',
+        'file'   => 'mollie_token_refresh_migration.sql',
+        'type'   => 'alter',
+        'check'  => function (PDO $db): bool {
+            return columnExists($db, 'tenants', 'mollie_connect_refresh_token')
+                && columnExists($db, 'tenants', 'mollie_connect_token_expires_at');
         },
     ],
 ];
@@ -639,6 +682,8 @@ function runVerification(PDO $db): void
             'mollie_connect_access_token',
             // Mollie Connect profile ID migration
             'mollie_connect_profile_id',
+            // Mollie token refresh migration
+            'mollie_connect_refresh_token', 'mollie_connect_token_expires_at',
             // Gated onboarding migration
             'verification_soft_limit', 'verification_hard_limit',
             'verification_cooldown_sec', 'verification_max_attempts',

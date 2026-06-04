@@ -27,7 +27,8 @@ class Tenant
         // Platform fee configuration (super-admin only)
         'platform_fee_percentage', 'platform_fee_min_cents',
         'mollie_status',         'mollie_connect_id', 'mollie_connect_status',
-        'mollie_connect_access_token', 'mollie_connect_profile_id',
+        'mollie_connect_access_token', 'mollie_connect_refresh_token',
+        'mollie_connect_token_expires_at', 'mollie_connect_profile_id',
         'invoice_period', 'btw_number', 'invoice_email', 'platform_fee_note',
     ];
 
@@ -233,6 +234,44 @@ class Tenant
         $stmt->execute([':id' => $tenantId]);
         $status = $stmt->fetchColumn();
         return $status === 'active';
+    }
+
+    /**
+     * Check if the Mollie Connect access token is expired (or expires within 5 min).
+     * Mollie access tokens expire after 1 hour (expires_in=3600).
+     * We use a 5-minute buffer to proactively refresh before actual expiry.
+     */
+    public function isMollieTokenExpired(int $tenantId): bool
+    {
+        $stmt = $this->db->prepare(
+            "SELECT `mollie_connect_token_expires_at` FROM `tenants` WHERE `id` = :id LIMIT 1"
+        );
+        $stmt->execute([':id' => $tenantId]);
+        $expiresAt = $stmt->fetchColumn();
+
+        if (empty($expiresAt)) {
+            // No expiry known — assume valid (legacy tokens without expiry data)
+            return false;
+        }
+
+        $expires = new DateTime($expiresAt, new DateTimeZone('UTC'));
+        $now = new DateTime('now', new DateTimeZone('UTC'));
+        // 5-minute buffer: refresh slightly before actual expiry
+        $now->modify('+5 minutes');
+
+        return $now >= $expires;
+    }
+
+    /**
+     * Update the Mollie Connect tokens after a successful refresh.
+     */
+    public function updateMollieTokens(int $tenantId, string $accessToken, string $refreshToken, string $expiresAt): bool
+    {
+        return $this->update($tenantId, [
+            'mollie_connect_access_token'     => $accessToken,
+            'mollie_connect_refresh_token'    => $refreshToken,
+            'mollie_connect_token_expires_at' => $expiresAt,
+        ]);
     }
 
     /**

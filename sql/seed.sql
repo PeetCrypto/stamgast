@@ -16,8 +16,8 @@ SET NAMES utf8mb4;
 -- 1. TENANT: "Cafe De REGULR.vip" (demo establishment)
 --    mollie_status='mock' + mollie_connect_status='active' = mock payments
 -- -------------------------------------------------------------------------
-INSERT INTO `tenants` (`uuid`, `name`, `slug`, `brand_color`, `secondary_color`, `secret_key`, `mollie_status`, `mollie_connect_status`, `mollie_connect_id`, `platform_fee_percentage`, `platform_fee_min_cents`, `whitelisted_ips`, `feature_push`, `feature_marketing`) VALUES
-('550e8400-e29b-41d4-a716-446655440000', 'Cafe De REGULR.vip', 'cafe-de-regulr', '#FFC107', '#FF9800', 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2', 'mock', 'active', 'org_mock_test', 1.00, 25, '127.0.0.1\n::1\n192.168.1.0/24', 1, 1);
+INSERT INTO `tenants` (`uuid`, `name`, `slug`, `brand_color`, `secondary_color`, `secret_key`, `mollie_status`, `mollie_connect_status`, `mollie_connect_id`, `platform_fee_percentage`, `platform_fee_min_cents`, `whitelisted_ips`, `feature_push`, `feature_marketing`, `tier_model_type`) VALUES
+('550e8400-e29b-41d4-a716-446655440000', 'Cafe De REGULR.vip', 'cafe-de-regulr', '#FFC107', '#FF9800', 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2', 'mock', 'active', 'org_mock_test', 1.00, 25, '127.0.0.1\n::1\n192.168.1.0/24', 1, 1, 'bonus');
 
 -- -------------------------------------------------------------------------
 -- 2. USERS
@@ -55,11 +55,11 @@ INSERT INTO `wallets` (`user_id`, `tenant_id`, `balance_cents`, `points_cents`) 
 -- -------------------------------------------------------------------------
 -- 4. LOYALTY TIERS (Packages)
 -- -------------------------------------------------------------------------
-INSERT INTO `loyalty_tiers` (`tenant_id`, `name`, `min_deposit_cents`, `topup_amount_cents`, `alcohol_discount_perc`, `food_discount_perc`, `points_multiplier`, `is_active`, `sort_order`) VALUES
-(1, 'Bronze',    0,       10000,  0.00,  0.00, 1.00, 1, 1),
-(1, 'Silver',   10000,  10000,   5.00,  5.00, 1.25, 1, 2),
-(1, 'Gold',     50000,  25000,  10.00, 10.00, 1.50, 1, 3),
-(1, 'Platinum', 200000, 50000,  20.00, 15.00, 2.00, 1, 4);
+INSERT INTO `loyalty_tiers` (`tenant_id`, `name`, `min_deposit_cents`, `topup_amount_cents`, `model_type`, `bonus_percentage`, `bonus_cents`, `alcohol_discount_perc`, `food_discount_perc`, `points_multiplier`, `is_active`, `sort_order`) VALUES
+(1, 'Bronze',    0,       10000,  'bonus', 0.00, 1000,  0.00,  0.00, 1.00, 1, 1),
+(1, 'Silver',   10000,  15000,   'bonus', 0.00, 2000,  5.00,  5.00, 1.25, 1, 2),
+(1, 'Gold',     50000,  20000,   'bonus', 0.00, 3000, 10.00, 10.00, 1.50, 1, 3),
+(1, 'Platinum', 200000, 50000,   'bonus', 0.00, 7500, 20.00, 15.00, 2.00, 1, 4);
 
 -- -------------------------------------------------------------------------
 -- LOGIN CREDENTIALS (for testing)

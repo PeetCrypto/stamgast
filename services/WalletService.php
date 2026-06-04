@@ -165,8 +165,16 @@ class WalletService
         );
 
         // Build redirect/webhook URLs
-        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        // Support ngrok/proxy: use X-Forwarded-Host if available (ngrok sends the public URL)
+        $forwardedHost = $_SERVER['HTTP_X_FORWARDED_HOST'] ?? '';
+        $forwardedProto = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '';
+        if (!empty($forwardedHost)) {
+            $scheme = !empty($forwardedProto) ? $forwardedProto : 'https';
+            $host = $forwardedHost;
+        } else {
+            $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+            $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        }
         $baseUrl = "{$scheme}://{$host}";
 
         // Redirect back to wallet with from_payment flag so the frontend knows to
@@ -177,8 +185,9 @@ class WalletService
         // Local dev (.test/.local/localhost): Mollie can't reach local URLs.
         // Omit webhookUrl — Mollie accepts payments without it (webhookUrl is optional).
         // On production, webhookUrl is always included for automatic payment confirmation.
-        $isLocal = preg_match('/\.(test|local)$/', $host) || $host === 'localhost' || $host === '127.0.0.1';
-        if ($isLocal) {
+        $actualHost = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        $isLocal = preg_match('/\.(test|local)$/', $actualHost) || $actualHost === 'localhost' || $actualHost === '127.0.0.1';
+        if ($isLocal && empty($forwardedHost)) {
             $webhookUrl = null;
         }
 
@@ -203,6 +212,38 @@ class WalletService
 
         if (!$isMock && empty($mollieApiKey)) {
             throw new \RuntimeException('Geen Mollie API key beschikbaar voor payment creatie.');
+        }
+
+        // ── Proactive token refresh ────────────────────────────────────────────
+        // If the token is expired or expires within 24h, refresh it BEFORE
+        // creating the payment. This prevents the payment from failing with 401.
+        if (!$isMock) {
+            $tenantRefreshToken = $tenant['mollie_connect_refresh_token'] ?? '';
+            if (!empty($tenantRefreshToken) && $this->tenantModel->isMollieTokenExpired($tenantId)) {
+                try {
+                    $ps = new PlatformSetting($this->db);
+                    $refresher = new MollieService(
+                        '', 'live',
+                        $ps->get('mollie_connect_client_id'),
+                        $ps->get('mollie_connect_client_secret')
+                    );
+                    $newTokens = $refresher->refreshAccessToken($tenantRefreshToken);
+
+                    $this->tenantModel->updateMollieTokens(
+                        $tenantId,
+                        $newTokens['access_token'],
+                        $newTokens['refresh_token'],
+                        $newTokens['expires_at']
+                    );
+
+                    $mollieApiKey = $newTokens['access_token'];
+                    error_log("Mollie token auto-refreshed for tenant {$tenantId}");
+                } catch (\Throwable $e) {
+                    error_log("Mollie token refresh failed for tenant {$tenantId}: " . $e->getMessage());
+                    // Continue with old token — it might still work, or the
+                    // payment creation will fail with a clear error
+                }
+            }
         }
 
         $mollie = new MollieService($mollieApiKey, $mollieMode);
@@ -248,6 +289,32 @@ class WalletService
         // MOCK MODE: Auto-process deposit immediately (no webhook needed)
         // ═══════════════════════════════════════════════════════════════
         if ($isMock) {
+            // Calculate bonus for the response BEFORE processing (processDeposit is idempotent)
+            $mockBonusCents = 0;
+            try {
+                $tierModel = new LoyaltyTier($this->db);
+                $tier = null;
+                $desc = json_encode(['label' => 'Opwaardering wallet', 'tier_id' => $tierId]);
+                $decoded = json_decode($desc, true);
+                if ($decoded && !empty($decoded['tier_id'])) {
+                    $tier = $tierModel->findById((int) $decoded['tier_id'], $tenantId);
+                }
+                if (!$tier) {
+                    $totalDeposits = $this->transactionModel->getTotalDeposits($userId, $tenantId);
+                    $tier = $tierModel->determineTier($tenantId, $totalDeposits);
+                }
+                $modelType = $tier['model_type'] ?? LoyaltyTier::MODEL_DISCOUNT;
+                if ($modelType === LoyaltyTier::MODEL_BONUS) {
+                    if (!empty($tier['bonus_cents']) && (int) $tier['bonus_cents'] > 0) {
+                        $mockBonusCents = (int) $tier['bonus_cents'];
+                    } elseif (($tier['bonus_percentage'] ?? 0) > 0) {
+                        $mockBonusCents = (int) floor($amountCents * (float) $tier['bonus_percentage'] / 100);
+                    }
+                }
+            } catch (\Throwable $e) {
+                error_log('Mock bonus calculation failed: ' . $e->getMessage());
+            }
+
             $this->processDeposit($payment['payment_id'], $amountCents);
             // Note: processDeposit() already sends notification to guest — no duplicate needed
 
@@ -261,6 +328,7 @@ class WalletService
                 $transactionId,
                 [
                     'amount_cents'      => $amountCents,
+                    'bonus_cents'       => $mockBonusCents,
                     'fee_cents'         => $feeCents,
                     'mollie_payment_id' => $payment['payment_id'],
                 ]
@@ -272,6 +340,8 @@ class WalletService
                 'transaction_id' => $transactionId,
                 'fee_cents'      => $feeCents,
                 'status'         => 'mock',
+                'bonus_cents'    => $mockBonusCents,
+                'total_cents'    => $amountCents + $mockBonusCents,
             ];
         }
 

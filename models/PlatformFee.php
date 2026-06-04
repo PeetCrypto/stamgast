@@ -100,14 +100,15 @@ class PlatformFee
         $stmt = $this->db->prepare(
             'UPDATE `platform_fees`
              SET `fee_amount_cents` = :fee_amount,
-                 `net_amount_cents` = `gross_amount_cents` - :fee_amount,
+                 `net_amount_cents` = `gross_amount_cents` - :fee_amount2,
                  `mollie_fee_cents` = :mollie_fee
              WHERE `id` = :id'
         );
         return $stmt->execute([
-            ':fee_amount' => $feeAmountCents,
-            ':mollie_fee' => $mollieFeeCents,
-            ':id'         => $feeId,
+            ':fee_amount'  => $feeAmountCents,
+            ':fee_amount2' => $feeAmountCents,
+            ':mollie_fee'  => $mollieFeeCents,
+            ':id'          => $feeId,
         ]);
     }
 

@@ -110,20 +110,23 @@ try {
         $ps->get('mollie_connect_client_secret')
     );
 
-    // Build redirect URI (must match what's registered in Mollie OAuth app settings)
-// Check for HTTPS in multiple ways (Laragon may set it differently)
-$isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-    || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https')
-    || (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443)
-    || (isset($_SERVER['HTTP_HOST']) && in_array($_SERVER['HTTP_HOST'], ['stamgast.test', 'app.regulr.vip']));
-$scheme = $isHttps ? 'https' : 'http';
-$host = $_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? 'localhost';
-$redirectUri = "{$scheme}://{$host}" . BASE_URL . "/api/mollie/connect-callback";
+    // Build redirect URI — must EXACTLY match what was sent during OAuth initiation.
+    // Use the ACTUAL request host (supports ngrok proxy) to match connect_mollie.php.
+    $forwardedHost = $_SERVER['HTTP_X_FORWARDED_HOST'] ?? '';
+    $forwardedProto = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '';
+    if (!empty($forwardedHost)) {
+        $redirectScheme = !empty($forwardedProto) ? $forwardedProto : 'https';
+        $redirectUri = $redirectScheme . '://' . $forwardedHost . BASE_URL . '/api/mollie/connect-callback';
+    } else {
+        $redirectUri = FULL_BASE_URL . '/api/mollie/connect-callback';
+    }
 
     $tokenData = $mollie->exchangeConnectCode($code, $redirectUri);
 
     $organizationId = $tokenData['organization_id'] ?? '';
     $accessToken    = $tokenData['access_token'] ?? '';
+    $refreshToken   = $tokenData['refresh_token'] ?? '';
+    $expiresAt      = $tokenData['expires_at'] ?? '';
 
     // Debug: log the full token response
     error_log("Mollie OAuth token response: " . json_encode($tokenData));
@@ -189,10 +192,12 @@ $redirectUri = "{$scheme}://{$host}" . BASE_URL . "/api/mollie/connect-callback"
     // ── Update tenant ───────────────────────────────────────────────────────
 
     $tenantModel->update($sessionTenantId, [
-        'mollie_connect_id'            => $orgId,
-        'mollie_connect_status'        => 'active',
-        'mollie_connect_access_token'  => $accessToken,
-        'mollie_connect_profile_id'    => $profileId,
+        'mollie_connect_id'                => $orgId,
+        'mollie_connect_status'            => 'active',
+        'mollie_connect_access_token'      => $accessToken,
+        'mollie_connect_refresh_token'     => $refreshToken,
+        'mollie_connect_token_expires_at'  => $expiresAt,
+        'mollie_connect_profile_id'        => $profileId,
     ]);
 
     // Clear tenant ID from session

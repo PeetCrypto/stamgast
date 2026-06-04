@@ -326,8 +326,9 @@ function handleApiRoute(string $route, string $method): void
     $action = $segments[1] ?? '';
 
     // Require CSRF check for state-changing requests
-    // Skip CSRF for: auth (public endpoints), upload (multipart/form-data sends token as form field)
-    if (!in_array($group, ['auth', 'upload'], true)) {
+    // Skip CSRF for: auth (public endpoints), upload (multipart/form-data sends token as form field),
+    // mollie (webhook called by Mollie servers without CSRF token)
+    if (!in_array($group, ['auth', 'upload', 'mollie'], true)) {
         require_once __DIR__ . '/middleware/csrf.php';
         csrfCheck();
     }
