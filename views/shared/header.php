@@ -110,6 +110,16 @@ $tenantLogo = $_SESSION['tenant_logo'] ?? ''; // Tenant uploaded logo URL
 
 <?php require VIEWS_PATH . 'shared/pwa-install-banner.php'; ?>
 
+<?php if (isViewingAs()): ?>
+<div id="viewing-as-banner" style="background:linear-gradient(135deg,#FF9800,#F44336);color:#000;padding:8px 16px;text-align:center;font-size:14px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:12px;position:sticky;top:0;z-index:9999;">
+    <span>&#128065; Je bekijkt dit als beheerder van <?= sanitize($_SESSION['tenant_name'] ?? 'onbekend') ?></span>
+    <button onclick="stopViewAs()" style="background:#000;color:#fff;border:none;padding:4px 14px;border-radius:4px;cursor:pointer;font-size:13px;">Terug naar superadmin</button>
+</div>
+<script>
+function stopViewAs(){fetch((window.__BASE_URL||'')+'/api/superadmin/view-as',{method:'DELETE',headers:{'X-CSRF-Token':document.querySelector('meta[name="csrf-token"]')?.content||''}}).then(r=>r.json()).then(d=>{if(d.success)window.location.href=(window.__BASE_URL||'')+'/superadmin';else alert('Fout: '+d.error);}).catch(()=>alert('Netwerkfout'));}
+</script>
+<?php endif; ?>
+
 <?php if (isLoggedIn()): ?>
 <nav class="nav-top">
     <div style="display:flex;align-items:center;width:100%;">

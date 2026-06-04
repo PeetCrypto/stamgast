@@ -171,6 +171,7 @@ $tenants = $tenantModel->getAllWithUserCount();
                                     <?= $isActive ? 'Uitschakelen' : 'Inschakelen' ?>
                                 </button>
                                 <a href="<?= BASE_URL ?>/superadmin/tenant/<?= (int) $t['id'] ?>" class="btn btn-secondary btn-sm" style="margin-left: 8px;">Bewerk</a>
+                                <a href="#" onclick="viewAsAdmin(<?= (int) $t['id'] ?>);return false;" class="btn btn-sm" style="margin-left:4px;background:rgba(255,152,0,0.15);color:#FF9800;border:1px solid rgba(255,152,0,0.3);">&#128065; Bekijk</a>
                             </td>
                         </tr>
                         <?php endforeach; ?>
@@ -388,6 +389,27 @@ document.querySelectorAll('.toggle-tenant-btn').forEach(btn => {
         }
     });
 });
+
+// View As Admin — start impersonation for a tenant
+async function viewAsAdmin(tenantId) {
+    const csrf = document.querySelector('input[name="csrf_token"]')?.value
+        || document.querySelector('meta[name="csrf-token"]')?.content || '';
+    try {
+        const res = await fetch((window.__BASE_URL || '') + '/api/superadmin/view-as', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+            body: JSON.stringify({ tenant_id: tenantId })
+        });
+        const data = await res.json();
+        if (data.success) {
+            window.location.href = (window.__BASE_URL || '') + '/admin';
+        } else {
+            alert('Fout: ' + (data.error || 'Onbekend'));
+        }
+    } catch (e) {
+        alert('Netwerkfout');
+    }
+}
 </script>
 
 <?php require VIEWS_PATH . 'shared/footer.php'; ?>

@@ -50,7 +50,12 @@ if (empty($_SESSION['role']) || $_SESSION['role'] !== 'superadmin') {
         . '</body></html>');
 }
 
-// ── 5. Output HTML header ────────────────────────────────────────────────────
+// ── 5. Close session BEFORE running migrations ────────────────────────────────
+// Prevents session lock from blocking concurrent requests (e.g. PWA keepalive)
+// and ensures migration output doesn't interfere with session cookies.
+session_write_close();
+
+// ── 6. Output HTML header ────────────────────────────────────────────────────
 echo '<!DOCTYPE html>' . "\n";
 echo '<html lang="nl">' . "\n";
 echo '<head>' . "\n";
@@ -89,7 +94,7 @@ if (ob_get_level() === 0) {
 ob_flush();
 flush();
 
-// ── 6. Register shutdown to close HTML tags ───────────────────────────────────
+// ── 7. Register shutdown to close HTML tags ───────────────────────────────────
 //    migrate.php always calls exit(0) or exit(1), so we need shutdown handler
 //    to close the <pre>, </body>, </html> tags.
 register_shutdown_function(function() {
@@ -100,5 +105,5 @@ register_shutdown_function(function() {
     echo "\n</pre>\n</body>\n</html>";
 });
 
-// ── 7. Run the migrations ────────────────────────────────────────────────────
+// ── 8. Run the migrations ────────────────────────────────────────────────────
 require __DIR__ . '/migrate_new.php';

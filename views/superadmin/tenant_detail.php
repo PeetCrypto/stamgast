@@ -49,7 +49,10 @@ $feeStats = $feeService->getTenantFeeStats($tenantId);
     <!-- Navigation -->
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
         <h1><?= sanitize($tenant['name']) ?></h1>
-        <a href="<?= BASE_URL ?>/superadmin/tenants" class="btn btn-secondary">&larr; Terug</a>
+        <div style="display:flex;gap:8px;align-items:center;">
+            <button onclick="viewAsAdmin()" class="btn btn-primary">&#128065; Bekijk als beheerder</button>
+            <a href="<?= BASE_URL ?>/superadmin/tenants" class="btn btn-secondary">&larr; Terug</a>
+        </div>
     </div>
 
     <!-- Stats Cards -->
@@ -427,6 +430,16 @@ $feeStats = $feeService->getTenantFeeStats($tenantId);
 <script>
 const CSRF = '<?= generateCSRFToken() ?>';
 const TENANT_ID = <?= $tenantId ?>;
+
+// View As Admin — start impersonation for this tenant
+async function viewAsAdmin(){
+    try{
+        const res=await fetch((window.__BASE_URL||'')+'/api/superadmin/view-as',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':CSRF},body:JSON.stringify({tenant_id:TENANT_ID})});
+        const data=await res.json();
+        if(data.success)window.location.href=(window.__BASE_URL||'')+'/admin';
+        else alert('Fout: '+(data.error||'Onbekend'));
+    }catch(e){alert('Netwerkfout');}
+}
 
 // Show/hide test danger zone based on checkbox state
 function toggleDangerZone() {

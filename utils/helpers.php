@@ -101,6 +101,36 @@ function currentUserRole(): ?string
 }
 
 /**
+ * Get the effective role for access control.
+ * When a superadmin is "viewing as" another role (e.g. admin),
+ * returns that role. Otherwise returns the actual session role.
+ */
+function effectiveRole(): ?string
+{
+    if (isset($_SESSION['viewing_as']['role']) && currentUserRole() === 'superadmin') {
+        return $_SESSION['viewing_as']['role'];
+    }
+    return currentUserRole();
+}
+
+/**
+ * Check if the superadmin is currently in "view as" mode
+ */
+function isViewingAs(): bool
+{
+    return isset($_SESSION['viewing_as']['role']) && currentUserRole() === 'superadmin';
+}
+
+/**
+ * Get the role being impersonated (viewing as).
+ * Returns null if not in viewing_as mode.
+ */
+function viewingAsRole(): ?string
+{
+    return $_SESSION['viewing_as']['role'] ?? null;
+}
+
+/**
  * Require authentication - redirect or die if not logged in
  */
 function requireAuth(): void

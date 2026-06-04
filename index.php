@@ -85,7 +85,7 @@ if (str_starts_with($route, 'stamgast/')) {
 
 // --- Run Auth Check (session timeout etc.) ---
 // Skip auth check for API requests (they have their own auth middleware)
-if ($route !== '' && !str_starts_with($route, 'api/') && $route !== 'push-test' && $route !== 'sw.js') {
+if ($route !== '' && !str_starts_with($route, 'api/') && $route !== 'push-test' && $route !== 'sw.js' && $route !== 'migrate') {
     authCheck();
 }
 
@@ -576,6 +576,9 @@ function handleApiRoute(string $route, string $method): void
                 case 'connect-mollie':
                     require __DIR__ . '/api/superadmin/connect_mollie.php';
                     break;
+                case 'view-as':
+                    require __DIR__ . '/api/superadmin/view-as.php';
+                    break;
                 default:
                     Response::notFound('Super-admin endpoint not found');
             }
@@ -880,19 +883,42 @@ function handleViewRoute(string $route, string $method): void
         }
     }
 
-    // Enforce role-based access
+    // Enforce strict role-based access (each role sees only its own views)
     $roleViews = [
-        'superadmin' => ['superadmin/dashboard.php', 'superadmin/tenants.php', 'superadmin/tenant_detail.php', 'superadmin/fees.php', 'superadmin/invoices.php', 'superadmin/settings.php', 'superadmin/migrate.php', 'superadmin/repair_deposits.php'],
+        'guest'      => ['guest/dashboard.php', 'guest/wallet.php', 'guest/qr.php', 'guest/scan.php', 'guest/inbox.php', 'guest/benefits.php', 'guest/profile/index.php', 'guest/pin-setup.php'],
+        'bartender'  => ['bartender/dashboard.php', 'bartender/scanner.php', 'bartender/payment.php'],
         'admin'      => ['admin/dashboard.php', 'admin/reports.php', 'admin/users.php', 'admin/tiers.php', 'admin/settings.php', 'admin/marketing.php', 'admin/push.php'],
-        'bartender'  => ['bartender/scanner.php', 'bartender/payment.php'],
+        'superadmin' => ['superadmin/dashboard.php', 'superadmin/tenants.php', 'superadmin/tenant_detail.php', 'superadmin/fees.php', 'superadmin/invoices.php', 'superadmin/settings.php', 'superadmin/migrate.php', 'superadmin/repair_deposits.php'],
     ];
 
-    foreach ($roleViews as $requiredRole => $views) {
-        if (in_array($viewFile, $views) && $role !== $requiredRole && $role !== 'superadmin') {
-            // If admin tries to access superadmin views, deny
-            if ($requiredRole === 'superadmin' && $role !== 'superadmin') {
-                redirect('/dashboard');
-            }
+    $effectiveRole = effectiveRole();
+    $actualRole    = currentUserRole();
+
+    // Find which role owns this view
+    $viewOwnerRole = null;
+    foreach ($roleViews as $ownerRole => $views) {
+        if (in_array($viewFile, $views, true)) {
+            $viewOwnerRole = $ownerRole;
+            break;
+        }
+    }
+
+    if ($viewOwnerRole !== null) {
+        $canAccess = ($effectiveRole === $viewOwnerRole);
+
+        // Superadmin can always access their own superadmin views (even when viewing_as)
+        if (!$canAccess && $actualRole === 'superadmin' && $viewOwnerRole === 'superadmin') {
+            $canAccess = true;
+        }
+
+        if (!$canAccess) {
+            $dashboardMap = [
+                'superadmin' => '/superadmin',
+                'admin'      => '/admin',
+                'bartender'  => '/scan',
+                'guest'      => '/dashboard',
+            ];
+            redirect($dashboardMap[$effectiveRole] ?? '/login');
         }
     }
 
