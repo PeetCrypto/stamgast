@@ -246,6 +246,9 @@
         };
     }
 
+    // Rood uitroepteken icoon voor non-paid transacties
+    var warningIconSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+
     function renderTransactionHistory(transactions) {
         const container = document.getElementById('transaction-list');
         if (!container) return;
@@ -256,28 +259,75 @@
         }
 
         container.innerHTML = transactions.map(function(tx) {
-            const isPositive = tx.type === 'deposit' || tx.type === 'bonus'
-                || (tx.type === 'correction' && tx.final_total_cents > 0);
-            const amount = isPositive ? tx.final_total_cents : -tx.final_total_cents;
-            const date = new Date(tx.created_at).toLocaleDateString('nl-NL', {
+            var status = tx.status || 'paid';
+            var isPaid = (status === 'paid');
+            var isPositive = (tx.type === 'deposit' || tx.type === 'bonus'
+                || (tx.type === 'correction' && tx.final_total_cents > 0));
+            var amount = isPositive ? tx.final_total_cents : -tx.final_total_cents;
+            var date = new Date(tx.created_at).toLocaleDateString('nl-NL', {
                 day: 'numeric',
                 month: 'short',
                 hour: '2-digit',
                 minute: '2-digit'
             });
 
-            var icon = getTransactionIcon(tx.type);
+            // Gebruik rood uitroepteken icoon voor non-paid, normaal icoon voor paid
+            var icon = isPaid ? getTransactionIcon(tx.type) : { svg: warningIconSvg, cls: 'icon-warning' };
 
-            return '<div class="transaction-item">' +
+            // Status modifier class for styling
+            var statusClass = 'transaction-item';
+            if (!isPaid) {
+                statusClass += ' transaction-item--' + status;
+            }
+
+            // Status label for non-paid transactions
+            var statusLabel = '';
+            if (status === 'pending') {
+                statusLabel = '<div class="transaction-status-label transaction-status-label--pending">' +
+                    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' +
+                    ' In behandeling</div>';
+            } else if (status === 'failed') {
+                statusLabel = '<div class="transaction-status-label transaction-status-label--failed">' +
+                    'Mislukt</div>';
+            } else if (status === 'expired') {
+                statusLabel = '<div class="transaction-status-label transaction-status-label--failed">' +
+                    'Verlopen</div>';
+            } else if (status === 'cancelled') {
+                statusLabel = '<div class="transaction-status-label transaction-status-label--cancelled">' +
+                    'Geannuleerd</div>';
+            }
+
+            // Warning badge for failed/expired/cancelled deposits
+            var warningBadge = '';
+            if (!isPaid && (tx.type === 'deposit' || tx.type === 'bonus')) {
+                warningBadge = '<div class="transaction-warning">Niet bijgeschreven</div>';
+            }
+
+            // Amount: paid = normaal met +/-, non-paid = rood zonder +/- teken
+            var amountClass, amountText;
+            if (isPaid) {
+                amountClass = 'transaction-amount ' + (isPositive ? 'positive' : 'negative');
+                amountText = (isPositive ? '+' : '') + window.REGULR.formatCurrency(amount);
+            } else {
+                amountClass = 'transaction-amount transaction-amount--failed';
+                amountText = window.REGULR.formatCurrency(amount);
+            }
+
+            // Type label: rood voor non-paid
+            var typeLabelClass = isPaid ? 'transaction-type' : 'transaction-type transaction-type--failed';
+
+            return '<div class="' + statusClass + '">' +
                 '<div class="transaction-icon ' + icon.cls + '">' +
                     icon.svg +
                 '</div>' +
                 '<div class="transaction-details">' +
-                    '<div class="transaction-type">' + getTransactionLabel(tx.type) + '</div>' +
+                    '<div class="' + typeLabelClass + '">' + getTransactionLabel(tx.type) + '</div>' +
                     '<div class="transaction-date">' + date + '</div>' +
+                    statusLabel +
+                    warningBadge +
                 '</div>' +
-                '<div class="transaction-amount ' + (isPositive ? 'positive' : 'negative') + '">' +
-                    (isPositive ? '+' : '') + window.REGULR.formatCurrency(amount) +
+                '<div class="' + amountClass + '">' +
+                    amountText +
                 '</div>' +
             '</div>';
         }).join('');

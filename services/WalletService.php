@@ -260,6 +260,8 @@ class WalletService
         );
 
         // Create pending transaction (deposit)
+        // Mock mode: status='paid' (processed immediately below)
+        // Test/Live mode: status='pending' (webhook updates to 'paid' on confirmation)
         $transactionId = $this->transactionModel->create([
             'tenant_id'          => $tenantId,
             'user_id'            => $userId,
@@ -269,6 +271,7 @@ class WalletService
             'ip_address'         => getClientIP(),
             'mollie_payment_id'  => $payment['payment_id'],
             'description'        => json_encode(['label' => 'Opwaardering wallet', 'tier_id' => $tierId]),
+            'status'             => $isMock ? 'paid' : 'pending',
         ]);
 
         // Create PlatformFee record
@@ -484,6 +487,9 @@ class WalletService
             $stmt->execute([':id' => $fee['id']]);
 
             $this->db->commit();
+
+            // Mark transaction as paid (deposit successfully credited to wallet)
+            $this->transactionModel->updateStatus($transactionId, 'paid');
 
             // Send notification + email to guest (non-critical)
             try {

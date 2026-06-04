@@ -455,6 +455,14 @@ $migrations = [
                 && columnExists($db, 'tenants', 'mollie_connect_token_expires_at');
         },
     ],
+    [
+        'name'   => 'Transaction Status (deposit lifecycle: pending/paid/failed/expired/cancelled)',
+        'file'   => 'transaction_status_migration.sql',
+        'type'   => 'alter',
+        'check'  => function (PDO $db): bool {
+            return columnExists($db, 'transactions', 'status');
+        },
+    ],
 ];
 
 // ── Helper functions ────────────────────────────────────────────────────────
@@ -729,6 +737,8 @@ function runVerification(PDO $db): void
             'btw_alc_cents', 'btw_food_cents', 'btw_total_cents',
             // Tip migration
             'tip_cents',
+            // Transaction status migration
+            'status',
         ],
     ];
 

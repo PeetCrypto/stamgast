@@ -154,6 +154,23 @@ try {
     );
 
     // ═══════════════════════════════════════════════════════════════════
+    // UPDATE TRANSACTION STATUS FROM MOLLIE
+    // Always update — only 'paid' triggers processDeposit() below
+    // Failed/expired/cancelled are visible in history but NOT in wallet
+    // ═══════════════════════════════════════════════════════════════════
+    $mollieStatus = $paymentStatus['status'] ?? 'open';
+    $statusMap = [
+        'open'      => 'pending',
+        'pending'   => 'pending',
+        'paid'      => 'paid',
+        'failed'    => 'failed',
+        'expired'   => 'expired',
+        'cancelled' => 'cancelled',
+    ];
+    $txStatus = $statusMap[$mollieStatus] ?? 'pending';
+    $transactionModel->updateStatus($transactionId, $txStatus);
+
+    // ═══════════════════════════════════════════════════════════════════
     // CRITICAL: Update platform fee FROM MOLLIE AS AUTHORITY
     // ═══════════════════════════════════════════════════════════════════
     $platformFeeModel = new PlatformFee($db);

@@ -45,7 +45,8 @@ class Transaction
               `final_total_cents`, `points_earned`, `points_used`,
               `btw_alc_cents`, `btw_food_cents`, `btw_total_cents`,
               `tip_cents`,
-              `ip_address`, `device_fingerprint`, `mollie_payment_id`, `description`)
+              `ip_address`, `device_fingerprint`, `mollie_payment_id`, `description`,
+              `status`)
              VALUES
              (:tenant_id, :user_id, :bartender_id, :type,
               :amount_alc_cents, :amount_food_cents,
@@ -53,7 +54,8 @@ class Transaction
               :final_total_cents, :points_earned, :points_used,
               :btw_alc_cents, :btw_food_cents, :btw_total_cents,
               :tip_cents,
-              :ip_address, :device_fingerprint, :mollie_payment_id, :description)'
+              :ip_address, :device_fingerprint, :mollie_payment_id, :description,
+              :status)'
         );
 
         $stmt->execute([
@@ -76,6 +78,7 @@ class Transaction
             ':device_fingerprint'  => $data['device_fingerprint'] ?? null,
             ':mollie_payment_id'   => $data['mollie_payment_id'] ?? null,
             ':description'         => $data['description'] ?? null,
+            ':status'              => $data['status'] ?? 'paid',
         ]);
 
         return (int) $this->db->lastInsertId();
@@ -147,6 +150,7 @@ class Transaction
     /**
      * Calculate total deposits for a user within a tenant
      * Used to determine the user's loyalty tier
+     * Only counts deposits with status='paid' — pending/failed deposits don't count
      */
     public function getTotalDeposits(int $userId, int $tenantId): int
     {
@@ -155,12 +159,14 @@ class Transaction
              FROM `transactions`
              WHERE `user_id` = :user_id
                AND `tenant_id` = :tenant_id
-               AND `type` = :type'
+               AND `type` = :type
+               AND `status` = :status'
         );
         $stmt->execute([
             ':user_id'   => $userId,
             ':tenant_id' => $tenantId,
             ':type'      => 'deposit',
+            ':status'    => 'paid',
         ]);
         return (int) $stmt->fetchColumn();
     }
@@ -176,6 +182,22 @@ class Transaction
         $stmt->execute([':mollie_id' => $molliePaymentId]);
         $result = $stmt->fetch();
         return $result ?: null;
+    }
+
+    /**
+     * Update the status of a transaction
+     * Used by webhook to track payment lifecycle (pending → paid/failed/expired/cancelled)
+     */
+    public function updateStatus(int $id, string $status): void
+    {
+        $allowed = ['pending', 'paid', 'failed', 'expired', 'cancelled'];
+        if (!in_array($status, $allowed, true)) {
+            throw new \InvalidArgumentException('Invalid transaction status: ' . $status);
+        }
+        $stmt = $this->db->prepare(
+            'UPDATE `transactions` SET `status` = :status WHERE `id` = :id'
+        );
+        $stmt->execute([':status' => $status, ':id' => $id]);
     }
 
     /**
