@@ -222,6 +222,7 @@ class LoyaltyTier
             'topup_amount_cents'    => self::MIN_TOPUP_CENTS,
             'model_type'            => self::MODEL_DISCOUNT,
             'bonus_percentage'      => 0.00,
+            'bonus_cents'           => 0,
             'alcohol_discount_perc' => 0.00,
             'food_discount_perc'    => 0.00,
             'points_multiplier'     => 1.00,
