@@ -116,7 +116,10 @@ require __DIR__ . '/../shared/header.php';
         <h2 style="color:#4CAF50;margin-bottom:0.5rem;">Betaling geslaagd!</h2>
         <p id="success-total" style="font-size:24px;font-weight:700;color:var(--accent-primary);margin-bottom:0.25rem;"></p>
         <p id="success-points" style="color:var(--text-muted);font-size:14px;margin-bottom:2rem;"></p>
-        <a href="<?= BASE_URL ?>/dashboard" class="btn btn-primary">Terug naar dashboard</a>
+        <div style="display:flex;gap:0.75rem;justify-content:center;">
+            <button class="btn btn-ghost" id="btn-scan-again" style="flex:1;">Nog een betaling</button>
+            <a href="<?= BASE_URL ?>/dashboard" class="btn btn-primary" style="flex:1;">Dashboard</a>
+        </div>
     </div>
 
     <!-- ============ STATE: FAILED ============ -->
@@ -264,14 +267,31 @@ require __DIR__ . '/../shared/header.php';
     }
 
     function stopScanner() {
-        if (qrScanner) {
-            try {
-                qrScanner.stop().then(function() {
-                    qrScanner.clear();
-                    qrScanner = null;
-                }).catch(function() { qrScanner = null; });
-            } catch (e) { qrScanner = null; }
-        }
+        if (!qrScanner) return;
+
+        // 1. Stop direct de onderliggende MediaStreamTrack(s) op OS-niveau.
+        //    Dit is synchroner dan qrScanner.stop() (een Promise) en voorkomt
+        //    dat de camera geblokkeerd blijft als de pagina verdwijnt vóór de
+        //    Promise resolveert (bekend probleem op iOS Safari / PWA).
+        try {
+            var videoEl = document.getElementById('qr-reader');
+            if (videoEl && videoEl.srcObject) {
+                var tracks = videoEl.srcObject.getTracks ? videoEl.srcObject.getTracks() : [];
+                for (var i = 0; i < tracks.length; i++) {
+                    try { tracks[i].stop(); } catch (e) {}
+                }
+                videoEl.srcObject = null;
+            }
+        } catch (e) {}
+
+        // 2. Roep ook de library stop() aan voor interne cleanup.
+        var scanner = qrScanner;
+        qrScanner = null; // direct null'en om re-entrancy te voorkomen
+        try {
+            scanner.stop().then(function() {
+                try { scanner.clear(); } catch (e) {}
+            }).catch(function() { /* track al handmatig gestopt */ });
+        } catch (e) { /* negeer */ }
     }
 
     function onQRDetected(decodedText) {
@@ -617,6 +637,12 @@ require __DIR__ . '/../shared/header.php';
         if (data.points_earned > 0) parts.push('+' + data.points_earned + ' punten verdiend');
         $('#success-points').textContent = parts.join(' • ');
         switchState('success');
+
+        // Reset state zodat een nieuwe betaling direct mogelijk is
+        sessionToken = null;
+        paymentData = null;
+        selectedTipCents = 0;
+        stopScanner();
     }
 
     function showFailed(reason) {
@@ -631,6 +657,13 @@ require __DIR__ . '/../shared/header.php';
 
         var cancelBtn = $('#btn-cancel');
         if (cancelBtn) cancelBtn.addEventListener('click', cancelPayment);
+
+        // Scan again after success
+        var scanAgainBtn = $('#btn-scan-again');
+        if (scanAgainBtn) scanAgainBtn.addEventListener('click', function() {
+            switchState('scanner');
+            startScanner();
+        });
 
         // Custom tip confirm button
         var customConfirmBtn = $('#tip-custom-confirm');
@@ -651,6 +684,21 @@ require __DIR__ . '/../shared/header.php';
         if (retryBtn) retryBtn.addEventListener('click', function() { startScanner(); });
         switchState('scanner');
         startScanner();
+
+        // --- Camera cleanup bij navigatie / app-achtergrond ---
+        // Zonder deze handlers blijft de getUserMedia track actief op OS-niveau
+        // als de gast weg navigeert (bijv. naar /wallet om een pakket te kopen).
+        // Op mobiel (vooral iOS) blokkeert dit de camera bij de volgende /pay
+        // visit — de gast moet dan de app herstarten.
+        function cleanupCamera() { stopScanner(); }
+
+        window.addEventListener('pagehide', cleanupCamera);
+        window.addEventListener('beforeunload', cleanupCamera);
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState === 'hidden') {
+                stopScanner();
+            }
+        });
     }
 
     if (document.readyState === 'loading') {
