@@ -384,6 +384,7 @@
     grid-template-columns: 1fr 1fr;
     gap: var(--space-md);
     margin-top: var(--space-lg);
+    margin-bottom: var(--space-lg);
 }
 
 /* Outline button variant */

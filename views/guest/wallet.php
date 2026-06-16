@@ -76,6 +76,23 @@ require __DIR__ . '/../shared/header.php';
     </div>
     <?php endif; ?>
 
+    <!-- Quick Actions (mid-page, voor snelle navigatie op mobiel) -->
+    <div class="quick-actions">
+        <a href="<?= BASE_URL ?>/pay" class="btn btn-outline">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+                <polyline points="9 22 9 12 15 12 15 22"/>
+            </svg>
+            Betaal
+        </a>
+        <a href="<?= BASE_URL ?>/dashboard" class="btn btn-outline">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+            </svg>
+            Dashboard
+        </a>
+    </div>
+
     <!-- Transaction History -->
     <div class="info-card glass-card">
         <h3>Transactiegeschiedenis</h3>
