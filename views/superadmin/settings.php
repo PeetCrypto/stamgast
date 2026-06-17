@@ -806,7 +806,7 @@ function createSuperadmin() {
 
     fetch('<?= BASE_URL ?>/api/superadmin/admins', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || '' },
         body: JSON.stringify({
             action: 'create',
             email: email,
@@ -869,7 +869,7 @@ function savePassword() {
 
     fetch('<?= BASE_URL ?>/api/superadmin/admins', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || '' },
         body: JSON.stringify({
             action: 'change_password',
             user_id: userId,
@@ -902,7 +902,7 @@ function deleteSuperadmin(userId, email) {
 
     fetch('<?= BASE_URL ?>/api/superadmin/admins', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || '' },
         body: JSON.stringify({
             action: 'delete',
             user_id: userId
