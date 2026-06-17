@@ -358,6 +358,19 @@ if ($route === 'migrate') {
     exit;
 }
 
+// --- One-time Mollie Token Encryption (superadmin only) ---
+if ($route === 'encrypt-mollie-tokens') {
+    if (isLoggedIn() && currentUserRole() === 'superadmin') {
+        require ROOT_PATH . 'encrypt_mollie_tokens.php';
+    } else {
+        http_response_code(403);
+        echo '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>';
+        echo '<h2 style="color:#f44336">403 — Geen toegang</h2>';
+        echo '</body></html>';
+    }
+    exit;
+}
+
 // --- View Routes ---
 handleViewRoute($route, $method);
 exit;
