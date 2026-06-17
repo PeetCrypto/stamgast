@@ -463,6 +463,96 @@ $migrations = [
             return columnExists($db, 'transactions', 'status');
         },
     ],
+    [
+        'name'   => 'Emergency Token (break-glass superadmin access)',
+        'type'   => 'inline',
+        'check'  => function (PDO $db): bool {
+            // "Applied" = there is an active (non-empty) emergency token hash
+            $stmt = $db->prepare("SELECT setting_value FROM platform_settings WHERE setting_key = 'emergency_token_hash' AND setting_value != '' LIMIT 1");
+            $stmt->execute();
+            return !empty($stmt->fetchColumn());
+        },
+        'run'    => function (PDO $db): bool {
+            // Generate a new 256-bit emergency token
+            $token = bin2hex(random_bytes(32));
+            $hash  = password_hash($token, PASSWORD_DEFAULT);
+
+            // Ensure platform_settings table exists
+            $db->exec(
+                "CREATE TABLE IF NOT EXISTS `platform_settings` (
+                    `id`            INT AUTO_INCREMENT PRIMARY KEY,
+                    `setting_key`   VARCHAR(128)   NOT NULL UNIQUE,
+                    `setting_value` TEXT           DEFAULT NULL,
+                    `encrypted`     TINYINT(1)     NOT NULL DEFAULT 0,
+                    `created_at`    TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    `updated_at`    TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    INDEX `idx_setting_key` (`setting_key`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+            );
+
+            // Upsert the token hash
+            $stmt = $db->prepare(
+                "INSERT INTO `platform_settings` (`setting_key`, `setting_value`, `encrypted`)
+                 VALUES ('emergency_token_hash', :hash, 1)
+                 ON DUPLICATE KEY UPDATE `setting_value` = :hash2, `updated_at` = NOW()"
+            );
+            $stmt->execute([':hash' => $hash, ':hash2' => $hash]);
+
+            // Display the plaintext token (shown ONCE in migration output)
+            echo "\n";
+            echo bold("  ┌──────────────────────────────────────────────────────┐\n");
+            echo bold("  │  🔑 EMERGENCY TOKEN GEGENEREERD                      │\n");
+            echo bold("  │                                                      │\n");
+            echo yellow("  │  Token: {$token}  │\n");
+            echo bold("  │                                                      │\n");
+            echo bold("  │  Gebruik dit token als wachtwoord op /login          │\n");
+            echo bold("  │  met je superadmin e-mail. Het token is eenmalig.     │\n");
+            echo bold("  └──────────────────────────────────────────────────────┘\n\n");
+
+            return true;
+        },
+    ],
+    [
+        'name'   => 'Security Hardening (password setup tokens + Mollie webhook secret)',
+        'file'   => 'security_hardening_migration.sql',
+        'type'   => 'alter',
+        'check'  => function (PDO $db): bool {
+            return columnExists($db, 'users', 'password_setup_token_hash')
+                && columnExists($db, 'users', 'password_setup_expires_at');
+        },
+    ],
+    [
+        'name'   => 'Mollie Webhook Secret Token',
+        'type'   => 'inline',
+        'check'  => function (PDO $db): bool {
+            $stmt = $db->prepare("SELECT setting_value FROM platform_settings WHERE setting_key = 'mollie_webhook_secret' AND setting_value != '' LIMIT 1");
+            $stmt->execute();
+            return !empty($stmt->fetchColumn());
+        },
+        'run'    => function (PDO $db): bool {
+            // Generate a 256-bit webhook secret token
+            $secret = bin2hex(random_bytes(32));
+
+            $stmt = $db->prepare(
+                "INSERT INTO `platform_settings` (`setting_key`, `setting_value`, `encrypted`)
+                 VALUES ('mollie_webhook_secret', :secret, 0)
+                 ON DUPLICATE KEY UPDATE `setting_value` = :secret2, `updated_at` = NOW()"
+            );
+            $stmt->execute([':secret' => $secret, ':secret2' => $secret]);
+
+            echo "\n";
+            echo bold("  ┌──────────────────────────────────────────────────────┐\n");
+            echo bold("  │  🔒 MOLLIE WEBHOOK SECRET GEGENEREERD               │\n");
+            echo bold("  │                                                      │\n");
+            echo yellow("  │  Secret: {$secret}  │\n");
+            echo bold("  │                                                      │\n");
+            echo bold("  │  Configureer dit als webhook URL parameter in Mollie │\n");
+            echo bold("  │  /api/mollie/webhook?token=<secret>                  │\n");
+            echo bold("  └──────────────────────────────────────────────────────┘\n\n");
+
+            return true;
+        },
+    ],
 ];
 
 // ── Helper functions ────────────────────────────────────────────────────────
@@ -716,6 +806,8 @@ function runVerification(PDO $db): void
             'fcm_token', 'phone', 'street', 'house_number', 'postal_code', 'city',
             // Email verification migration
             'email_verification_code', 'email_verified_at',
+            // Security hardening migration
+            'password_setup_token_hash', 'password_setup_expires_at',
         ],
         'loyalty_tiers' => [
             'id', 'tenant_id', 'name', 'min_deposit_cents',

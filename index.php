@@ -12,6 +12,7 @@ require_once __DIR__ . '/config/app.php';
 require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/config/cors.php';
 require_once __DIR__ . '/utils/helpers.php';
+require_once __DIR__ . '/utils/Crypto.php';
 require_once __DIR__ . '/utils/response.php';
 require_once __DIR__ . '/utils/audit.php';
 require_once __DIR__ . '/utils/validator.php';
@@ -48,10 +49,26 @@ if (session_status() === PHP_SESSION_NONE) {
 
         // Nu we session data hebben: check rol en vernieuw cookie indien gast
         if (isset($_SESSION['role']) && $_SESSION['role'] === 'guest') {
+            // SECURITY: Periodically regenerate session ID to limit the window of a stolen session.
+            // Without this, a leaked session ID remains valid for the full 60-day guest cookie lifetime.
+            $lastRegen = $_SESSION['last_session_regen'] ?? 0;
+            if (time() - (int) $lastRegen > 86400) { // 24 hours
+                session_regenerate_id(true);
+                $_SESSION['last_session_regen'] = time();
+            }
+
+            // SECURITY: Use array notation to preserve the SameSite=Lax flag.
+            // The old positional setcookie() call dropped SameSite, falling back to
+            // browser default (None in older browsers), making CSRF easier.
             $params = session_get_cookie_params();
-            setcookie(session_name(), session_id(), time() + SESSION_COOKIE_LIFETIME_GUEST,
-                $params['path'], $params['domain'], $params['secure'], $params['httponly']
-            );
+            setcookie(session_name(), session_id(), [
+                'expires'  => time() + SESSION_COOKIE_LIFETIME_GUEST,
+                'path'     => $params['path'],
+                'domain'   => $params['domain'],
+                'secure'   => $params['secure'],
+                'httponly' => true,
+                'samesite' => 'Lax',
+            ]);
         }
     } else {
         // Nieuwe session (geen cookie)
@@ -73,6 +90,21 @@ require_once __DIR__ . '/services/TimezoneService.php';
 $db = Database::getInstance()->getConnection();
 $tzTenantId = $_SESSION['tenant_id'] ?? null;
 TimezoneService::init($db, $tzTenantId);
+
+// --- Load Emergency Token Hash from DB ---
+// Break-glass superadmin access token. Loaded from platform_settings
+// so it can be invalidated after use without redeploying.
+try {
+    $emergencyStmt = $db->prepare("SELECT `setting_value` FROM `platform_settings` WHERE `setting_key` = 'emergency_token_hash' AND `setting_value` != '' LIMIT 1");
+    $emergencyStmt->execute();
+    $emergencyHash = $emergencyStmt->fetchColumn();
+    if (!empty($emergencyHash)) {
+        putenv('EMERGENCY_TOKEN_HASH=' . $emergencyHash);
+        $_ENV['EMERGENCY_TOKEN_HASH'] = $emergencyHash;
+    }
+} catch (\Throwable $e) {
+    // platform_settings table may not exist yet — non-fatal
+}
 
 // --- Get Route ---
 $route = trim($_GET['route'] ?? '', '/');
@@ -167,7 +199,18 @@ if (str_starts_with($staticRoute, 'css/') || str_starts_with($staticRoute, 'js/'
     if ($staticRoute === 'favicon.ico' && !file_exists($filePath)) {
         $filePath = PUBLIC_PATH . 'icons/favicon.png';
     }
-    if (file_exists($filePath)) {
+
+    // SECURITY: Validate that the resolved path is inside PUBLIC_PATH.
+    // Prevents path traversal (e.g. css/../../../config/app.php) on servers
+    // that don't normalize ../ in URLs.
+    $realFilePath = realpath($filePath);
+    $realPublicPath = realpath(PUBLIC_PATH);
+    if ($realFilePath === false || $realPublicPath === false || !str_starts_with($realFilePath, $realPublicPath)) {
+        http_response_code(403);
+        exit;
+    }
+
+    if (file_exists($realFilePath)) {
         $ext = pathinfo($filePath, PATHINFO_EXTENSION);
         $mimeTypes = [
             'css' => 'text/css',
@@ -179,7 +222,7 @@ if (str_starts_with($staticRoute, 'css/') || str_starts_with($staticRoute, 'js/'
             'json' => 'application/json',
         ];
         header('Content-Type: ' . ($mimeTypes[$ext] ?? 'text/plain'));
-        readfile($filePath);
+        readfile($realFilePath);
         exit;
     }
 }
@@ -207,8 +250,11 @@ if (str_starts_with($apiRouteCheck, 'api/')) {
         handleApiRoute($apiRoute, $method);
     } catch (\Throwable $e) {
         ob_end_clean();
-        // Always show error details for superadmin users (helps debugging on production)
-        $showDebug = APP_DEBUG || (isset($_SESSION['role']) && $_SESSION['role'] === 'superadmin');
+        // SECURITY: Never leak internal error details in HTTP responses, even for superadmins.
+        // Full error details go to server logs only. A stolen superadmin session should not
+        // reveal file paths, line numbers, or stack traces that aid further exploitation.
+        error_log('API Error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+        $showDebug = APP_DEBUG; // Only in development mode
         http_response_code(500);
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode([
@@ -361,6 +407,9 @@ function handleApiRoute(string $route, string $method): void
                     break;
                 case 'reset-password':
                     require __DIR__ . '/api/auth/reset-password.php';
+                    break;
+                case 'setup-password':
+                    require __DIR__ . '/api/auth/setup-password.php';
                     break;
                 case 'keepalive':
                     require __DIR__ . '/api/auth/keepalive.php';
@@ -724,6 +773,7 @@ function handleViewRoute(string $route, string $method): void
         'register'        => 'shared/register.php',
         'forgot-password' => 'shared/forgot-password.php',
         'reset-password'  => 'shared/reset-password.php',
+        'setup-password'  => 'shared/setup-password.php',
         'push-test'       => 'shared/push-test.php',
 
         // Guest
@@ -759,6 +809,7 @@ function handleViewRoute(string $route, string $method): void
     'superadmin/settings'         => 'superadmin/settings.php',
     'superadmin/migrate'          => 'superadmin/migrate.php',
     'superadmin/repair-deposits'  => 'superadmin/repair_deposits.php',
+    'superadmin/emergency-token'  => 'superadmin/emergency_token.php',
     ];
 
     // Handle API routes first
@@ -834,7 +885,7 @@ function handleViewRoute(string $route, string $method): void
     }
 
     // Enforce auth for protected views
-    $publicViews = ['shared/login.php', 'shared/register.php'];
+    $publicViews = ['shared/login.php', 'shared/register.php', 'shared/setup-password.php'];
     if (!in_array($viewFile, $publicViews) && !isLoggedIn()) {
         redirect(getGuestLoginUrl());
     }
@@ -888,7 +939,7 @@ function handleViewRoute(string $route, string $method): void
         'guest'      => ['guest/dashboard.php', 'guest/wallet.php', 'guest/qr.php', 'guest/scan.php', 'guest/inbox.php', 'guest/benefits.php', 'guest/profile/index.php', 'guest/pin-setup.php'],
         'bartender'  => ['bartender/dashboard.php', 'bartender/scanner.php', 'bartender/payment.php'],
         'admin'      => ['admin/dashboard.php', 'admin/reports.php', 'admin/users.php', 'admin/tiers.php', 'admin/settings.php', 'admin/marketing.php', 'admin/push.php'],
-        'superadmin' => ['superadmin/dashboard.php', 'superadmin/tenants.php', 'superadmin/tenant_detail.php', 'superadmin/fees.php', 'superadmin/invoices.php', 'superadmin/settings.php', 'superadmin/migrate.php', 'superadmin/repair_deposits.php'],
+        'superadmin' => ['superadmin/dashboard.php', 'superadmin/tenants.php', 'superadmin/tenant_detail.php', 'superadmin/fees.php', 'superadmin/invoices.php', 'superadmin/settings.php', 'superadmin/migrate.php', 'superadmin/repair_deposits.php', 'superadmin/emergency_token.php'],
     ];
 
     $effectiveRole = effectiveRole();

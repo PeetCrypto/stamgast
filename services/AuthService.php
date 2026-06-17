@@ -76,8 +76,8 @@ class AuthService
             return null;
         }
 
-        // Check if Argon2id needs rehash (cost parameters changed)
-        if (password_needs_rehash($user['password_hash'], PASSWORD_ARGON2ID)) {
+        // Check if password needs rehash (algorithm/cost changed)
+        if (password_needs_rehash($user['password_hash'], PASSWORD_DEFAULT)) {
             $this->rehashPassword($user['id'], $password);
         }
 
@@ -134,7 +134,7 @@ class AuthService
 
         // Hash password with Argon2id + pepper
         $pepperedPassword = $data['password'] . (defined('APP_PEPPER') ? APP_PEPPER : '');
-        $passwordHash = password_hash($pepperedPassword, PASSWORD_ARGON2ID);
+        $passwordHash = password_hash($pepperedPassword, PASSWORD_DEFAULT);
 
         if ($passwordHash === false) {
             return ['success' => false, 'error' => 'Wachtwoord hashing mislukt'];
@@ -309,7 +309,7 @@ class AuthService
     private function rehashPassword(int $userId, string $password): void
     {
         $pepperedPassword = $password . (defined('APP_PEPPER') ? APP_PEPPER : '');
-        $newHash = password_hash($pepperedPassword, PASSWORD_ARGON2ID);
+        $newHash = password_hash($pepperedPassword, PASSWORD_DEFAULT);
 
         if ($newHash !== false) {
             $stmt = $this->db->prepare('UPDATE `users` SET `password_hash` = :hash WHERE `id` = :id');
@@ -333,5 +333,44 @@ class AuthService
             ':user_id'   => $userId,
             ':tenant_id' => $tenantId,
         ]);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Emergency Token (Break-Glass Access)
+    // ─────────────────────────────────────────────────────────────
+
+    /**
+     * Verify an emergency token against the stored hash.
+     * Uses password_verify since we hash the token with Argon2id.
+     */
+    public function verifyEmergencyToken(string $token, string $storedHash): bool
+    {
+        if (empty($token) || empty($storedHash)) {
+            return false;
+        }
+        // Minimum length check to avoid timing attacks on short inputs
+        if (strlen($token) < 32) {
+            return false;
+        }
+        return password_verify($token, $storedHash);
+    }
+
+    /**
+     * Invalidate the emergency token by clearing the hash in the database.
+     * Called after successful emergency login (one-time use).
+     */
+    public function invalidateEmergencyToken(): void
+    {
+        try {
+            $stmt = $this->db->prepare(
+                "UPDATE `platform_settings` SET `setting_value` = '' WHERE `setting_key` = 'emergency_token_hash'"
+            );
+            $stmt->execute();
+        } catch (\Throwable $e) {
+            error_log('Failed to invalidate emergency token: ' . $e->getMessage());
+        }
+        // Also clear from current process environment
+        putenv('EMERGENCY_TOKEN_HASH');
+        $_ENV['EMERGENCY_TOKEN_HASH'] = '';
     }
 }

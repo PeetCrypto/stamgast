@@ -15,17 +15,59 @@ function sanitize(string $value): string
 }
 
 /**
- * Get the client IP address (proxy-aware)
+ * Get the trusted base URL for external redirects, webhooks, and OAuth callbacks.
+ *
+ * SECURITY: Never trust X-Forwarded-Host in production. An attacker can spoof
+ * this header to perform SSRF, open redirect, or OAuth redirect attacks.
+ *
+ * In production: always use FULL_BASE_URL (derived from APP_URL in .env).
+ * In development: allow X-Forwarded-Host for ngrok/local tunnel support.
+ *
+ * @return string Base URL without trailing slash (e.g. "https://app.regulr.vip")
+ */
+function getTrustedBaseUrl(): string
+{
+    // In development, allow X-Forwarded-Host for ngrok tunnels
+    if (APP_DEBUG) {
+        $forwardedHost   = $_SERVER['HTTP_X_FORWARDED_HOST'] ?? '';
+        $forwardedProto  = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '';
+        if (!empty($forwardedHost)) {
+            $scheme = !empty($forwardedProto) ? $forwardedProto : 'https';
+            // Validate: only allow valid hostnames (no IP injection, no path traversal)
+            if (preg_match('/^[a-zA-Z0-9._:-]+$/', $forwardedHost)) {
+                return rtrim("{$scheme}://{$forwardedHost}", '/');
+            }
+        }
+    }
+
+    // Production: use FULL_BASE_URL (from APP_URL env var)
+    return rtrim(FULL_BASE_URL, '/');
+}
+
+/**
+ * Get the client IP address.
+ *
+ * SECURITY: Only trusts X-Forwarded-For in development mode or when behind
+ * a known reverse proxy. In production on shared hosting, REMOTE_ADDR is
+ * the only trustworthy source. Trusting XFF headers allows IP spoofing
+ * which defeats rate limiting, IP whitelists, and audit logging.
+ *
+ * @return string Client IP address
  */
 function getClientIP(): string
 {
-    $headers = ['HTTP_X_FORWARDED_FOR', 'HTTP_CLIENT_IP', 'REMOTE_ADDR'];
-    foreach ($headers as $header) {
-        $ip = $_SERVER[$header] ?? '';
-        if (filter_var($ip, FILTER_VALIDATE_IP)) {
-            return $ip;
+    // In development, allow X-Forwarded-For for ngrok/local proxy testing
+    if (APP_DEBUG) {
+        $headers = ['HTTP_X_FORWARDED_FOR', 'HTTP_CLIENT_IP', 'REMOTE_ADDR'];
+        foreach ($headers as $header) {
+            $ip = $_SERVER[$header] ?? '';
+            if ($ip !== '' && filter_var($ip, FILTER_VALIDATE_IP)) {
+                return $ip;
+            }
         }
     }
+
+    // Production: only trust REMOTE_ADDR
     return $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
 }
 

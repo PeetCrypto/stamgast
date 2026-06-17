@@ -29,7 +29,8 @@ switch ($method) {
             // List all tenants
             $tenants = $tenantModel->getAll();
             $safeTenants = array_map(function ($t) {
-                unset($t['secret_key'], $t['mollie_api_key']);
+                unset($t['secret_key'], $t['mollie_api_key'],
+                      $t['mollie_connect_access_token'], $t['mollie_connect_refresh_token']);
                 return $t;
             }, $tenants);
             Response::success(['tenants' => $safeTenants]);
@@ -156,7 +157,7 @@ function handleCreate(Tenant $model, User $userModel, array $input, PDO $db): vo
     } catch (\Throwable $e) {
         error_log('REGULR tenant create failed: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
         Response::error(
-            'Fout bij aanmaken tenant. Controleer of alle database migraties zijn uitgevoerd. Details: ' . $e->getMessage(),
+            'Fout bij aanmaken tenant. Controleer of alle database migraties zijn uitgevoerd. Controleer de server logs voor details.',
             'TENANT_CREATE_FAILED',
             500
         );
@@ -165,34 +166,58 @@ function handleCreate(Tenant $model, User $userModel, array $input, PDO $db): vo
     // Auto-create admin user for the new tenant
     // contact_email is guaranteed to be present (validated above)
     $adminEmail = $input['contact_email'];
-    $adminPassword = substr(bin2hex(random_bytes(12)), 0, 16); // 16-char random password
+    // SECURITY: Generate a random temp password (never communicated via email).
+    // The user sets their own password via a one-time setup link.
+    $tempPassword = bin2hex(random_bytes(16));
+    $adminPasswordHash = password_hash($tempPassword . APP_PEPPER, PASSWORD_DEFAULT);
     $adminFirstName = $input['contact_name'] ?? 'Admin';
     $nameParts = explode(' ', trim($adminFirstName), 2);
     $firstName = $nameParts[0];
     $lastName = $nameParts[1] ?? $input['name'];
 
+    // Generate one-time setup token (magic link)
+    $setupToken = bin2hex(random_bytes(32));
+    $setupTokenHash = password_hash($setupToken, PASSWORD_DEFAULT);
+    $setupExpiresAt = date('Y-m-d H:i:s', time() + 86400); // 24 hours
+
     try {
         $userModel->create([
             'tenant_id'     => $tenantId,
             'email'         => $adminEmail,
-            'password_hash' => password_hash($adminPassword . APP_PEPPER, PASSWORD_ARGON2ID),
+            'password_hash' => $adminPasswordHash,
             'role'          => 'admin',
             'first_name'    => $firstName,
             'last_name'     => $lastName,
+        ]);
+
+        // Store the setup token
+        $adminUserId = (int) $db->lastInsertId();
+        $stmt = $db->prepare(
+            "UPDATE `users`
+             SET `password_setup_token_hash` = :token_hash,
+                 `password_setup_expires_at` = :expires_at
+             WHERE `id` = :id"
+        );
+        $stmt->execute([
+            ':token_hash'  => $setupTokenHash,
+            ':expires_at'  => $setupExpiresAt,
+            ':id'          => $adminUserId,
         ]);
     } catch (\Throwable $e) {
         error_log('REGULR admin user create failed: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
         // Rollback: delete the tenant we just created
         try { $model->delete($tenantId); } catch (\Throwable $_) {}
         Response::error(
-            'Fout bij aanmaken admin gebruiker. Controleer of alle database migraties zijn uitgevoerd. Details: ' . $e->getMessage(),
+            'Fout bij aanmaken admin gebruiker. Controleer of alle database migraties zijn uitgevoerd. Controleer de server logs voor details.',
             'ADMIN_CREATE_FAILED',
             500
         );
     }
 
     // Create wallet for admin user
-    $adminUserId = (int) $db->lastInsertId();
+    if (empty($adminUserId)) {
+        $adminUserId = (int) $db->lastInsertId();
+    }
     try {
         $stmt = $db->prepare(
             'INSERT INTO `wallets` (`user_id`, `tenant_id`, `balance_cents`, `points_cents`)
@@ -204,24 +229,24 @@ function handleCreate(Tenant $model, User $userModel, array $input, PDO $db): vo
         // Non-fatal: wallet creation failure should not block tenant creation
     }
 
-    // --- Send welcome email with login credentials ---
-    // Try template-based email first, fall back to hardcoded HTML
-    $welcomeSubject = 'REGULR.vip - Jouw inloggegevens voor ' . $input['name'];
+    // --- Send welcome email with setup link (no plaintext password) ---
+    // SECURITY: The user sets their own password via a one-time magic link.
+    $setupUrl = FULL_BASE_URL . '/setup-password?token=' . $setupToken;
+    $welcomeSubject = 'REGULR.vip - Jouw account voor ' . $input['name'];
     $welcomeHtml = "<h2>Welkom bij REGULR.vip!</h2>"
         . "<p>Er is een account aangemaakt voor <strong>" . htmlspecialchars($input['name']) . "</strong>.</p>"
-        . "<p><strong>Jouw inloggegevens:</strong></p>"
+        . "<p><strong>Jouw e-mailadres:</strong></p>"
         . "<ul>"
         . "<li>E-mail: <code>" . htmlspecialchars($adminEmail) . "</code></li>"
-        . "<li>Wachtwoord: <code>" . htmlspecialchars($adminPassword) . "</code></li>"
         . "</ul>"
-        . "<p>Log in op jouw REGULR.vip omgeving om te beginnen.</p>"
-        . "<p><em>Verander je wachtwoord na het eerste inloggen!</em></p>";
+        . "<p>Stel je wachtwoord in via de onderstaande link om je account te activeren:</p>"
+        . "<p><a href=\"" . htmlspecialchars($setupUrl) . "\" style=\"display:inline-block;background:#FFC107;color:#000;padding:12px 30px;border-radius:8px;text-decoration:none;font-weight:bold;\">Wachtwoord instellen</a></p>"
+        . "<p>Deze link is 24 uur geldig.</p>";
     $welcomeText = "Welkom bij REGULR.vip!\n\n"
         . "Er is een account aangemaakt voor " . $input['name'] . ".\n\n"
-        . "Inloggegevens:\n"
-        . "- E-mail: " . $adminEmail . "\n"
-        . "- Wachtwoord: " . $adminPassword . "\n\n"
-        . "Verander je wachtwoord na het eerste inloggen!";
+        . "E-mail: " . $adminEmail . "\n\n"
+        . "Stel je wachtwoord in via deze link (24 uur geldig):\n"
+        . $setupUrl . "\n";
 
     // 1) Try template-based email first
     $emailSent = false;
@@ -237,8 +262,9 @@ function handleCreate(Tenant $model, User $userModel, array $input, PDO $db): vo
                 'tenant_name'        => $input['name'],
                 'user_name'          => $firstName . ' ' . $lastName,
                 'user_email'         => $adminEmail,
-                'user_password'      => $adminPassword,
-                'password_reset_link' => FULL_BASE_URL . '/login',
+                'invitation_link'    => $setupUrl,
+                'password_reset_link' => $setupUrl,
+                // SECURITY: user_password intentionally omitted
             ],
             null,  // global template (no tenant_id)
             'nl'
@@ -311,9 +337,9 @@ function handleCreate(Tenant $model, User $userModel, array $input, PDO $db): vo
     unset($tenant['secret_key']);
 
     Response::success([
-        'tenant'         => $tenant,
-        'admin_email'    => $adminEmail,
-        'admin_password' => $adminPassword,
+        'tenant'      => $tenant,
+        'admin_email' => $adminEmail,
+        'message'     => 'Er is een uitnodigingsmail verstuurd naar de admin met een link om het wachtwoord in te stellen.',
     ], 201);
 }
 
@@ -415,7 +441,7 @@ function handleUpdate(Tenant $model, array $input, PDO $db): void
         Response::success(['tenant' => $updated]);
     } catch (\Throwable $e) {
         error_log('REGULR tenant update failed: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
-        Response::error('Fout bij bijwerken tenant: ' . $e->getMessage(), 'UPDATE_FAILED', 500);
+        Response::error('Fout bij bijwerken tenant. Controleer de server logs voor details.', 'UPDATE_FAILED', 500);
     }
 }
 
@@ -519,7 +545,7 @@ function handleChangePassword(User $userModel, array $input, PDO $db): void
     }
 
     // Update password
-    $passwordHash = password_hash($newPassword . APP_PEPPER, PASSWORD_ARGON2ID);
+    $passwordHash = password_hash($newPassword . APP_PEPPER, PASSWORD_DEFAULT);
     $userModel->updatePassword($userId, $passwordHash);
 
     $audit = new Audit($db);

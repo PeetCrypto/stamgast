@@ -65,17 +65,23 @@ define('PLATFORM_FEE_DEFAULT_MIN_CENTS', (int)(getenv('PLATFORM_FEE_DEFAULT_MIN_
 define('PLATFORM_FEE_BTW_PERCENTAGE', (float)(getenv('PLATFORM_FEE_BTW_PERCENTAGE') ?: 21.00));
 
 // --- Firebase / VAPID ---
-define('FIREBASE_API_KEY', getenv('FIREBASE_API_KEY') ?: 'AIzaSyC1nLHXx8T7alGDDGnj0eBTqJBvPNl0bL0');
+// SECURITY: No hardcoded fallback values. All keys must come from .env.
+// The Firebase API key is a public key (safe for client-side use), but we still
+// avoid hardcoding it to prevent key confusion between environments.
+$_firebaseApiKey = getenv('FIREBASE_API_KEY') ?: '';
+define('FIREBASE_API_KEY', $_firebaseApiKey);
 define('FIREBASE_PROJECT_ID', getenv('FIREBASE_PROJECT_ID') ?: 'regulr-vip');
 define('FIREBASE_MESSAGING_SENDER_ID', getenv('FIREBASE_MESSAGING_SENDER_ID') ?: '584188670460');
-define('FIREBASE_APP_ID', getenv('FIREBASE_APP_ID') ?: '1:584188670460:web:3f68a6dba9538b4de17fdb');
-define('VAPID_PUBLIC_KEY', getenv('VAPID_PUBLIC_KEY') ?: 'BErFgT0yeifZRV9c1HPHTH4UUSCmRzwAejmCDogUReiz9oUUXlKSF4jzamgpmhHD8ZZ0h_bxAfE6qgrIljQ78dk');
+define('FIREBASE_APP_ID', getenv('FIREBASE_APP_ID') ?: '');
+define('VAPID_PUBLIC_KEY', getenv('VAPID_PUBLIC_KEY') ?: '');
 define('VAPID_PRIVATE_KEY_PEM', getenv('VAPID_PRIVATE_KEY_PEM') ?: '');
 define('VAPID_SUBJECT', getenv('VAPID_SUBJECT') ?: 'mailto:admin@regulr.vip');
 
-// Legacy FCM (deprecated but kept for fallback)
+// Legacy FCM (deprecated — migrated to VAPID/Web Push)
+// FIREBASE_SERVER_KEY was a legacy server key. It has been removed from the codebase
+// for security. If absolutely needed, set it via .env: FIREBASE_SERVER_KEY=...
 define('FIREBASE_PUBLIC_KEY', VAPID_PUBLIC_KEY);
-define('FIREBASE_SERVER_KEY', getenv('FIREBASE_SERVER_KEY') ?: '3D96caBCj6aoJoQIvgVELAnYL7GHps7xkyX70hn5Bks');
+define('FIREBASE_SERVER_KEY', getenv('FIREBASE_SERVER_KEY') ?: '');
 
 // --- WALLET LIMITS ---
 define('DEPOSIT_MIN_CENTS', 10000);  // €100 minimum (consistent met LoyaltyTier::MIN_TOPUP_CENTS)

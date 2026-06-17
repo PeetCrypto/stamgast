@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../services/AuthService.php';
 require_once __DIR__ . '/../../services/Email/email_helpers.php';
+require_once __DIR__ . '/../../utils/RateLimiter.php';
 
 // Only allow POST
 $method = $_SERVER['REQUEST_METHOD'];
@@ -27,6 +28,24 @@ if (empty($email) || !isValidEmail($email)) {
 }
 
 $db = Database::getInstance()->getConnection();
+
+// ─────────────────────────────────────────────────────────────
+// RATE LIMITING — prevent email enumeration / spam abuse
+// ─────────────────────────────────────────────────────────────
+$rateLimiter = new RateLimiter($db);
+$clientIp = getClientIP();
+
+if ($rateLimiter->isIpRateLimited($clientIp)) {
+    http_response_code(429);
+    header('Content-Type: application/json; charset=utf-8');
+    header('Retry-After: ' . RateLimiter::WINDOW_SECONDS);
+    echo json_encode([
+        'success' => false,
+        'error'   => 'Te veel aanvragen. Probeer het later opnieuw.',
+        'code'    => 'RATE_LIMITED',
+    ]);
+    exit;
+}
 $userModel = new User($db);
 $tenantModel = new Tenant($db);
 

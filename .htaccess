@@ -44,20 +44,22 @@ RewriteRule ^sql/ - [F,L]
 
 # Block hidden files (.env, .git, .htaccess itself from listing)
 <FilesMatch "^\.">
-    Order allow,deny
-    Deny from all
+    Require all denied
 </FilesMatch>
 
 # Block access to sensitive file types
 <FilesMatch "\.(sql|log|env|yml|yaml|json|lock|md)$">
-    Order allow,deny
-    Deny from all
+    Require all denied
+</FilesMatch>
+
+# Block access to CLI-only emergency/admin scripts (defense in depth)
+<FilesMatch "^(emergency_token|emergency_reset|create_admin|reset_admin_password|gen_token|pre_deploy_token)\.php$">
+    Require all denied
 </FilesMatch>
 
 # Allow manifest.json.php for PWA
 <FilesMatch "manifest\.json\.php$">
-    Order allow,deny
-    Allow from all
+    Require all granted
 </FilesMatch>
 
 # Allow sw.js service worker with expanded scope

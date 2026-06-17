@@ -38,6 +38,29 @@ class Tenant
     }
 
     /**
+     * Decrypt Mollie OAuth tokens in a tenant row.
+     * SECURITY: Tokens are stored encrypted in the database (AES-256-GCM).
+     * This transparently decrypts them when reading, so callers always get plaintext.
+     * Values without the "enc:" prefix (legacy plaintext) are passed through unchanged.
+     *
+     * @param array $row Database row
+     * @return array Row with decrypted token fields
+     */
+    private function decryptTokens(array $row): array
+    {
+        $tokenFields = ['mollie_connect_access_token', 'mollie_connect_refresh_token'];
+        foreach ($tokenFields as $field) {
+            if (isset($row[$field]) && $row[$field] !== '' && $row[$field] !== null) {
+                $decrypted = \Crypto::decrypt($row[$field]);
+                if ($decrypted !== null) {
+                    $row[$field] = $decrypted;
+                }
+            }
+        }
+        return $row;
+    }
+
+    /**
      * Find tenant by ID
      */
     public function findById(int $id): ?array
@@ -45,6 +68,10 @@ class Tenant
         $stmt = $this->db->prepare('SELECT * FROM `tenants` WHERE `id` = :id LIMIT 1');
         $stmt->execute([':id' => $id]);
         $result = $stmt->fetch();
+        if ($result) {
+            // SECURITY: Decrypt Mollie OAuth tokens on read
+            $result = $this->decryptTokens($result);
+        }
         return $result ?: null;
     }
 
@@ -56,6 +83,9 @@ class Tenant
         $stmt = $this->db->prepare('SELECT * FROM `tenants` WHERE `uuid` = :uuid LIMIT 1');
         $stmt->execute([':uuid' => $uuid]);
         $result = $stmt->fetch();
+        if ($result) {
+            $result = $this->decryptTokens($result);
+        }
         return $result ?: null;
     }
 
@@ -67,6 +97,9 @@ class Tenant
         $stmt = $this->db->prepare('SELECT * FROM `tenants` WHERE `slug` = :slug LIMIT 1');
         $stmt->execute([':slug' => $slug]);
         $result = $stmt->fetch();
+        if ($result) {
+            $result = $this->decryptTokens($result);
+        }
         return $result ?: null;
     }
 
@@ -172,6 +205,21 @@ class Tenant
      */
     public function update(int $id, array $data): bool
     {
+        // SECURITY: Encrypt Mollie OAuth tokens before storing in the database.
+        // This protects tenant payment credentials in case of a database leak.
+        $encryptFields = [
+            'mollie_connect_access_token',
+            'mollie_connect_refresh_token',
+        ];
+        foreach ($encryptFields as $field) {
+            if (isset($data[$field]) && $data[$field] !== '') {
+                // Only encrypt if not already encrypted
+                if (!\Crypto::isEncrypted($data[$field])) {
+                    $data[$field] = \Crypto::encrypt($data[$field]);
+                }
+            }
+        }
+
         $sets = [];
         $params = [':id' => $id];
 

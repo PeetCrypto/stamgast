@@ -94,7 +94,7 @@ function handleCreate(User $userModel, array $input, PDO $db): void
     }
 
     // Hash password with Argon2id + APP_PEPPER (same as AuthService / deploy.php)
-    $hash = password_hash($password . APP_PEPPER, PASSWORD_ARGON2ID);
+    $hash = password_hash($password . APP_PEPPER, PASSWORD_DEFAULT);
 
     $stmt = $db->prepare(
         "INSERT INTO users (tenant_id, email, password_hash, role, first_name, last_name, account_status)
@@ -143,7 +143,7 @@ function handleChangePassword(User $userModel, array $input, PDO $db): void
     }
 
     // Hash and update
-    $hash = password_hash($newPassword . APP_PEPPER, PASSWORD_ARGON2ID);
+    $hash = password_hash($newPassword . APP_PEPPER, PASSWORD_DEFAULT);
     $userModel->updatePassword($userId, $hash);
 
     // Audit log

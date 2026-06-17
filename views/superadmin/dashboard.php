@@ -66,6 +66,16 @@ $feeTotals = $feeService->getPlatformTotals();
         </div>
     </div>
 
+    <!-- Systeem tools -->
+    <div class="glass-card" style="padding: var(--space-lg); margin-top: var(--space-lg);">
+        <h2 style="margin-bottom: var(--space-md);">Systeem Tools</h2>
+        <div style="display: flex; gap: var(--space-sm); flex-wrap: wrap;">
+            <a href="<?= BASE_URL ?>/superadmin/migrate" class="btn btn-secondary">DB Migratie</a>
+            <a href="<?= BASE_URL ?>/superadmin/repair-deposits" class="btn btn-secondary">Repareer Stortingen</a>
+            <a href="<?= BASE_URL ?>/superadmin/emergency-token" class="btn btn-secondary" style="border-color: #f85149; color: #f85149;">🔑 Emergency Token</a>
+        </div>
+    </div>
+
     <div style="margin-top: var(--space-xl); text-align: center;">
         <a href="<?= BASE_URL ?>/logout" class="btn btn-secondary">Uitloggen</a>
     </div>

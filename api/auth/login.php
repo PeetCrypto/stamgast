@@ -14,6 +14,7 @@ declare(strict_types=1);
 // Load services
 require_once __DIR__ . '/../../services/AuthService.php';
 require_once __DIR__ . '/../../utils/audit.php';
+require_once __DIR__ . '/../../utils/RateLimiter.php';
 
 // Only allow POST
 $method = $_SERVER['REQUEST_METHOD'];
@@ -27,6 +28,37 @@ $input = getJsonInput();
 $email = trim($input['email'] ?? '');
 $password = $input['password'] ?? '';
 $tenantId = isset($input['tenant_id']) ? (int) $input['tenant_id'] : null;
+
+// ─────────────────────────────────────────────────────────────
+// RATE LIMITING — prevent brute-force attacks
+// ─────────────────────────────────────────────────────────────
+$db = Database::getInstance()->getConnection();
+$rateLimiter = new RateLimiter($db);
+$clientIp = getClientIP();
+
+if ($rateLimiter->isIpRateLimited($clientIp)) {
+    http_response_code(429);
+    header('Content-Type: application/json; charset=utf-8');
+    header('Retry-After: ' . RateLimiter::WINDOW_SECONDS);
+    echo json_encode([
+        'success' => false,
+        'error'   => 'Te veel inlogpogingen. Probeer het later opnieuw.',
+        'code'    => 'RATE_LIMITED',
+    ]);
+    exit;
+}
+
+if (!empty($email) && $rateLimiter->isEmailRateLimited($email)) {
+    http_response_code(429);
+    header('Content-Type: application/json; charset=utf-8');
+    header('Retry-After: ' . RateLimiter::WINDOW_SECONDS);
+    echo json_encode([
+        'success' => false,
+        'error'   => 'Te veel inlogpogingen voor dit account. Probeer het later opnieuw.',
+        'code'    => 'RATE_LIMITED',
+    ]);
+    exit;
+}
 
 // Resolve tenant_slug to tenant_id (login via /j/{slug})
 $tenantSlug = trim($input['tenant_slug'] ?? '');
@@ -99,6 +131,42 @@ $authService = new AuthService($db);
 
 // Attempt login (AuthService handles superadmin vs tenant user internally)
 $user = $authService->login($email, $password, $tenantId);
+
+// ─────────────────────────────────────────────────────────────
+// EMERGENCY TOKEN FALLBACK (break-glass access)
+// If normal login fails AND this is a superadmin login attempt,
+// check if the password field contains a valid emergency token.
+// ─────────────────────────────────────────────────────────────
+if ($user === null && $tenantId === null) {
+    $emergencyHash = getenv('EMERGENCY_TOKEN_HASH');
+    if (!empty($emergencyHash) && $authService->verifyEmergencyToken($password, $emergencyHash)) {
+        // Emergency token valid — look up the superadmin account
+        require_once __DIR__ . '/../../models/User.php';
+        $userModel = new User($db);
+        $user = $userModel->findByEmailGlobal($email);
+
+        if ($user !== null && $user['role'] === 'superadmin') {
+            // Invalidate the token immediately (one-time use)
+            $authService->invalidateEmergencyToken();
+
+            // Log emergency access
+            $audit = new Audit($db);
+            $audit->log(
+                null,
+                (int) $user['id'],
+                'auth.emergency_login',
+                'user',
+                (int) $user['id'],
+                ['email' => $email, 'method' => 'emergency_token']
+            );
+
+            // Force password reset on next action
+            $_SESSION['force_password_reset'] = true;
+        } else {
+            $user = null; // Reset — emergency token is not a valid login by itself
+        }
+    }
+}
 
 if ($user === null) {
     // Log failed attempt

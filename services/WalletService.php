@@ -164,30 +164,35 @@ class WalletService
             (int) $tenant['platform_fee_min_cents']
         );
 
-        // Build redirect/webhook URLs
-        // Support ngrok/proxy: use X-Forwarded-Host if available (ngrok sends the public URL)
-        $forwardedHost = $_SERVER['HTTP_X_FORWARDED_HOST'] ?? '';
-        $forwardedProto = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '';
-        if (!empty($forwardedHost)) {
-            $scheme = !empty($forwardedProto) ? $forwardedProto : 'https';
-            $host = $forwardedHost;
-        } else {
-            $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-            $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-        }
-        $baseUrl = "{$scheme}://{$host}";
+        // Build redirect/webhook URLs using trusted base URL
+        // SECURITY: Never trust X-Forwarded-Host in production (SSRF risk).
+        // Uses getTrustedBaseUrl() which respects APP_URL from .env.
+        $baseUrl = getTrustedBaseUrl();
 
         // Redirect back to wallet with from_payment flag so the frontend knows to
         // poll for balance updates (race condition: webhook may not have processed yet)
         $redirectUrl = $baseUrl . '/wallet?from_payment=1';
+
+        // Build webhook URL with secret token for authentication
+        // SECURITY: The webhook validates this token to prevent unauthorized calls.
+        $webhookToken = '';
+        try {
+            $ps = new PlatformSetting($this->db);
+            $webhookToken = $ps->get('mollie_webhook_secret') ?? '';
+        } catch (\Throwable $e) {
+            // Non-fatal — webhook will reject without token in production
+        }
         $webhookUrl = $baseUrl . '/api/mollie/webhook';
+        if (!empty($webhookToken)) {
+            $webhookUrl .= '?token=' . urlencode($webhookToken);
+        }
 
         // Local dev (.test/.local/localhost): Mollie can't reach local URLs.
         // Omit webhookUrl — Mollie accepts payments without it (webhookUrl is optional).
         // On production, webhookUrl is always included for automatic payment confirmation.
         $actualHost = $_SERVER['HTTP_HOST'] ?? 'localhost';
         $isLocal = preg_match('/\.(test|local)$/', $actualHost) || $actualHost === 'localhost' || $actualHost === '127.0.0.1';
-        if ($isLocal && empty($forwardedHost)) {
+        if ($isLocal) {
             $webhookUrl = null;
         }
 

@@ -55,7 +55,7 @@ if (($resetRecord['role'] ?? '') === 'superadmin') {
 
 // Hash new password with Argon2id + pepper
 $pepperedPassword = $password . (defined('APP_PEPPER') ? APP_PEPPER : '');
-$newHash = password_hash($pepperedPassword, PASSWORD_ARGON2ID);
+$newHash = password_hash($pepperedPassword, PASSWORD_DEFAULT);
 
 if ($newHash === false) {
     Response::error('Wachtwoord kon niet worden opgeslagen', 'HASH_ERROR', 500);

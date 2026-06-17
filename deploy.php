@@ -144,9 +144,10 @@ if (empty($env['ENCRYPTION_KEY']) || strlen($env['ENCRYPTION_KEY']) < 16) {
 }
 
 $SUPERADMIN_EMAIL = $env['SUPERADMIN_EMAIL'] ?? 'admin@regulr.vip';
-$SUPERADMIN_PASSWORD = $env['SUPERADMIN_PASSWORD'] ?? 'Admin123!';
-$SUPERADMIN_FIRST_NAME = $env['SUPERADMIN_FIRST_NAME'] ?? 'Admin';
-$SUPERADMIN_LAST_NAME = $env['SUPERADMIN_LAST_NAME'] ?? 'REGULR.vip';
+// Generate a strong random password — shown once at end of deployment
+$SUPERADMIN_PASSWORD = bin2hex(random_bytes(16));
+$SUPERADMIN_FIRST_NAME = 'Admin';
+$SUPERADMIN_LAST_NAME = 'REGULR.vip';
 
 // STAP 3: Upload Directories
 header_msg('STAP 3: Upload Directories');
@@ -338,12 +339,12 @@ try {
     $existingAdmin = $stmt->fetch();
     if ($existingAdmin) {
         check("Superadmin bestaat al", true, "Email: {$SUPERADMIN_EMAIL}");
-        $hash = password_hash($SUPERADMIN_PASSWORD . $pepper, PASSWORD_ARGON2ID);
+        $hash = password_hash($SUPERADMIN_PASSWORD . $pepper, PASSWORD_DEFAULT);
         $pdo->prepare("UPDATE users SET password_hash = ? WHERE id = ?")->execute([$hash, $existingAdmin['id']]);
         check("Wachtwoord bijgewerkt", true);
     } else {
         step("Aanmaken superadmin...");
-        $hash = password_hash($SUPERADMIN_PASSWORD . $pepper, PASSWORD_ARGON2ID);
+        $hash = password_hash($SUPERADMIN_PASSWORD . $pepper, PASSWORD_DEFAULT);
         $pdo->prepare("INSERT INTO users (tenant_id, email, password_hash, role, first_name, last_name, account_status) VALUES (NULL, ?, ?, 'superadmin', ?, ?, 'active')")->execute([$SUPERADMIN_EMAIL, $hash, $SUPERADMIN_FIRST_NAME, $SUPERADMIN_LAST_NAME]);
         $adminId = $pdo->lastInsertId();
         check("Superadmin aangemaakt", true, "Email: {$SUPERADMIN_EMAIL} (ID: {$adminId})");
@@ -386,7 +387,9 @@ if ($failedChecks === 0) {
     echo "  Je kunt inloggen op: https://app.regulr.vip/login\n";
     echo "  Email: {$SUPERADMIN_EMAIL}\n";
     echo "  Wachtwoord: {$SUPERADMIN_PASSWORD}\n";
-    echo "\n  ⚡ VERANDER DIT WACHTWOORD NA EERSTE LOGIN!\n";
+    echo "\n  ⚡ BEWAAR DIT WACHTWOORD IN EEN WACHTWOORDBEHEERDER!\n";
+    echo "  ⚡ VERANDER HET WACHTWOORD NA EERSTE LOGIN!\n";
+    echo "\n  📋 Voor noodgevallen: php emergency_token.php (CLI)\n";
     step("Script verwijderen...");
     @unlink(__FILE__);
     echo "  ✅ deploy.php verwijderd\n\n";

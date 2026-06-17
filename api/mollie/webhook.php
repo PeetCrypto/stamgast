@@ -22,6 +22,7 @@ require_once __DIR__ . '/../../models/Transaction.php';
 require_once __DIR__ . '/../../models/PlatformFee.php';
 require_once __DIR__ . '/../../models/PlatformSetting.php';
 require_once __DIR__ . '/../../utils/helpers.php';
+require_once __DIR__ . '/../../utils/Crypto.php';
 
 // Always return 200 to Mollie — we handle errors internally
 function webhookRespond(int $code, string $message): void
@@ -34,6 +35,27 @@ function webhookRespond(int $code, string $message): void
 
 if ($method !== 'POST') {
     webhookRespond(405, 'Method not allowed');
+}
+
+// ── SECURITY: Validate webhook secret token ─────────────────────────────────
+// Mollie doesn't support HMAC signatures on webhooks, so we use a secret token
+// passed as a query parameter (?token=XXX). This prevents unauthorized callers
+// from triggering server-side Mollie API calls and wallet processing.
+// The token is stored in platform_settings (set during migration).
+// In development mode, the token check is skipped for local testing.
+$webhookToken = $_GET['token'] ?? '';
+if (!APP_DEBUG) {
+    $expectedToken = '';
+    try {
+        $db = Database::getInstance()->getConnection();
+        $ps = new PlatformSetting($db);
+        $expectedToken = $ps->get('mollie_webhook_secret') ?? '';
+    } catch (\Throwable $e) {
+        // If we can't read the setting, fail closed
+    }
+    if (empty($expectedToken) || empty($webhookToken) || !hash_equals($expectedToken, $webhookToken)) {
+        webhookRespond(403, 'Forbidden');
+    }
 }
 
 try {

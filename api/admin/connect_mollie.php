@@ -70,18 +70,8 @@ $_SESSION['mollie_connect_tenant_id'] = (int) $tenantId;
 $_SESSION['mollie_connect_source'] = 'admin';
 
 // Build redirect URI — must EXACTLY match what's registered in Mollie OAuth app settings.
-// Use the ACTUAL request host (supports ngrok proxy) instead of APP_URL from .env.
-// ngrok forwards the original host via X-Forwarded-Host / X-Forwarded-Proto headers.
-$forwardedHost = $_SERVER['HTTP_X_FORWARDED_HOST'] ?? '';
-$forwardedProto = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '';
-if (!empty($forwardedHost)) {
-    // Behind a proxy (ngrok, Cloudflare, etc.) — use forwarded headers
-    $redirectScheme = !empty($forwardedProto) ? $forwardedProto : 'https';
-    $redirectUri = $redirectScheme . '://' . $forwardedHost . BASE_URL . '/api/mollie/connect-callback';
-} else {
-    // Direct access — use FULL_BASE_URL (APP_URL or auto-detected)
-    $redirectUri = FULL_BASE_URL . '/api/mollie/connect-callback';
-}
+// SECURITY: Use trusted base URL (APP_URL from .env), not X-Forwarded-Host (SSRF risk).
+$redirectUri = getTrustedBaseUrl() . '/api/mollie/connect-callback';
 
 // Build Mollie OAuth authorization URL
 $oauthParams = http_build_query([

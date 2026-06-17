@@ -167,9 +167,14 @@ if ($method === 'GET') {
             Response::error('Ongeldig e-mailadres', 'INVALID_EMAIL', 400);
         }
 
-        // Validate password length
-        if (mb_strlen($password) < 8) {
-            Response::error('Wachtwoord moet minimaal 8 tekens lang zijn', 'INVALID_PASSWORD', 400);
+        // Validate password strength using the full validator (not just length).
+        // SECURITY: Admin-created accounts (bartender/admin) must meet the same
+        // password policy as guest registration: min 8 chars, 1 uppercase, 1 number.
+        $v = new Validator();
+        $v->password('password', $password);
+        if (!$v->isValid()) {
+            $errors = $v->getErrors();
+            Response::error(implode(', ', $errors), 'INVALID_PASSWORD', 400);
         }
 
         // Validate role - admin can only create admin/bartender/guest (never superadmin)
@@ -184,12 +189,20 @@ if ($method === 'GET') {
         }
 
         // Hash password with Argon2id + pepper
-        $pepperedPassword = $password . (defined('APP_PEPPER') ? APP_PEPPER : '');
-        $passwordHash = password_hash($pepperedPassword, PASSWORD_ARGON2ID);
+        // SECURITY: Generate a temporary random password (user will set their own via setup link).
+        // The password is NOT sent via email — only a one-time setup link is sent.
+        $tempPassword = bin2hex(random_bytes(16)); // Random temp password, never communicated
+        $pepperedPassword = $tempPassword . (defined('APP_PEPPER') ? APP_PEPPER : '');
+        $passwordHash = password_hash($pepperedPassword, PASSWORD_DEFAULT);
 
         if ($passwordHash === false) {
             Response::error('Wachtwoord hashing mislukt', 'HASH_ERROR', 500);
         }
+
+        // Generate one-time setup token (magic link) so the user can set their own password
+        $setupToken = bin2hex(random_bytes(32));
+        $setupTokenHash = password_hash($setupToken, PASSWORD_DEFAULT);
+        $setupExpiresAt = date('Y-m-d H:i:s', time() + 86400); // 24 hours
 
         try {
             $db->beginTransaction();
@@ -204,6 +217,19 @@ if ($method === 'GET') {
                 'last_name'     => $lastName,
                 'birthdate'     => $birthdate,
                 'photo_status'  => 'unvalidated',
+            ]);
+
+            // Store the setup token so the user can set their own password
+            $stmt = $db->prepare(
+                "UPDATE `users`
+                 SET `password_setup_token_hash` = :token_hash,
+                     `password_setup_expires_at` = :expires_at
+                 WHERE `id` = :id"
+            );
+            $stmt->execute([
+                ':token_hash'  => $setupTokenHash,
+                ':expires_at'  => $setupExpiresAt,
+                ':id'          => $newUserId,
             ]);
 
             // Create wallet for the new user
@@ -232,19 +258,16 @@ if ($method === 'GET') {
                     $templateType = ($role === 'bartender') ? 'bartender_invite' : 'admin_invite';
                     $userName = $firstName . ' ' . $lastName;
 
-                    // Build login URL
-                    $loginUrl = FULL_BASE_URL . '/login';
-                    if ($tenant && !empty($tenant['slug'])) {
-                        $loginUrl = FULL_BASE_URL . '/j/' . $tenant['slug'] . '/login';
-                    }
+                    // Build setup-password link (magic link — no plaintext password in email)
+                    $setupUrl = FULL_BASE_URL . '/setup-password?token=' . $setupToken;
 
                     // Try template-based email first
                     $templateVars = [
                         'user_name'       => $userName,
                         'tenant_name'     => $tenantName,
-                        'invitation_link' => $loginUrl,
+                        'invitation_link' => $setupUrl,
                         'user_email'      => $email,
-                        'user_password'   => $password,
+                        // SECURITY: user_password is intentionally omitted — user sets their own password
                     ];
 
                     $sent = $emailService->sendTemplatedEmail(
@@ -267,17 +290,16 @@ if ($method === 'GET') {
                             . "<p><strong>Jouw inloggegevens:</strong></p>"
                             . "<ul>"
                             . "<li>E-mail: <code>" . htmlspecialchars($email) . "</code></li>"
-                            . "<li>Wachtwoord: <code>" . htmlspecialchars($password) . "</code></li>"
                             . "</ul>"
-                            . "<p>Log in op jouw " . htmlspecialchars($tenantName) . " omgeving om te beginnen.</p>"
-                            . "<p><em>Verander je wachtwoord na het eerste inloggen!</em></p>";
+                            . "<p>Stel je wachtwoord in via de onderstaande link:</p>"
+                            . "<p><a href=\"" . htmlspecialchars($setupUrl) . "\" style=\"display:inline-block;background:#FFC107;color:#000;padding:12px 30px;border-radius:8px;text-decoration:none;font-weight:bold;\">Wachtwoord instellen</a></p>"
+                            . "<p>Deze link is 24 uur geldig.</p>";
 
                         $text = "Welkom bij " . $tenantName . "!\n\n"
                             . "Er is een " . ($role === 'bartender' ? 'bartender' : 'admin') . " account aangemaakt voor " . $tenantName . ".\n\n"
-                            . "Inloggegevens:\n"
-                            . "- E-mail: " . $email . "\n"
-                            . "- Wachtwoord: " . $password . "\n\n"
-                            . "Verander je wachtwoord na het eerste inloggen!";
+                            . "E-mail: " . $email . "\n\n"
+                            . "Stel je wachtwoord in via deze link (24 uur geldig):\n"
+                            . $setupUrl . "\n";
 
                         $emailService->sendEmail(
                             $email,
@@ -405,8 +427,12 @@ if ($method === 'GET') {
             Response::error('Ongeldig user_id', 'INVALID_INPUT', 400);
         }
 
-        if (mb_strlen($newPassword) < 8) {
-            Response::error('Wachtwoord moet minimaal 8 tekens lang zijn', 'INVALID_PASSWORD', 400);
+        // Validate password strength using the full validator
+        $v = new Validator();
+        $v->password('new_password', $newPassword);
+        if (!$v->isValid()) {
+            $errors = $v->getErrors();
+            Response::error(implode(', ', $errors), 'INVALID_PASSWORD', 400);
         }
 
         // Verify user belongs to this tenant
@@ -422,7 +448,7 @@ if ($method === 'GET') {
 
         // Hash new password with Argon2id + pepper
         $pepperedPassword = $newPassword . (defined('APP_PEPPER') ? APP_PEPPER : '');
-        $passwordHash = password_hash($pepperedPassword, PASSWORD_ARGON2ID);
+        $passwordHash = password_hash($pepperedPassword, PASSWORD_DEFAULT);
 
         if ($passwordHash === false) {
             Response::error('Wachtwoord hashing mislukt', 'HASH_ERROR', 500);

@@ -259,10 +259,15 @@ if ($mimeType === 'image/svg+xml') {
     if ($svgContent === false) {
         Response::error('Kon SVG-bestand niet lezen', 'READ_ERROR', 400);
     }
-    // Block dangerous patterns (script tags, event handlers, external references)
-    $dangerous = '/<script|javascript:|on\w+\s*=|<iframe|<embed|<object|\bexternalResourcesRequired\b/i';
+    // Block dangerous patterns (scripts, event handlers, external references, CSS-based attacks)
+    // SECURITY: Comprehensive blocklist covering known SVG XSS vectors.
+    // Includes: script tags, event handlers, javascript: URIs, iframes/embeds/objects,
+    // <style> tags (CSS exfiltration attacks), <use> with data:/external refs,
+    // <animate>/<set> with event triggers, xlink:href with javascript:/data:,
+    // and externalResourcesRequired.
+    $dangerous = '/<script|javascript:|on\w+\s*=|<iframe|<embed|<object|<style|<use\b|<animate\b|<set\b|xlink:href\s*=\s*["\']?\s*(?:javascript:|data:)|\bdata:\s*[^,]*\bbase64|href\s*=\s*["\']?\s*(?:javascript:|data:)|\bexternalResourcesRequired\b|@import|expression\s*\(/i';
     if (preg_match($dangerous, $svgContent)) {
-        Response::error('SVG bevat niet-toegestane elementen (scripts of event handlers)', 'SVG_UNSAFE', 400);
+        Response::error('SVG bevat niet-toegestane elementen (scripts, event handlers, styles of externe referenties)', 'SVG_UNSAFE', 400);
     }
 }
 
@@ -286,7 +291,7 @@ $newFilename = "tenant_{$tenantId}_" . time() . '.' . $extension;
 $uploadDir = PUBLIC_PATH . 'uploads' . DIRECTORY_SEPARATOR . 'logos' . DIRECTORY_SEPARATOR;
 
 if (!is_dir($uploadDir)) {
-    mkdir($uploadDir, 0777, true);
+    mkdir($uploadDir, 0755, true);
 }
 
 $newFilePath = $uploadDir . $newFilename;

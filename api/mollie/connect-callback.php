@@ -19,6 +19,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../config/app.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../utils/helpers.php';
+require_once __DIR__ . '/../../utils/Crypto.php';
 require_once __DIR__ . '/../../services/MollieService.php';
 
 // Start session (needed for state validation)
@@ -111,15 +112,8 @@ try {
     );
 
     // Build redirect URI — must EXACTLY match what was sent during OAuth initiation.
-    // Use the ACTUAL request host (supports ngrok proxy) to match connect_mollie.php.
-    $forwardedHost = $_SERVER['HTTP_X_FORWARDED_HOST'] ?? '';
-    $forwardedProto = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '';
-    if (!empty($forwardedHost)) {
-        $redirectScheme = !empty($forwardedProto) ? $forwardedProto : 'https';
-        $redirectUri = $redirectScheme . '://' . $forwardedHost . BASE_URL . '/api/mollie/connect-callback';
-    } else {
-        $redirectUri = FULL_BASE_URL . '/api/mollie/connect-callback';
-    }
+    // SECURITY: Use trusted base URL (APP_URL from .env), not X-Forwarded-Host.
+    $redirectUri = getTrustedBaseUrl() . '/api/mollie/connect-callback';
 
     $tokenData = $mollie->exchangeConnectCode($code, $redirectUri);
 
