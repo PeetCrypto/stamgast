@@ -23,6 +23,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/../../models/PlatformSetting.php';
+require_once __DIR__ . '/../../services/MollieService.php';
 
 if ($method !== 'POST') {
     Response::error('Method not allowed', 'METHOD_NOT_ALLOWED', 405);
@@ -74,17 +75,16 @@ $redirectUri = getTrustedBaseUrl() . '/api/mollie/connect-callback';
 
 error_log("Mollie Connect redirect URI: {$redirectUri}");
 
-// Build Mollie OAuth authorization URL
-$oauthParams = http_build_query([
-    'client_id'     => $clientId,
-    'redirect_uri'  => $redirectUri,
-    'response_type' => 'code',
-    'scope'         => 'organizations.read payments.read payments.write profiles.read',
-    'state'         => $state,
-    'force_approval_prompt' => 'true',
-]);
+// Get the OAuth client secret too (needed by the service for scope consistency)
+$clientSecret = $ps->get('mollie_connect_client_secret');
+if (empty($clientSecret)) {
+    $clientSecret = defined('MOLLIE_CONNECT_CLIENT_SECRET') ? MOLLIE_CONNECT_CLIENT_SECRET : '';
+}
 
-$oauthUrl = 'https://my.mollie.com/oauth2/authorize?' . $oauthParams;
+// Build Mollie OAuth authorization URL via MollieService (single source of truth
+// for scopes — avoids drift between this file and the service class).
+$authBuilder = new MollieService('', 'live', $clientId, $clientSecret);
+$oauthUrl = $authBuilder->getConnectAuthorizationUrl($redirectUri, $state) . '&force_approval_prompt=true';
 
 // Audit log
 $audit = new Audit($db);

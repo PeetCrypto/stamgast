@@ -23,6 +23,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/../../models/PlatformSetting.php';
+require_once __DIR__ . '/../../services/MollieService.php';
 
 if ($method !== 'POST') {
     Response::error('Method not allowed', 'METHOD_NOT_ALLOWED', 405);

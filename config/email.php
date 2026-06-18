@@ -48,6 +48,6 @@ return [
         'name' => 'REGULR.vip'
     ],
     
-    // Encryption key for sensitive data
-    'encryption_key' => $_ENV['ENCRYPTION_KEY'] ?? 'default_key_change_in_production'
+    // Encryption key for sensitive data — NO insecure fallback
+    'encryption_key' => (getenv('ENCRYPTION_KEY') ?: ($_ENV['ENCRYPTION_KEY'] ?? ''))
 ];

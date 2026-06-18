@@ -21,7 +21,7 @@ class Crypto
      */
     private static function getKey(): string
     {
-        $key = getenv('ENCRYPTION_KEY') ?: '';
+        $key = getenv('ENCRYPTION_KEY') ?: ($_ENV['ENCRYPTION_KEY'] ?? '');
         if (empty($key)) {
             throw new \RuntimeException('ENCRYPTION_KEY not configured in environment');
         }
