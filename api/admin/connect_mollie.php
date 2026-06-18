@@ -73,17 +73,18 @@ $_SESSION['mollie_connect_source'] = 'admin';
 // SECURITY: Use trusted base URL (APP_URL from .env), not X-Forwarded-Host (SSRF risk).
 $redirectUri = getTrustedBaseUrl() . '/api/mollie/connect-callback';
 
-// Build Mollie OAuth authorization URL
-$oauthParams = http_build_query([
-    'client_id'     => $clientId,
-    'redirect_uri'  => $redirectUri,
-    'response_type' => 'code',
-    'scope'         => 'organizations.read payments.read payments.write profiles.read',
-    'state'         => $state,
-    'force_approval_prompt' => 'true',
-]);
+// Get the OAuth client secret too (needed by the service for scope consistency)
+$clientSecret = $ps->get('mollie_connect_client_secret');
+if (empty($clientSecret)) {
+    $clientSecret = defined('MOLLIE_CONNECT_CLIENT_SECRET') ? MOLLIE_CONNECT_CLIENT_SECRET : '';
+}
 
-$oauthUrl = 'https://my.mollie.com/oauth2/authorize?' . $oauthParams;
+// Build Mollie OAuth authorization URL via MollieService (single source of truth
+// for scopes — avoids drift between this file and the service class).
+$authBuilder = new MollieService('', 'live', $clientId, $clientSecret);
+$oauthUrl = $authBuilder->getConnectAuthorizationUrl($redirectUri, $state) . '&force_approval_prompt=true';
+
+error_log("Mollie Connect redirect URI (admin): {$redirectUri}");
 
 // Audit log
 $audit = new Audit($db);

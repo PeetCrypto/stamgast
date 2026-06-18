@@ -279,6 +279,63 @@ $feeStats = $feeService->getTenantFeeStats($tenantId);
                     <?php if (!empty($tenant['mollie_connect_id'])): ?>
                         <p class="text-sm text-secondary">Org ID: <code><?= sanitize($tenant['mollie_connect_id']) ?></code></p>
                     <?php endif; ?>
+
+                    <?php
+                    // Account status badge — gebaseerd op gecachte Mollie onboarding status.
+                    // Wordt live ververst via /api/superadmin/mollie-status (zie JS onderaan).
+                    $obStatus    = $tenant['mollie_connect_onboarding_status'] ?? null;
+                    $canReceive  = isset($tenant['mollie_connect_can_receive_payments'])
+                        ? (bool) $tenant['mollie_connect_can_receive_payments'] : null;
+                    $checkedAt   = $tenant['mollie_connect_status_checked_at'] ?? null;
+
+                    // Bepaal badge kleur + label op basis van onboarding data
+                    if ($canReceive === true && $obStatus === 'completed') {
+                        $acctColor = 'rgba(76,175,80,0.2);color:#4CAF50';
+                        $acctLabel = 'Live';
+                    } elseif ($obStatus === 'blocked') {
+                        $acctColor = 'rgba(244,67,54,0.2);color:#f44336';
+                        $acctLabel = 'Geblokkeerd';
+                    } elseif ($obStatus === 'in-review') {
+                        $acctColor = 'rgba(255,152,0,0.2);color:#FF9800';
+                        $acctLabel = 'In behandeling';
+                    } elseif ($obStatus === 'needs-data' || ($obStatus !== null && $canReceive === false)) {
+                        $acctColor = 'rgba(244,67,54,0.2);color:#f44336';
+                        $acctLabel = 'Onvolledig';
+                    } else {
+                        $acctColor = 'rgba(158,158,158,0.2);color:#9e9e9e';
+                        $acctLabel = 'Onbekend';
+                    }
+
+                    // Format "laatst gecontroleerd" timestamp (UTC → lokaal)
+                    $checkedLabel = '';
+                    if (!empty($checkedAt)) {
+                        try {
+                            $dt = new DateTime($checkedAt, new DateTimeZone('UTC'));
+                            $dt->setTimezone(new DateTimeZone('Europe/Amsterdam'));
+                            $checkedLabel = $dt->format('j M Y H:i');
+                        } catch (Throwable $e) {
+                            $checkedLabel = $checkedAt;
+                        }
+                    }
+                    ?>
+                    <div style="margin-bottom: var(--space-sm); display: flex; justify-content: space-between; align-items: center; gap: var(--space-sm);">
+                        <span class="text-sm text-secondary">Account status:</span>
+                        <span style="display:flex; align-items:center; gap:var(--space-xs);">
+                            <span id="mollie-acct-badge" class="badge" style="background:<?= $acctColor ?>;" data-status="<?= sanitize((string) ($obStatus ?? '')) ?>" data-can-receive="<?= $canReceive === null ? '' : ($canReceive ? '1' : '0') ?>">
+                                <?= $acctLabel ?>
+                            </span>
+                            <button type="button" id="mollie-acct-refresh" class="btn btn-secondary" style="padding:2px 8px; font-size:12px; line-height:1.4;">Verversen</button>
+                        </span>
+                    </div>
+                    <p id="mollie-acct-checked" class="text-sm text-secondary" style="margin-top:0; margin-bottom:var(--space-sm); font-size:11px;">
+                        <?php if ($checkedLabel): ?>
+                            Laatst gecontroleerd: <?= sanitize($checkedLabel) ?>
+                        <?php else: ?>
+                            Nog niet gecontroleerd — klik "Verversen".
+                        <?php endif; ?>
+                    </p>
+                    <p id="mollie-acct-detail" class="text-sm text-secondary" style="margin:0 0 var(--space-sm); font-size:11px;"></p>
+
                     <div class="form-group" style="margin-top: var(--space-sm);">
                         <label class="text-sm text-secondary">Betaalmodus</label>
                         <select id="mollie-mode-select" class="form-input">
@@ -841,6 +898,99 @@ document.getElementById('btn-reset-balances')?.addEventListener('click', async (
     }
     setTimeout(() => { statusEl.textContent = ''; }, 6000);
 });
+
+// ── Mollie Connect account status: live refresh ──────────────────────────
+// Haalt de actuele onboarding-status op via /api/superadmin/mollie-status,
+// werkt de badge bij en cached het resultaat server-side.
+(function () {
+    const refreshBtn = document.getElementById('mollie-acct-refresh');
+    if (!refreshBtn) return;
+
+    const badge   = document.getElementById('mollie-acct-badge');
+    const checked = document.getElementById('mollie-acct-checked');
+    const detail  = document.getElementById('mollie-acct-detail');
+
+    function applyStatus(status, canReceive) {
+        let color, label;
+        if (canReceive === true && status === 'completed') {
+            color = 'rgba(76,175,80,0.2);color:#4CAF50'; label = 'Live';
+        } else if (status === 'in-review') {
+            color = 'rgba(255,152,0,0.2);color:#FF9800'; label = 'In behandeling';
+        } else if (status === 'blocked') {
+            color = 'rgba(244,67,54,0.2);color:#f44336'; label = 'Geblokkeerd';
+        } else if (status === 'needs-data' || (status && canReceive === false)) {
+            color = 'rgba(244,67,54,0.2);color:#f44336'; label = 'Onvolledig';
+        } else {
+            color = 'rgba(158,158,158,0.2);color:#9e9e9e'; label = 'Onbekend';
+        }
+        badge.style.cssText = 'background:' + color + ';';
+        badge.textContent = label;
+        badge.setAttribute('data-status', status || '');
+        badge.setAttribute('data-can-receive', canReceive === null ? '' : (canReceive ? '1' : '0'));
+    }
+
+    refreshBtn.addEventListener('click', async () => {
+        const originalText = refreshBtn.textContent;
+        refreshBtn.disabled = true;
+        refreshBtn.textContent = 'Controleren...';
+        detail.textContent = '';
+        detail.style.color = '';
+
+        try {
+            const res = await fetch((window.__BASE_URL || '') + '/api/superadmin/mollie-status?tenant_id=' + TENANT_ID, {
+                headers: { 'X-CSRF-Token': CSRF }
+            });
+            const result = await res.json();
+
+            if (!result.success) {
+                throw new Error(result.error || 'Onbekende fout');
+            }
+
+            const data = result.data || {};
+            const acct = data.account_status;
+            const cached = data.cached || {};
+
+            if (data.error) {
+                // API call itself reported an error (bijv. token probleem)
+                detail.textContent = '⚠ ' + data.error;
+                detail.style.color = '#f44336';
+                refreshBtn.textContent = originalText;
+                refreshBtn.disabled = false;
+                return;
+            }
+
+            // Primary: unified account_status (derived from profiles + optional onboarding)
+            if (acct) {
+                applyStatus(acct.status, acct.can_receive_payments);
+            } else if (cached.onboarding_status !== null && cached.onboarding_status !== undefined) {
+                applyStatus(cached.onboarding_status, cached.can_receive_payments);
+            }
+
+            // Toon "laatst gecontroleerd" — cached.checked_at is UTC ISO
+            if (cached.checked_at) {
+                let label = cached.checked_at;
+                try {
+                    const dt = new Date(cached.checked_at + 'Z');
+                    label = dt.toLocaleString('nl-NL', {
+                        day: 'numeric', month: 'short', year: 'numeric',
+                        hour: '2-digit', minute: '2-digit'
+                    });
+                } catch (e) { /* fallback raw */ }
+                checked.textContent = 'Laatst gecontroleerd: ' + label;
+            }
+
+            detail.textContent = '✓ Status vernieuwd';
+            detail.style.color = '#4CAF50';
+        } catch (err) {
+            detail.textContent = '✗ ' + (err.message || 'Netwerkfout');
+            detail.style.color = '#f44336';
+        } finally {
+            refreshBtn.textContent = originalText;
+            refreshBtn.disabled = false;
+            setTimeout(() => { if (detail.textContent.startsWith('✓')) detail.textContent = ''; }, 6000);
+        }
+    });
+})();
 </script>
 
 <?php require VIEWS_PATH . 'shared/footer.php'; ?>

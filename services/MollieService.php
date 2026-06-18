@@ -201,6 +201,113 @@ class MollieService
     }
 
     /**
+     * Get the onboarding status of the connected organization.
+     *
+     * This is the authoritative gate for live payments: Mollie only allows live
+     * payments once the connected merchant has completed onboarding/verification
+     * and `canReceivePayments` is true.
+     *
+     * @return array{status: string, can_receive_payments: bool, can_receive_settlements: bool}
+     * @throws \RuntimeException on API failure
+     */
+    public function getOnboardingStatus(): array
+    {
+        // Mock mode: always allowed
+        if ($this->mode === 'mock') {
+            return ['status' => 'completed', 'can_receive_payments' => true, 'can_receive_settlements' => true];
+        }
+
+        $response = $this->apiCall('GET', '/onboarding/me');
+
+        return [
+            'status'                  => $response['status'] ?? 'unknown',
+            'can_receive_payments'    => (bool) ($response['canReceivePayments'] ?? false),
+            'can_receive_settlements' => (bool) ($response['canReceiveSettlements'] ?? false),
+        ];
+    }
+
+    /**
+     * List website profiles of the connected organization.
+     * Used to resolve the correct profileId for the current mode (test/live).
+     *
+     * Mollie profiles have a "mode" field ("live" or "test") and a "status"
+     * field ("unverified", "verified", "blocked"). For live payments we need
+     * a profile with mode="live"; for test payments mode="test".
+     *
+     * @return array<int, array{id: string, name: string, mode: string, status: string}>
+     * @throws \RuntimeException on API failure
+     */
+    public function listProfiles(): array
+    {
+        // Mock mode: no real profiles
+        if ($this->mode === 'mock') {
+            return [];
+        }
+
+        $response = $this->apiCall('GET', '/profiles');
+
+        $profiles = $response['_embedded']['profiles'] ?? [];
+        $result = [];
+        foreach ($profiles as $profile) {
+            $result[] = [
+                'id'     => $profile['id'] ?? '',
+                'name'   => $profile['name'] ?? '',
+                'mode'   => $profile['mode'] ?? 'live',
+                'status' => $profile['status'] ?? 'unverified',
+            ];
+        }
+        return $result;
+    }
+
+    /**
+     * Resolve the correct profileId for the current mode.
+     *
+     * Strategy:
+     * 1. List all profiles via the API.
+     * 2. Filter by mode matching $this->mode (test→"test", live→"live").
+     * 3. Prefer a profile with status "verified" (for live) or any non-blocked.
+     * 4. Fallback: first profile of the correct mode.
+     *
+     * @return string The profileId (pfl_xxx), or '' if none found.
+     * @throws \RuntimeException on API failure
+     */
+    public function resolveProfileId(): string
+    {
+        $profiles = $this->listProfiles();
+        if (empty($profiles)) {
+            return '';
+        }
+
+        $wantMode = ($this->mode === 'test') ? 'test' : 'live';
+
+        // 1. Prefer correct mode + verified status
+        foreach ($profiles as $p) {
+            if ($p['mode'] === $wantMode && $p['status'] === 'verified') {
+                return $p['id'];
+            }
+        }
+        // 2. Correct mode + any non-blocked status
+        foreach ($profiles as $p) {
+            if ($p['mode'] === $wantMode && $p['status'] !== 'blocked') {
+                return $p['id'];
+            }
+        }
+        // 3. Correct mode, any status
+        foreach ($profiles as $p) {
+            if ($p['mode'] === $wantMode) {
+                return $p['id'];
+            }
+        }
+        // 4. Last resort: first non-blocked profile (some accounts report mode differently)
+        foreach ($profiles as $p) {
+            if ($p['status'] !== 'blocked') {
+                return $p['id'];
+            }
+        }
+        return '';
+    }
+
+    /**
      * Create a Mollie Connect OAuth authorization URL
      * Used for tenant onboarding
      *
@@ -217,7 +324,10 @@ class MollieService
             'client_id'     => $clientId,
             'redirect_uri'  => $redirectUri,
             'response_type' => 'code',
-            'scope'         => 'organizations.read payments.read payments.write profiles.read',
+            // onboarding.read is required by GET /onboarding/me, which we use to
+            // gate live payments (canReceivePayments) and to display the tenant's
+            // account status in the superadmin tenant detail view.
+            'scope'         => 'organizations.read payments.read payments.write profiles.read onboarding.read',
             'state'         => $state,
         ]);
 

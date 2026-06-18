@@ -253,6 +253,89 @@ class WalletService
 
         $mollie = new MollieService($mollieApiKey, $mollieMode);
 
+        // ── Onboarding gate for LIVE payments ────────────────────────────────
+        // Per Mollie Connect go-live checklist: a connected merchant can only
+        // receive LIVE payments once Mollie has completed their onboarding/
+        // verification and `canReceivePayments` is true. Without this, Mollie
+        // rejects the live payment with a 4xx → 500 in our app.
+        // We check this ONLY for live mode (test mode always works).
+        if (!$isMock && $mollieMode === 'live') {
+            // 1) TENANT onboarding check (uses tenant access token)
+            try {
+                $onboarding = $mollie->getOnboardingStatus();
+                if (!$onboarding['can_receive_payments']) {
+                    throw new \RuntimeException(
+                        'De Mollie-koppeling van deze klant is nog niet klaar voor live betalingen. ' .
+                        'De klant moet zijn Mollie-account eerst volledig activeren (onboarding/verificatie ' .
+                        'voltooien in het Mollie Dashboard). Huidige status: "' . $onboarding['status'] . '".'
+                    );
+                }
+            } catch (\MollieTokenExpiredException $e) {
+                throw $e;
+            } catch (\RuntimeException $e) {
+                if (str_contains($e->getMessage(), 'nog niet klaar voor live')) {
+                    throw $e;
+                }
+                error_log("Mollie onboarding check failed for tenant {$tenantId}: " . $e->getMessage());
+            }
+
+            // 2) PLATFORM onboarding check (uses platform API key).
+            // The applicationFee flows to the platform account; if the platform
+            // itself is not verified/ready, Mollie rejects the live payment too.
+            $platformApiKey = $this->getPlatformApiKey();
+            if (!empty($platformApiKey)) {
+                try {
+                    $platformMollie = new MollieService($platformApiKey, 'live');
+                    $platformOnboarding = $platformMollie->getOnboardingStatus();
+                    if (!$platformOnboarding['can_receive_payments']) {
+                        throw new \RuntimeException(
+                            'Het PLATFORM Mollie-account (superadmin) is nog niet klaar voor live betalingen. ' .
+                            'De superadmin moet zijn eigen Mollie-account eerst volledig activeren ' .
+                            '(onboarding/verificatie voltooien in het Mollie Dashboard). ' .
+                            'Huidige status: "' . $platformOnboarding['status'] . '".'
+                        );
+                    }
+                } catch (\RuntimeException $e) {
+                    if (str_contains($e->getMessage(), 'PLATFORM Mollie-account')) {
+                        throw $e;
+                    }
+                    error_log("Mollie PLATFORM onboarding check failed: " . $e->getMessage());
+                }
+            }
+        }
+
+        // ── Resolve the correct profileId for the current mode ──────────────
+        // The stored mollie_connect_profile_id may be a TEST profile (saved when
+        // the tenant connected before their live profile was active). For live
+        // payments this causes Mollie to reject the request.
+        // Fix: dynamically resolve the profile matching the current mode.
+        $profileId = $isMock ? null : ($tenant['mollie_connect_profile_id'] ?? null);
+        if (!$isMock) {
+            try {
+                $resolvedProfileId = $mollie->resolveProfileId();
+                if ($resolvedProfileId !== '') {
+                    // Use the freshly resolved profile (always correct for the mode).
+                    $profileId = $resolvedProfileId;
+
+                    // Persist it back so subsequent calls skip the extra API call,
+                    // and so the superadmin detail page shows the right value.
+                    if ($resolvedProfileId !== ($tenant['mollie_connect_profile_id'] ?? '')) {
+                        $this->tenantModel->update($tenantId, [
+                            'mollie_connect_profile_id' => $resolvedProfileId,
+                        ]);
+                        error_log("Mollie profileId auto-corrected for tenant {$tenantId}: " .
+                                  "'{$tenant['mollie_connect_profile_id']}' -> '{$resolvedProfileId}' (mode={$mollieMode})");
+                    }
+                } else {
+                    error_log("Mollie: no profile found for tenant {$tenantId} in mode={$mollieMode}; falling back to stored profileId.");
+                }
+            } catch (\Throwable $e) {
+                // Non-fatal: fall back to the stored profileId and let Mollie
+                // return a clear error if it's wrong (now properly logged).
+                error_log("Mollie profile resolve failed for tenant {$tenantId}: " . $e->getMessage());
+            }
+        }
+
         $payment = $mollie->createPayment(
             $amountCents,
             'Opwaarderen ' . $tenant['name'] . ' wallet',
@@ -260,8 +343,8 @@ class WalletService
             $webhookUrl,
             (string) $userId,
             null, // onBehalfOf: NOT used with tenant OAuth token (token is already scoped)
-            $isMock ? 0 : $feeCents,                       // applicationFee: only for real Mollie
-            $isMock ? null : ($tenant['mollie_connect_profile_id'] ?? null) // profileId: required for real Mollie
+            $isMock ? 0 : $feeCents,   // applicationFee: only for real Mollie
+            $profileId                  // profileId: required for real Mollie
         );
 
         // Create pending transaction (deposit)

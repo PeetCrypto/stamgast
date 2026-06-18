@@ -553,6 +553,16 @@ $migrations = [
             return true;
         },
     ],
+    [
+        'name'   => 'Mollie Connect Onboarding Status Cache',
+        'file'   => 'mollie_status_cache_migration.sql',
+        'type'   => 'alter',
+        'check'  => function (PDO $db): bool {
+            return columnExists($db, 'tenants', 'mollie_connect_onboarding_status')
+                && columnExists($db, 'tenants', 'mollie_connect_can_receive_payments')
+                && columnExists($db, 'tenants', 'mollie_connect_status_checked_at');
+        },
+    ],
 ];
 
 // ── Helper functions ────────────────────────────────────────────────────────
@@ -795,6 +805,9 @@ function runVerification(PDO $db): void
             'tier_model_type',
             // Tip migration
             'tip_amount_1_cents', 'tip_amount_2_cents', 'tip_amount_3_cents',
+            // Mollie onboarding status cache migration
+            'mollie_connect_onboarding_status', 'mollie_connect_can_receive_payments',
+            'mollie_connect_status_checked_at',
         ],
         'users' => [
             'tenant_id', 'email', 'password_hash', 'role', 'first_name', 'last_name',

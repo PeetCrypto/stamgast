@@ -163,14 +163,25 @@ try {
         if ($profileResponse !== false && $profileHttpCode < 400) {
             $profileData = json_decode($profileResponse, true);
             $profiles = $profileData['_embedded']['profiles'] ?? [];
-            // Use the first active profile
+
+            // Prefer a LIVE-mode profile (the tenant connects to go live eventually).
+            // Mollie profiles have a "mode" field: "live" or "test".
             foreach ($profiles as $profile) {
-                if (($profile['status'] ?? '') === 'active') {
+                if (($profile['mode'] ?? '') === 'live' && ($profile['status'] ?? '') !== 'blocked') {
                     $profileId = $profile['id'] ?? '';
                     break;
                 }
             }
-            // Fallback: use first profile regardless of status
+            // Fallback: first active profile of any mode
+            if (empty($profileId)) {
+                foreach ($profiles as $profile) {
+                    if (($profile['status'] ?? '') === 'active') {
+                        $profileId = $profile['id'] ?? '';
+                        break;
+                    }
+                }
+            }
+            // Last resort: first profile regardless
             if (empty($profileId) && !empty($profiles)) {
                 $profileId = $profiles[0]['id'] ?? '';
             }

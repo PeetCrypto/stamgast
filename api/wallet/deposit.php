@@ -73,13 +73,17 @@ try {
 } catch (\InvalidArgumentException $e) {
     Response::error($e->getMessage(), 'VALIDATION_ERROR', 422);
 } catch (\RuntimeException $e) {
-    if (APP_DEBUG) {
-        Response::internalError('Opwaardering mislukt: ' . $e->getMessage());
-    }
-    Response::internalError('Opwaardering mislukt');
+    // ⚠️ ALWAYS log the real error so it's never hidden in production.
+    error_log('[deposit] RuntimeException for tenant ' . ($tenantId ?? '?') .
+              ' user ' . ($userId ?? '?') . ': ' . $e->getMessage() . "\n" . $e->getTraceAsString());
+    // Superadmin sees the real error in the console for fast debugging;
+    // guests keep the safe generic message (no info leak).
+    $showDetail = APP_DEBUG || currentUserRole() === 'superadmin';
+    Response::internalError($showDetail ? ('Opwaardering mislukt: ' . $e->getMessage()) : 'Opwaardering mislukt');
 } catch (\Throwable $e) {
-    if (APP_DEBUG) {
-        Response::internalError('Opwaardering mislukt: ' . $e->getMessage());
-    }
-    Response::internalError('Opwaardering mislukt');
+    // ⚠️ ALWAYS log the real error so it's never hidden in production.
+    error_log('[deposit] Throwable for tenant ' . ($tenantId ?? '?') .
+              ' user ' . ($userId ?? '?') . ': ' . $e->getMessage() . "\n" . $e->getTraceAsString());
+    $showDetail = APP_DEBUG || currentUserRole() === 'superadmin';
+    Response::internalError($showDetail ? ('Opwaardering mislukt: ' . $e->getMessage()) : 'Opwaardering mislukt');
 }
