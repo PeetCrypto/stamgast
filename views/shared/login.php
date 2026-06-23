@@ -164,7 +164,7 @@ $csrfToken  = generateCSRFToken();
                     id="email"
                     name="email"
                     class="form-input"
-                    placeholder="<?= sanitize(getenv('SUPERADMIN_EMAIL') ?: 'Login') ?>"
+                    placeholder="E-mailadres"
                     required
                     autocomplete="email"
                     autofocus
