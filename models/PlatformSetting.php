@@ -15,7 +15,6 @@ class PlatformSetting
         'mollie_connect_api_key',
         'mollie_connect_client_id',
         'mollie_connect_client_secret',
-        'mollie_mode_default',
     ];
 
     /** Keys whose values should be masked in API responses */

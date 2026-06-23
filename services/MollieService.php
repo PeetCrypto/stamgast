@@ -35,6 +35,7 @@ class MollieService
     private ?string $clientId;
     private ?string $clientSecret;
     private string $baseUrl = 'https://api.mollie.com/v2';
+    private bool $useBasicAuth = false;
 
     public function __construct(string $apiKey, string $mode = 'mock', ?string $clientId = null, ?string $clientSecret = null)
     {
@@ -42,6 +43,16 @@ class MollieService
         $this->mode = $mode;
         $this->clientId = $clientId;
         $this->clientSecret = $clientSecret;
+    }
+
+    /**
+     * Use Basic Auth (client_id:client_secret) instead of Bearer API key.
+     * Required for organization-level endpoints like /profiles and /onboarding/me
+     * which do not work with profile-scoped API keys.
+     */
+    public function useBasicAuth(bool $enabled): void
+    {
+        $this->useBasicAuth = $enabled;
     }
 
     /**
@@ -257,6 +268,23 @@ class MollieService
             ];
         }
         return $result;
+    }
+
+    /**
+     * List all available payment methods.
+     * Works with profile-scoped API keys (unlike /profiles and /onboarding/me).
+     *
+     * @return array List of payment method objects
+     * @throws \RuntimeException on API failure
+     */
+    public function listMethods(): array
+    {
+        if ($this->mode === 'mock') {
+            return [];
+        }
+
+        $response = $this->apiCall('GET', '/methods');
+        return $response['_embedded']['methods'] ?? [];
     }
 
     /**
@@ -557,11 +585,19 @@ class MollieService
             throw new \RuntimeException('Failed to initialize cURL');
         }
 
-        $headers = [
-            'Authorization: Bearer ' . $this->apiKey,
-            'Content-Type: application/json',
-            'Accept: application/json',
-        ];
+        if ($this->useBasicAuth) {
+            $headers = [
+                'Authorization: Basic ' . base64_encode($this->clientId . ':' . $this->clientSecret),
+                'Content-Type: application/json',
+                'Accept: application/json',
+            ];
+        } else {
+            $headers = [
+                'Authorization: Bearer ' . $this->apiKey,
+                'Content-Type: application/json',
+                'Accept: application/json',
+            ];
+        }
 
         $curlOptions = [
             CURLOPT_CUSTOMREQUEST  => $method,

@@ -641,6 +641,9 @@ function handleApiRoute(string $route, string $method): void
                 case 'mollie-status':
                     require __DIR__ . '/api/superadmin/mollie_status.php';
                     break;
+                case 'platform-mollie-status':
+                    require __DIR__ . '/api/superadmin/platform_mollie_status.php';
+                    break;
                 case 'view-as':
                     require __DIR__ . '/api/superadmin/view-as.php';
                     break;

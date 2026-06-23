@@ -26,18 +26,6 @@ logs/
 *.cache
 
 # Test / debug scripts (not for production)
-check_firebase_app.php
-check_key.php
-fcm-standard.php
-fcm-test.php
-fcm_test_all.php
-test_fcm_get_token.php
-test_fcm_send.php
-test_push.php
-test_dashboard.php
-vapid_key_test.php
-vapid_setup.php
-verify_keys.php
 migrate_fcm.php
 db_dump.txt
 reset_admin_password.php

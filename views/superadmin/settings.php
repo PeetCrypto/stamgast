@@ -32,15 +32,10 @@ $testResult = null;
 // Handle Platform Settings form submission
 if (isset($_POST['platform_settings_action'])) {
     $fields = [
-        'mollie_mode_default'          => trim($_POST['mollie_mode_default'] ?? 'mock'),
         'mollie_connect_client_id'     => trim($_POST['mollie_connect_client_id'] ?? ''),
         'mollie_connect_client_secret' => trim($_POST['mollie_connect_client_secret'] ?? ''),
         'mollie_connect_api_key'       => trim($_POST['mollie_connect_api_key'] ?? ''),
     ];
-
-    if (!in_array($fields['mollie_mode_default'], ['mock', 'test', 'live'], true)) {
-        $fields['mollie_mode_default'] = 'mock';
-    }
 
     $secretKeys = ['mollie_connect_api_key', 'mollie_connect_client_secret'];
     $allSaved = true;
@@ -163,10 +158,16 @@ if (isset($_POST['email_settings_action']))    $activeTab = 'email';
 if (isset($_POST['test_email_action']))        $activeTab = 'email';
 
 // Prepare display values (mask secrets)
-$modeValue     = $settings['mollie_mode_default'] ?? 'mock';
 $clientIdValue = $settings['mollie_connect_client_id'] ?? '';
 $hasSecret     = !empty($settings['mollie_connect_client_secret']);
 $hasApiKey     = !empty($settings['mollie_connect_api_key']);
+$apiKey        = $settings['mollie_connect_api_key'] ?? '';
+$keyType       = '';
+if (!empty($apiKey)) {
+    if (str_starts_with($apiKey, 'live_')) $keyType = 'live';
+    elseif (str_starts_with($apiKey, 'test_')) $keyType = 'test';
+    else $keyType = 'unknown';
+}
 ?>
 
 <?php require VIEWS_PATH . 'shared/header.php'; ?>
@@ -237,16 +238,6 @@ $hasApiKey     = !empty($settings['mollie_connect_api_key']);
                 </p>
 
                 <div class="form-group">
-                    <label>Mollie Modus (standaard)</label>
-                    <select name="mollie_mode_default" class="form-input">
-                        <option value="mock" <?= $modeValue === 'mock' ? 'selected' : '' ?>>Mock (simulatie, geen echte API calls)</option>
-                        <option value="test" <?= $modeValue === 'test' ? 'selected' : '' ?>>Test (Mollie test keys)</option>
-                        <option value="live" <?= $modeValue === 'live' ? 'selected' : '' ?>>Live (productie)</option>
-                    </select>
-                    <p class="text-sm text-secondary" style="margin-top: 4px;">Bepaalt de standaardmodus voor nieuwe betalingen.</p>
-                </div>
-
-                <div class="form-group">
                     <label>OAuth Client ID</label>
                     <input type="text" name="mollie_connect_client_id" class="form-input"
                            value="<?= sanitize($clientIdValue) ?>"
@@ -283,10 +274,10 @@ $hasApiKey     = !empty($settings['mollie_connect_api_key']);
                 <div style="display: grid; gap: var(--space-sm);">
                     <?php
                     $statusItems = [
-                        'Modus'            => strtoupper($modeValue),
                         'Client ID'        => !empty($clientIdValue) ? '<span style="color:#4CAF50;">&#10003; Ingesteld</span>' : '<span style="color:#f44336;">&#10007; Niet ingesteld</span>',
                         'Client Secret'    => $hasSecret ? '<span style="color:#4CAF50;">&#10003; Ingesteld</span>' : '<span style="color:#f44336;">&#10007; Niet ingesteld</span>',
                         'Platform API Key' => $hasApiKey ? '<span style="color:#4CAF50;">&#10003; Ingesteld</span>' : '<span style="color:#f44336;">&#10007; Niet ingesteld</span>',
+                        'Key Type'         => !empty($keyType) ? '<span style="color:#4CAF50;">' . strtoupper($keyType) . '</span>' : '<span style="color:#f44336;">Onbekend</span>',
                     ];
                     foreach ($statusItems as $label => $value): ?>
                     <div style="display: flex; justify-content: space-between; padding: var(--space-xs) 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
@@ -306,6 +297,45 @@ $hasApiKey     = !empty($settings['mollie_connect_api_key']);
                     &#9888; Vul alle velden in om Mollie Connect te activeren.
                 </p>
                 <?php endif; ?>
+            </div>
+
+            <!-- Key Status Check -->
+            <div class="glass-card" style="padding: var(--space-lg); margin-top: var(--space-lg);">
+                <h2 style="margin-bottom: var(--space-md); color: var(--accent-primary);">Key Status</h2>
+                <?php if ($keyType === 'test'): ?>
+                <div style="margin-bottom: var(--space-md); padding: var(--space-sm); border-radius: var(--radius-sm); background: rgba(244,67,54,0.1); border: 1px solid rgba(244,67,54,0.3); color: #f44336; font-size: 13px;">
+                    &#9888; Platform API Key staat op <strong>test modus</strong>. Onboarding status is niet beschikbaar in test modus. Voor live betalingen moet je een <strong>live API key</strong> gebruiken.
+                </div>
+                <?php endif; ?>
+                <div id="platform-key-status" style="display: grid; gap: var(--space-sm);">
+                    <div style="display: flex; justify-content: space-between; padding: var(--space-xs) 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <span class="text-secondary">API Key Type</span>
+                        <span id="key-status-type">
+                            <?php if ($keyType === 'live'): ?>
+                                <span class="badge" style="background: rgba(76,175,80,0.2); color: #4CAF50;">Live</span>
+                            <?php elseif ($keyType === 'test'): ?>
+                                <span class="badge" style="background: rgba(255,152,0,0.2); color: #FF9800;">Test</span>
+                            <?php else: ?>
+                                <span class="badge" style="background: rgba(158,158,158,0.2); color: #9e9e9e;">Onbekend</span>
+                            <?php endif; ?>
+                        </span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; padding: var(--space-xs) 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <span class="text-secondary">Key Geldig</span>
+                        <span id="key-status-valid">...</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; padding: var(--space-xs) 0;">
+                        <span class="text-secondary">Laatst Gecontroleerd</span>
+                        <span id="key-status-checked">...</span>
+                    </div>
+                    <div style="margin-top: var(--space-sm); padding: var(--space-sm); border-radius: var(--radius-sm); background: rgba(33,150,243,0.08); border: 1px solid rgba(33,150,243,0.2); font-size: 12px; color: #2196F3;">
+                        &#8505; De platform API key is profiel-scoped — alleen de geldigheid kan gecheckt worden. Onboarding status en "kan betalingen ontvangen" zijn alleen zichtbaar per tenant (via Mollie Connect). Controleer het hoofdaccount in het <a href="https://www.mollie.com/dashboard" target="_blank" rel="noopener" style="color: #2196F3; text-decoration: underline;">Mollie Dashboard</a>.
+                    </div>
+                </div>
+                <div style="text-align: center; margin-top: var(--space-md);">
+                    <button type="button" id="btn-check-platform-key" class="btn btn-primary" style="width: auto; min-width: 200px;" onclick="checkPlatformKeyStatus()">&#128269; Controleer Key Status</button>
+                </div>
+                <p id="key-status-error" class="text-sm" style="margin-top: var(--space-sm); text-align: center; color: #f44336; display: none;"></p>
             </div>
         </div>
 
@@ -705,6 +735,70 @@ function closeModal() {
 document.getElementById('template-modal').addEventListener('click', function(e) {
     if (e.target === this) closeModal();
 });
+
+// --- Platform Key Status Check ---
+function checkPlatformKeyStatus() {
+    var btn = document.getElementById('btn-check-platform-key');
+    var errorEl = document.getElementById('key-status-error');
+    btn.disabled = true;
+    btn.textContent = 'Controleren...';
+    errorEl.style.display = 'none';
+
+    fetch('<?= BASE_URL ?>/api/superadmin/platform-mollie-status')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                var s = data.data;
+
+                // Live status badge
+                var received = s.onboarding ? s.onboarding.can_receive_payments : false;
+                var onboardingStatus = s.onboarding ? (s.onboarding.status || 'unknown') : 'niet beschikbaar';
+
+                // Key valid
+                var validEl = document.getElementById('key-status-valid');
+                if (s.key_valid === true) {
+                    validEl.innerHTML = '<span style="color:#4CAF50;">&#10003; Geldig</span>';
+                } else if (s.key_valid === false) {
+                    validEl.innerHTML = '<span style="color:#f44336;">&#10007; Ongeldig</span>';
+                } else {
+                    validEl.innerHTML = '<span style="color:#9e9e9e;">Niet gecontroleerd</span>';
+                }
+
+                // Checked at
+                var checkedEl = document.getElementById('key-status-checked');
+                if (s.checked_at) {
+                    var d = new Date(s.checked_at + ' UTC');
+                    checkedEl.textContent = d.toLocaleString('nl-NL', { timeZone: 'Europe/Amsterdam' });
+                } else {
+                    checkedEl.textContent = '-';
+                }
+
+                // Show error if present
+                if (s.error) {
+                    errorEl.textContent = s.error;
+                    errorEl.style.display = 'block';
+                }
+            } else {
+                errorEl.textContent = data.error || 'Onbekende fout';
+                errorEl.style.display = 'block';
+            }
+        })
+        .catch(function(err) {
+            errorEl.textContent = 'Netwerkfout: ' + err.message;
+            errorEl.style.display = 'block';
+        })
+        .finally(function() {
+            btn.disabled = false;
+            btn.innerHTML = '&#128269; Controleer Key Status';
+        });
+}
+
+// Auto-check on page load if key is configured
+<?php if ($hasApiKey): ?>
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(checkPlatformKeyStatus, 500);
+});
+<?php endif; ?>
 </script>
 
 <!-- ==================== SUPERADMIN CREATE MODAL ==================== -->
