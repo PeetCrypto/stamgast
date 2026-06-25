@@ -932,6 +932,31 @@ function updatePreview() {
     bBox.classList.toggle('over', bc >= 500);
 }
 
+// ------------------------------------------
+// Toast helper (gebruikt bestaande .toast styling uit components.css)
+// ------------------------------------------
+function showToast(message, type) {
+    const existing = document.querySelector('.toast');
+    if (existing) existing.remove();
+
+    const toast = document.createElement('div');
+    toast.className = 'toast toast--' + (type === 'error' ? 'error' : 'success');
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    // Animate in
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => toast.classList.add('toast--visible'));
+    });
+
+    // Auto-dismiss (foutmeldingen iets langer tonen)
+    const duration = type === 'error' ? 5000 : 3500;
+    setTimeout(() => {
+        toast.classList.remove('toast--visible');
+        setTimeout(() => { if (toast.parentNode) toast.remove(); }, 300);
+    }, duration);
+}
+
 async function sendWhaleMessage() {
     const sendBtn = document.getElementById('wm-send');
     const userId = parseInt(sendBtn.dataset.userId, 10);
@@ -939,8 +964,8 @@ async function sendWhaleMessage() {
     const body = document.getElementById('wm-body').value.trim();
 
     if (!userId) return;
-    if (!title) { alert('Vul een titel in.'); return; }
-    if (!body) { alert('Vul een bericht in.'); return; }
+    if (!title) { showToast('Vul een titel in.', 'error'); return; }
+    if (!body) { showToast('Vul een bericht in.', 'error'); return; }
 
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
     const original = sendBtn.textContent;
@@ -970,12 +995,12 @@ async function sendWhaleMessage() {
                 ? `Bericht verstuurd naar ${name} — Push ✓ & Inbox ✓`
                 : `Bericht verstuurd naar ${name} — bezorgd in inbox (geen push-token).`;
             closeWhaleModal();
-            alert(msg);
+            showToast(msg, 'success');
         } else {
-            alert('Versturen mislukt: ' + (data.error || 'onbekende fout'));
+            showToast('Versturen mislukt: ' + (data.error || 'onbekende fout'), 'error');
         }
     } catch (e) {
-        alert('Kon bericht niet versturen.');
+        showToast('Kon bericht niet versturen.', 'error');
     } finally {
         sendBtn.disabled = false;
         sendBtn.textContent = original;
