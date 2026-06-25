@@ -143,7 +143,9 @@ class PlatformFee
         }
 
         $placeholders = implode(',', array_fill(0, count($feeIds), '?'));
-        $params = [...$feeIds, $invoiceId, 'invoiced'];
+        // Params MUST match placeholder order in SQL:
+        //   SET invoice_id = ?, status = ?   WHERE id IN (?, ?, ...)
+        $params = array_merge([$invoiceId, 'invoiced'], $feeIds);
 
         $stmt = $this->db->prepare(
             "UPDATE `platform_fees`

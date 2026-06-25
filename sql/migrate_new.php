@@ -571,6 +571,14 @@ $migrations = [
             return columnExists($db, 'loyalty_tiers', 'is_test_package');
         },
     ],
+    [
+        'name'   => 'Database-Backed Session Storage (sessions table)',
+        'file'   => 'session_storage_migration.sql',
+        'type'   => 'table',
+        'check'  => function (PDO $db): bool {
+            return tableExists($db, 'sessions');
+        },
+    ],
 ];
 
 // ── Helper functions ────────────────────────────────────────────────────────
@@ -782,6 +790,8 @@ function runVerification(PDO $db): void
         'platform_settings', 'verification_attempts',
         'user_credentials', 'webauthn_challenges',
         'wallet_credit_log',
+        // Database-backed session storage
+        'sessions',
     ];
 
     $requiredColumns = [

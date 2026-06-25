@@ -27,7 +27,17 @@ $role = $_SESSION['role'] ?? '';
 if ($role === 'guest') {
     $db = Database::getInstance()->getConnection();
     $userModel = new User($db);
-    $accountStatus = $userModel->getAccountStatus((int) $_SESSION['user_id']);
+
+    // FAIL-OPEN: if the query throws (e.g. a migration locks the users table),
+    // do NOT destroy the session. Treat the account as still active and retry
+    // on the next keepalive ping. Logging people out because of a transient
+    // lock wait is the exact bug we are fixing.
+    $accountStatus = 'active';
+    try {
+        $accountStatus = $userModel->getAccountStatus((int) $_SESSION['user_id']);
+    } catch (\Throwable $e) {
+        error_log('keepalive: account status check failed (transient?), failing open: ' . $e->getMessage());
+    }
 
     if ($accountStatus === 'suspended') {
         // Account is gesuspendeerd — destroy session

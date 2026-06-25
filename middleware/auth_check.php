@@ -41,7 +41,20 @@ function authCheck(): void
                 require_once __DIR__ . '/../models/Tenant.php';
                 $db = \Database::getInstance()->getConnection();
                 $tenantModel = new Tenant($db);
-                if (!$tenantModel->isActive((int) $tenantId)) {
+
+                // FAIL-OPEN: if the DB query throws (e.g. a migration is locking
+                // the tenants table), we MUST NOT log the user out. Treat it as
+                // "tenant probably still active" and retry on the next request.
+                // Logging people out because of a transient lock wait would be
+                // the exact bug we are fixing.
+                $tenantActive = true;
+                try {
+                    $tenantActive = $tenantModel->isActive((int) $tenantId);
+                } catch (\Throwable $e) {
+                    error_log('authCheck: tenant active check failed (transient?), failing open: ' . $e->getMessage());
+                }
+
+                if (!$tenantActive) {
                     // Tenant is disabled — force logout
                     // For guests: save slug cookie before destroying session
                     if ($role === 'guest' && isset($_SESSION['tenant']['slug'])) {

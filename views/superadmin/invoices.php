@@ -10,11 +10,36 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../models/PlatformInvoice.php';
 require_once __DIR__ . '/../../models/PlatformFee.php';
 require_once __DIR__ . '/../../models/Tenant.php';
+require_once __DIR__ . '/../../models/PlatformSetting.php';
 require_once __DIR__ . '/../../services/PlatformFeeService.php';
 
 $db = Database::getInstance()->getConnection();
 $invoiceModel = new PlatformInvoice($db);
 $tenantModel = new Tenant($db);
+$settingModel = new PlatformSetting($db);
+
+// Lijst van bedrijfsgegevens keys (gebruikt door save-handler én formulier)
+$companyKeys = [
+    'invoice_company_name', 'invoice_company_address', 'invoice_company_postal',
+    'invoice_company_city', 'invoice_company_country', 'invoice_btw_number',
+    'invoice_kvk', 'invoice_iban', 'invoice_email', 'invoice_website',
+];
+
+// ── Save bedrijfsgegevens ─────────────────────────────────────────────────
+$companySaved = false;
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_company_info'])) {
+    foreach ($companyKeys as $key) {
+        $value = trim($_POST[$key] ?? '');
+        $settingModel->set($key, $value);
+    }
+    $companySaved = true;
+}
+
+// Huidige waarden voor formulier (altijd laden, ook bij GET)
+$companyFields = [];
+foreach ($companyKeys as $k) {
+    $companyFields[$k] = $settingModel->get($k) ?? '';
+}
 
 // Fetch invoice list + totals
 $page = max(1, (int) ($_GET['page'] ?? 1));
@@ -80,6 +105,64 @@ $defaultPeriodEnd = date('Y-m-t', strtotime('last month'));
         <p id="gen-status" class="text-sm" style="margin-top: var(--space-sm);"></p>
     </div>
 
+    <!-- Bedrijfsgegevens (afzender op facturen) -->
+    <div class="glass-card" style="padding: var(--space-lg); margin-bottom: var(--space-lg);">
+        <h2 style="margin-bottom: var(--space-md); display:flex; align-items:center; gap:var(--space-sm);">
+            &#128233; Bedrijfsgegevens op factuur
+            <?php if ($companySaved): ?>
+                <span style="font-size:12px; font-weight:400; color:#4CAF50;">&mdash; Opgeslagen</span>
+            <?php endif; ?>
+        </h2>
+        <form method="POST" action="">
+            <input type="hidden" name="save_company_info" value="1">
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-md);">
+                <div class="form-group" style="margin-bottom:0;">
+                    <label class="text-sm text-secondary">Bedrijfsnaam</label>
+                    <input type="text" name="invoice_company_name" class="form-input" value="<?= sanitize((string)$companyFields['invoice_company_name']) ?>" placeholder="REGULR.vip">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label class="text-sm text-secondary">Adres</label>
+                    <input type="text" name="invoice_company_address" class="form-input" value="<?= sanitize((string)$companyFields['invoice_company_address']) ?>" placeholder="Straatnaam 1">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label class="text-sm text-secondary">Postcode</label>
+                    <input type="text" name="invoice_company_postal" class="form-input" value="<?= sanitize((string)$companyFields['invoice_company_postal']) ?>" placeholder="1234 AB">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label class="text-sm text-secondary">Plaats</label>
+                    <input type="text" name="invoice_company_city" class="form-input" value="<?= sanitize((string)$companyFields['invoice_company_city']) ?>" placeholder="Amsterdam">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label class="text-sm text-secondary">Land</label>
+                    <input type="text" name="invoice_company_country" class="form-input" value="<?= sanitize((string)$companyFields['invoice_company_country']) ?>" placeholder="Nederland">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label class="text-sm text-secondary">BTW-nummer</label>
+                    <input type="text" name="invoice_btw_number" class="form-input" value="<?= sanitize((string)$companyFields['invoice_btw_number']) ?>" placeholder="NL001234567B01">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label class="text-sm text-secondary">KVK-nummer</label>
+                    <input type="text" name="invoice_kvk" class="form-input" value="<?= sanitize((string)$companyFields['invoice_kvk']) ?>" placeholder="12345678">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label class="text-sm text-secondary">IBAN</label>
+                    <input type="text" name="invoice_iban" class="form-input" value="<?= sanitize((string)$companyFields['invoice_iban']) ?>" placeholder="NL91ABNA0417164300">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label class="text-sm text-secondary">E-mail</label>
+                    <input type="email" name="invoice_email" class="form-input" value="<?= sanitize((string)$companyFields['invoice_email']) ?>" placeholder="info@regulr.vip">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label class="text-sm text-secondary">Website</label>
+                    <input type="text" name="invoice_website" class="form-input" value="<?= sanitize((string)$companyFields['invoice_website']) ?>" placeholder="https://regulr.vip">
+                </div>
+            </div>
+            <div style="margin-top: var(--space-md);">
+                <button type="submit" class="btn btn-primary">&#128190; Opslaan</button>
+            </div>
+        </form>
+    </div>
+
     <!-- Status Filter -->
     <div style="display: flex; gap: var(--space-sm); margin-bottom: var(--space-md); flex-wrap: wrap;">
         <a href="<?= BASE_URL ?>/superadmin/invoices" class="btn btn-sm" style="padding: 4px 12px; font-size: 13px; <?= !$statusFilter ? 'background:var(--accent-primary);color:#000;' : '' ?>">Alle</a>
@@ -133,13 +216,14 @@ $defaultPeriodEnd = date('Y-m-t', strtotime('last month'));
                                 <td style="padding: var(--space-sm);">
                                     <span class="badge" style="background:<?= $sc ?>;"><?= $statusLabels[$inv['status']] ?? $inv['status'] ?></span>
                                 </td>
-                                <td style="padding: var(--space-sm); white-space: nowrap;">
-                                    <?php if ($inv['status'] === 'draft'): ?>
-                                        <button class="btn btn-sm inv-status-btn" data-id="<?= (int) $inv['id'] ?>" data-status="sent" style="padding:2px 8px;font-size:12px;background:rgba(33,150,243,0.2);color:#2196F3;">Markeer Verzonden</button>
-                                    <?php elseif ($inv['status'] === 'sent' || $inv['status'] === 'overdue'): ?>
-                                        <button class="btn btn-sm inv-status-btn" data-id="<?= (int) $inv['id'] ?>" data-status="paid" style="padding:2px 8px;font-size:12px;background:rgba(76,175,80,0.2);color:#4CAF50;">Markeer Betaald</button>
-                                    <?php endif; ?>
-                                </td>
+                                 <td style="padding: var(--space-sm); white-space: nowrap;">
+                                     <a href="<?= BASE_URL ?>/superadmin/invoices/view?id=<?= (int) $inv['id'] ?>" class="btn btn-sm" style="padding:2px 8px;font-size:12px;background:rgba(255,255,255,0.08);color:var(--text-primary);text-decoration:none;">Bekijk</a>
+                                     <?php if ($inv['status'] === 'draft'): ?>
+                                         <button class="btn btn-sm inv-status-btn" data-id="<?= (int) $inv['id'] ?>" data-status="sent" style="padding:2px 8px;font-size:12px;background:rgba(33,150,243,0.2);color:#2196F3;">Verzonden</button>
+                                     <?php elseif ($inv['status'] === 'sent' || $inv['status'] === 'overdue'): ?>
+                                         <button class="btn btn-sm inv-status-btn" data-id="<?= (int) $inv['id'] ?>" data-status="paid" style="padding:2px 8px;font-size:12px;background:rgba(76,175,80,0.2);color:#4CAF50;">Betaald</button>
+                                     <?php endif; ?>
+                                 </td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>

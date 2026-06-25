@@ -130,6 +130,121 @@ $featureMarketing = (bool) ($_tenant['feature_marketing'] ?? true);
     color: var(--accent-primary);
 }
 
+/* ── Whale Message Modal (self-contained) ── */
+.wm-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.72);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-md);
+}
+.wm-overlay.open { display: flex; }
+
+.wm-modal {
+    background: var(--bg-lightest, #1a1a1a);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    width: 100%;
+    max-width: 460px;
+    max-height: 90vh;
+    overflow-y: auto;
+    animation: fadeInUp 200ms ease-out;
+}
+.wm-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-md) var(--space-lg);
+    border-bottom: 1px solid var(--glass-border);
+}
+.wm-header h2 { font-size: 18px; font-weight: 600; margin: 0; }
+.wm-close {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 26px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+}
+.wm-close:hover { color: var(--text-primary); }
+.wm-body { padding: var(--space-lg); }
+
+.wm-guest {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    background: rgba(255, 193, 7, 0.06);
+    border: 1px solid rgba(255, 193, 7, 0.2);
+    border-radius: var(--radius-md);
+    padding: var(--space-sm) var(--space-md);
+    margin-bottom: var(--space-md);
+}
+.wm-avatar {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: var(--accent-gradient);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    color: #000;
+    flex-shrink: 0;
+}
+.wm-pushwarn {
+    display: none;
+    background: rgba(255, 152, 0, 0.1);
+    border: 1px solid rgba(255, 152, 0, 0.3);
+    border-radius: var(--radius-md);
+    padding: var(--space-sm) var(--space-md);
+    margin-bottom: var(--space-md);
+    font-size: 13px;
+    color: #ffb74d;
+    line-height: 1.4;
+}
+.wm-preview {
+    background: #111;
+    border-radius: 10px;
+    padding: var(--space-md);
+    margin-bottom: var(--space-md);
+}
+.wm-preview-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+.wm-preview-icon {
+    width: 22px;
+    height: 22px;
+    border-radius: 5px;
+    background: var(--accent-gradient);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+}
+.wm-counter {
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-align: right;
+    margin-top: 4px;
+}
+.wm-counter.warn { color: var(--accent-primary); }
+.wm-counter.over { color: var(--error); }
+.wm-actions {
+    display: flex;
+    gap: var(--space-sm);
+    justify-content: space-between;
+    margin-top: var(--space-md);
+}
+
 /* Barman Card */
 .barman-card {
     display: flex;
@@ -421,12 +536,79 @@ $featureMarketing = (bool) ($_tenant['feature_marketing'] ?? true);
 
 </div>
 
+<!-- ============================================ -->
+<!-- WHALE MESSAGE MODAL                          -->
+<!-- Admin kan standaardbericht sturen of eigen    -->
+<!-- bericht schrijven -> push (PWA) + inbox       -->
+<!-- ============================================ -->
+<div class="wm-overlay" id="whale-modal-overlay">
+    <div class="wm-modal" role="dialog" aria-modal="true" aria-labelledby="wm-title-text">
+        <div class="wm-header">
+            <h2 id="wm-title-text">🎁 Bericht sturen</h2>
+            <button type="button" class="wm-close" id="wm-close" aria-label="Sluiten">&times;</button>
+        </div>
+        <div class="wm-body">
+            <!-- Gast info -->
+            <div class="wm-guest">
+                <div class="wm-avatar" id="wm-avatar">--</div>
+                <div style="flex: 1; min-width: 0;">
+                    <div style="font-weight: 600;" id="wm-guest-name">Gast</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);" id="wm-push-status"></div>
+                </div>
+            </div>
+
+            <!-- Push waarschuwing (alleen als gast geen push-token heeft) -->
+            <div class="wm-pushwarn" id="wm-pushwarn">
+                ⚠️ Deze gast heeft push notificaties uit staan. Het bericht wordt <strong>alleen in de app-inbox</strong> bezorgd (geen PWA push).
+            </div>
+
+            <!-- Titel -->
+            <div class="form-group">
+                <label for="wm-title">Titel</label>
+                <input type="text" id="wm-title" class="form-input" maxlength="100" required>
+                <div class="wm-counter"><span id="wm-title-count">0</span>/100</div>
+            </div>
+
+            <!-- Bericht -->
+            <div class="form-group">
+                <label for="wm-body">Bericht</label>
+                <textarea id="wm-body" class="form-input" rows="3" maxlength="500" style="resize: vertical; width: 100%;" required></textarea>
+                <div class="wm-counter"><span id="wm-body-count">0</span>/500</div>
+            </div>
+
+            <!-- Voorbeeldweergave -->
+            <div class="wm-preview">
+                <div class="wm-preview-head">
+                    <div class="wm-preview-icon">🎁</div>
+                    <span style="font-size: 12px; font-weight: 600; color: var(--text-secondary);" id="wm-preview-tenant"><?= sanitize($tenantName) ?></span>
+                </div>
+                <div style="font-weight: 600; font-size: 14px; margin-bottom: 2px;" id="wm-preview-title"></div>
+                <div style="font-size: 13px; color: var(--text-secondary);" id="wm-preview-body"></div>
+            </div>
+
+            <!-- Acties -->
+            <div class="wm-actions">
+                <button type="button" class="btn btn-secondary btn-sm" id="wm-reset">↩ Standaardbericht</button>
+                <button type="button" class="btn btn-primary" id="wm-send">🎁 Versturen</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <?php require VIEWS_PATH . 'shared/footer.php'; ?>
 
 <script>
 // Feature flags from server (controlled by Super-Admin)
 const FEATURE_PUSH = <?= $featurePush ? 'true' : 'false' ?>;
 const FEATURE_MARKETING = <?= $featureMarketing ? 'true' : 'false' ?>;
+
+// Whale message state + standaardbericht (admin kan dit aanpassen in de modal)
+const __whalesById = {};
+const WHALE_DEFAULT_TITLE = 'Bedankt voor je bezoek! 🎉';
+function WHALE_DEFAULT_BODY(firstName) {
+    const name = (firstName && firstName.trim()) ? firstName.trim() : 'topgast';
+    return `Beste ${name}, je bent een echte topgast bij ons! Bedankt voor je trouwe bezoeken. Hierbij een extra bedankje van het team. Tot snel! 🍻`;
+}
 
 // ==========================================
 // Admin Dashboard JS
@@ -556,10 +738,11 @@ function renderWhales(whales) {
     
     let html = '';
     whales.forEach((w, i) => {
+        __whalesById[w.id] = w;
         const initials = (w.first_name?.[0] || '') + (w.last_name?.[0] || '');
         const hasPush = w.has_push ? '✅' : '⚠️';
         const bonusBtn = FEATURE_PUSH
-            ? `<button class="btn btn-secondary btn-action" onclick="sendWhaleBonus(${w.id})" title="Bonus sturen">🎁</button>`
+            ? `<button class="btn btn-secondary btn-action" onclick="openWhaleModal(${w.id})" title="Bericht sturen">🎁</button>`
             : '';
         
         html += `
@@ -674,13 +857,96 @@ function renderCorrectionLog(logs) {
 }
 
 // ------------------------------------------
-// Send Whale Bonus
+// Whale Message Modal - standaard of eigen bericht
+// Verstuurt PWA push (FCM) + inbox notificatie
 // ------------------------------------------
-async function sendWhaleBonus(userId) {
-    if (!confirm('Wil je deze whale een bonus sturen?')) return;
-    
+
+function openWhaleModal(userId) {
+    const w = __whalesById[userId];
+    if (!w) {
+        console.warn('Whale niet gevonden voor id', userId);
+        return;
+    }
+
+    const fullName = `${w.first_name} ${w.last_name}`;
+    const initials = (w.first_name?.[0] || '') + (w.last_name?.[0] || '');
+
+    document.getElementById('wm-avatar').textContent = initials || '??';
+    document.getElementById('wm-guest-name').textContent = fullName;
+
+    // Push status + waarschuwing
+    const statusEl = document.getElementById('wm-push-status');
+    const warnEl = document.getElementById('wm-pushwarn');
+    if (w.has_push) {
+        statusEl.innerHTML = '✅ Push notificaties aan';
+        warnEl.style.display = 'none';
+    } else {
+        statusEl.innerHTML = '⚠️ Push notificaties uit';
+        warnEl.style.display = 'block';
+    }
+
+    // Pre-fill met het standaardbericht
+    document.getElementById('wm-title').value = WHALE_DEFAULT_TITLE;
+    document.getElementById('wm-body').value = WHALE_DEFAULT_BODY(w.first_name);
+    updatePreview();
+
+    // Bewaar target id op de verzendknop
+    document.getElementById('wm-send').dataset.userId = String(userId);
+
+    document.getElementById('whale-modal-overlay').classList.add('open');
+}
+
+function closeWhaleModal() {
+    document.getElementById('whale-modal-overlay').classList.remove('open');
+}
+
+function resetWhaleStandard() {
+    const userId = parseInt(document.getElementById('wm-send').dataset.userId, 10);
+    const w = __whalesById[userId] || {};
+    document.getElementById('wm-title').value = WHALE_DEFAULT_TITLE;
+    document.getElementById('wm-body').value = WHALE_DEFAULT_BODY(w.first_name);
+    updatePreview();
+}
+
+function updatePreview() {
+    const titleEl = document.getElementById('wm-title');
+    const bodyEl = document.getElementById('wm-body');
+    const title = titleEl.value;
+    const body = bodyEl.value;
+
+    document.getElementById('wm-preview-title').textContent = title || 'Je titel hier...';
+    document.getElementById('wm-preview-body').textContent = body || 'Je bericht verschijnt hier als voorbeeld...';
+
+    // Tekens-tellers met kleurstatus
+    const tc = title.length;
+    const bc = body.length;
+    const tCount = document.getElementById('wm-title-count');
+    const bCount = document.getElementById('wm-body-count');
+    const tBox = tCount.parentElement;
+    const bBox = bCount.parentElement;
+    tCount.textContent = tc;
+    bCount.textContent = bc;
+    tBox.classList.toggle('warn', tc > 80 && tc < 100);
+    tBox.classList.toggle('over', tc >= 100);
+    bBox.classList.toggle('warn', bc > 450 && bc < 500);
+    bBox.classList.toggle('over', bc >= 500);
+}
+
+async function sendWhaleMessage() {
+    const sendBtn = document.getElementById('wm-send');
+    const userId = parseInt(sendBtn.dataset.userId, 10);
+    const title = document.getElementById('wm-title').value.trim();
+    const body = document.getElementById('wm-body').value.trim();
+
+    if (!userId) return;
+    if (!title) { alert('Vul een titel in.'); return; }
+    if (!body) { alert('Vul een bericht in.'); return; }
+
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
-    
+    const original = sendBtn.textContent;
+    sendBtn.disabled = true;
+    sendBtn.textContent = 'Versturen...';
+
     try {
         const response = await fetch((window.__BASE_URL || '') + '/api/push/send_notification', {
             method: 'POST',
@@ -690,19 +956,53 @@ async function sendWhaleBonus(userId) {
             },
             body: JSON.stringify({
                 user_id: userId,
-                title: 'Bedankt! 🎉',
-                body: 'Je bent een topgast! Hierbij een bedankje van ons.'
+                title: title,
+                body: body
             })
         });
-        
+
         const data = await response.json();
         if (data.success) {
-            alert('Bonus melding verstuurd!');
+            const w = __whalesById[userId] || {};
+            const name = w.first_name || 'gast';
+            const pushed = (data.sent || 0) > 0;
+            const msg = pushed
+                ? `Bericht verstuurd naar ${name} — Push ✓ & Inbox ✓`
+                : `Bericht verstuurd naar ${name} — bezorgd in inbox (geen push-token).`;
+            closeWhaleModal();
+            alert(msg);
         } else {
-            alert('Kon dashboard niet laden');
+            alert('Versturen mislukt: ' + (data.error || 'onbekende fout'));
         }
     } catch (e) {
-        alert('Kon bonus niet versturen');
+        alert('Kon bericht niet versturen.');
+    } finally {
+        sendBtn.disabled = false;
+        sendBtn.textContent = original;
     }
 }
+
+// Event wiring (alleen als de elementen bestaan)
+(function wireWhaleModal() {
+    const overlay = document.getElementById('whale-modal-overlay');
+    if (!overlay) return;
+
+    document.getElementById('wm-close')?.addEventListener('click', closeWhaleModal);
+    document.getElementById('wm-reset')?.addEventListener('click', resetWhaleStandard);
+    document.getElementById('wm-send')?.addEventListener('click', sendWhaleMessage);
+    document.getElementById('wm-title')?.addEventListener('input', updatePreview);
+    document.getElementById('wm-body')?.addEventListener('input', updatePreview);
+
+    // Sluiten bij klik op de overlay (buiten de modal)
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) closeWhaleModal();
+    });
+
+    // Sluiten met Escape
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && overlay.classList.contains('open')) {
+            closeWhaleModal();
+        }
+    });
+})();
 </script>

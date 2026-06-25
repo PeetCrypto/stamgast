@@ -17,6 +17,7 @@ require_once __DIR__ . '/utils/response.php';
 require_once __DIR__ . '/utils/audit.php';
 require_once __DIR__ . '/utils/validator.php';
 require_once __DIR__ . '/middleware/auth_check.php';
+require_once __DIR__ . '/utils/DatabaseSessionHandler.php';
 
 // --- Autoload Models ---
 spl_autoload_register(function (string $class) {
@@ -25,6 +26,13 @@ spl_autoload_register(function (string $class) {
         require_once $modelPath;
     }
 });
+
+// --- Register Database-Backed Sessions ---
+// MUST happen BEFORE the first session_start(). Switches PHP session storage
+// from volatile files to the `sessions` table so users stay logged in across
+// restarts, deploys and (business) DB migrations. Falls back to file sessions
+// automatically if the DB is unreachable.
+DatabaseSessionHandler::register();
 
 // --- Start Session ---
 if (session_status() === PHP_SESSION_NONE) {
@@ -825,6 +833,7 @@ function handleViewRoute(string $route, string $method): void
     'superadmin/tenant'         => 'superadmin/tenant_detail.php',
     'superadmin/fees'             => 'superadmin/fees.php',
     'superadmin/invoices'         => 'superadmin/invoices.php',
+    'superadmin/invoices/view'    => 'superadmin/invoice_view.php',
     'superadmin/settings'         => 'superadmin/settings.php',
     'superadmin/migrate'          => 'superadmin/migrate.php',
     'superadmin/repair-deposits'  => 'superadmin/repair_deposits.php',
@@ -958,7 +967,7 @@ function handleViewRoute(string $route, string $method): void
         'guest'      => ['guest/dashboard.php', 'guest/wallet.php', 'guest/qr.php', 'guest/scan.php', 'guest/inbox.php', 'guest/benefits.php', 'guest/profile/index.php', 'guest/pin-setup.php'],
         'bartender'  => ['bartender/dashboard.php', 'bartender/scanner.php', 'bartender/payment.php'],
         'admin'      => ['admin/dashboard.php', 'admin/reports.php', 'admin/users.php', 'admin/tiers.php', 'admin/settings.php', 'admin/marketing.php', 'admin/push.php'],
-        'superadmin' => ['superadmin/dashboard.php', 'superadmin/tenants.php', 'superadmin/tenant_detail.php', 'superadmin/fees.php', 'superadmin/invoices.php', 'superadmin/settings.php', 'superadmin/migrate.php', 'superadmin/repair_deposits.php', 'superadmin/emergency_token.php'],
+        'superadmin' => ['superadmin/dashboard.php', 'superadmin/tenants.php', 'superadmin/tenant_detail.php', 'superadmin/fees.php', 'superadmin/invoices.php', 'superadmin/invoice_view.php', 'superadmin/settings.php', 'superadmin/migrate.php', 'superadmin/repair_deposits.php', 'superadmin/emergency_token.php'],
     ];
 
     $effectiveRole = effectiveRole();

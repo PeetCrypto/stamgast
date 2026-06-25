@@ -25,9 +25,9 @@ define('DB_CHARSET', 'utf8mb4');
 // Productie: .env met eigen sterke pepper
 define('APP_PEPPER', getenv('APP_PEPPER') ?: 'change-this-to-a-random-string-in-production-32chars-min');
 // --- SESSION TIMEOUT ---
-// Staff (admin, bartender, superadmin): 30 minuten
+// Staff (admin, bartender, superadmin): 8 uur
 // Gast (PWA, always-logged-in): 5 jaar (permanent, beveiliging via PIN/FaceID app-lock)
-define('SESSION_TIMEOUT', 1800);                    // 30 min — standaard (staff)
+define('SESSION_TIMEOUT', 28800);                   // 8 uur — staff (admin, bartender, superadmin)
 define('SESSION_TIMEOUT_GUEST', 157680000);         // 5 jaar — gast PWA (altijd ingelogd)
 define('SESSION_COOKIE_LIFETIME_GUEST', 157680000); // 5 jaar — cookie lifetime
 define('SESSION_KEEPALIVE_INTERVAL', 900);           // 15 min — SW keepalive ping

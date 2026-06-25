@@ -29,10 +29,17 @@ define('REGULR_MIGRATE_ALLOW_WEB', true);
 
 // ── 3. Load project bootstrap ────────────────────────────────────────────────
 //    Populates getenv() with DB_HOST, DB_NAME, DB_USER, DB_PASS, etc.
-//    index.php already loaded config, but include guard for direct access
+//    index.php already loaded config + registered DatabaseSessionHandler, but
+//    include this guard for direct CLI/direct access.
+//    NOTE: register() is NOT called here — the /migrate route runs via index.php
+//    which already registered the handler and started the session. Calling it
+//    again would fail with "session already active" warnings.
 if (!defined('APP_ENV')) {
     require_once dirname(__DIR__) . '/config/load_env.php';
     require_once dirname(__DIR__) . '/config/app.php';
+    require_once dirname(__DIR__) . '/config/database.php';
+    require_once dirname(__DIR__) . '/utils/DatabaseSessionHandler.php';
+    DatabaseSessionHandler::register();
 }
 
 // ── 4. Security gate ─────────────────────────────────────────────────────────

@@ -15,6 +15,17 @@ class PlatformSetting
         'mollie_connect_api_key',
         'mollie_connect_client_id',
         'mollie_connect_client_secret',
+        // Factuur bedrijfsgegevens (afzender op verzamelfacturen)
+        'invoice_company_name',
+        'invoice_company_address',
+        'invoice_company_postal',
+        'invoice_company_city',
+        'invoice_company_country',
+        'invoice_btw_number',
+        'invoice_kvk',
+        'invoice_iban',
+        'invoice_email',
+        'invoice_website',
     ];
 
     /** Keys whose values should be masked in API responses */
