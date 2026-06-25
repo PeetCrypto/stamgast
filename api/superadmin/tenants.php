@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../models/Tenant.php';
 require_once __DIR__ . '/../../models/User.php';
+require_once __DIR__ . '/../../models/LoyaltyTier.php';
 
 $db = Database::getInstance()->getConnection();
 $tenantModel = new Tenant($db);
@@ -428,6 +429,22 @@ function handleUpdate(Tenant $model, array $input, PDO $db): void
 
         $model->update($tenantId, $input);
 
+        // ── Test Modus lifecycle: auto-manage the €0.01 test package ────────
+        // Enable  → ensure the test package exists
+        // Disable → remove all test packages
+        // Combined with the defensive read-filter in LoyaltyTier this is
+        // double protection: even if removal fails, the package stays hidden.
+        if (array_key_exists('is_test', $input)) {
+            $newIsTest = (bool) $input['is_test'];
+            $wasTest   = (bool) ($existing['is_test'] ?? 0);
+            $tierModel = new LoyaltyTier($db);
+            if ($newIsTest && !$wasTest) {
+                $tierModel->ensureTestPackage($tenantId);
+            } elseif (!$newIsTest && $wasTest) {
+                $tierModel->removeTestPackages($tenantId);
+            }
+        }
+
         try {
             $audit = new Audit($db);
             $audit->log(0, currentUserId(), 'tenant.updated', 'tenant', $tenantId, $input);
@@ -680,10 +697,25 @@ function handlePurgePackages(Tenant $model, array $input, PDO $db): void
     try {
         $count = $model->purgePackages($tenantId);
 
-        $audit = new Audit($db);
-        $audit->log(0, currentUserId(), 'tenant.purge_packages', 'tenant', $tenantId, ['purged_packages' => $count]);
+        // If the tenant is still in Test Modus, re-create the €0.01 test
+        // package so the operator can keep testing live payments after wiping.
+        $recreated = 0;
+        if (!empty($existing['is_test'])) {
+            $tierModel = new LoyaltyTier($db);
+            $tierModel->ensureTestPackage($tenantId);
+            $recreated = 1;
+        }
 
-        Response::success(['purged_packages' => $count]);
+        $audit = new Audit($db);
+        $audit->log(0, currentUserId(), 'tenant.purge_packages', 'tenant', $tenantId, [
+            'purged_packages'        => $count,
+            'test_package_recreated' => $recreated,
+        ]);
+
+        Response::success([
+            'purged_packages'        => $count,
+            'test_package_recreated' => $recreated,
+        ]);
     } catch (\Throwable $e) {
         error_log('purgePackages failed: ' . $e->getMessage());
         Response::error('Fout bij verwijderen pakketten: ' . $e->getMessage(), 'PURGE_FAILED', 500);

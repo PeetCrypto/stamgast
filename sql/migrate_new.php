@@ -563,6 +563,14 @@ $migrations = [
                 && columnExists($db, 'tenants', 'mollie_connect_status_checked_at');
         },
     ],
+    [
+        'name'   => 'Test Package Flag (is_test_package on loyalty_tiers)',
+        'file'   => 'test_package_migration.sql',
+        'type'   => 'alter',
+        'check'  => function (PDO $db): bool {
+            return columnExists($db, 'loyalty_tiers', 'is_test_package');
+        },
+    ],
 ];
 
 // ── Helper functions ────────────────────────────────────────────────────────
@@ -831,6 +839,8 @@ function runVerification(PDO $db): void
             'model_type', 'bonus_percentage',
             // Bonus cents migration
             'bonus_cents',
+            // Test package migration
+            'is_test_package',
         ],
         'transactions' => [
             'id', 'tenant_id', 'user_id', 'type', 'final_total_cents',

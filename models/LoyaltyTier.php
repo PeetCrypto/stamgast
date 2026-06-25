@@ -25,6 +25,16 @@ class LoyaltyTier
     /** Maximum bonus percentage */
     public const BONUS_MAX = 100;
 
+    /**
+     * Test package configuration
+     * Auto-managed package that appears ONLY when a tenant is in Test Modus.
+     * Lets an operator verify a live Mollie payment end-to-end for €0.01
+     * while receiving a €10 bonus (to also test the bonus-crediting flow).
+     */
+    public const TEST_PACKAGE_TOPUP_CENTS = 1;     // €0.01
+    public const TEST_PACKAGE_BONUS_CENTS = 1000;  // €10.00
+    public const TEST_PACKAGE_NAME        = 'Test Pakket (€0,01)';
+
     public function __construct(PDO $db)
     {
         $this->db = $db;
@@ -65,15 +75,29 @@ class LoyaltyTier
     /**
      * Get only active tiers for a tenant (for guest-facing views)
      *
+     * DEFENSIVE FILTER: test packages (is_test_package = 1) are ALWAYS excluded
+     * unless explicitly requested via $includeTestPackages. This guarantees that
+     * a lingering test package row can never be shown to real guests, even if
+     * the toggle lifecycle logic were to fail. The caller only passes true when
+     * the tenant is confirmed to be in Test Modus (is_test = 1).
+     *
+     * @param int  $tenantId
+     * @param bool $includeTestPackages Only true when tenant.is_test = 1
      * @return array<int, array>
      */
-    public function getActiveByTenant(int $tenantId): array
+    public function getActiveByTenant(int $tenantId, bool $includeTestPackages = false): array
     {
-        $stmt = $this->db->prepare(
-            'SELECT * FROM `loyalty_tiers`
-             WHERE `tenant_id` = :tenant_id AND `is_active` = 1
-             ORDER BY `sort_order` ASC, `topup_amount_cents` ASC'
-        );
+        $sql = 'SELECT * FROM `loyalty_tiers`
+             WHERE `tenant_id` = :tenant_id AND `is_active` = 1';
+
+        // Exclude auto-managed test packages unless explicitly requested
+        if (!$includeTestPackages && $this->hasTestPackageColumn()) {
+            $sql .= ' AND `is_test_package` = 0';
+        }
+
+        $sql .= ' ORDER BY `sort_order` ASC, `topup_amount_cents` ASC';
+
+        $stmt = $this->db->prepare($sql);
         $stmt->execute([':tenant_id' => $tenantId]);
         return $stmt->fetchAll();
     }
@@ -93,6 +117,24 @@ class LoyaltyTier
             $this->hasBonusCentsColumn = ((int) $stmt->fetchColumn()) > 0;
         }
         return $this->hasBonusCentsColumn;
+    }
+
+    private ?bool $hasTestPackageColumn = null;
+
+    /**
+     * Check if is_test_package column exists in the table
+     * (guards code paths on deployments where the migration is not yet run)
+     */
+    private function hasTestPackageColumn(): bool
+    {
+        if ($this->hasTestPackageColumn === null) {
+            $stmt = $this->db->query(
+                "SELECT COUNT(*) FROM information_schema.columns 
+                 WHERE table_schema = DATABASE() AND table_name = 'loyalty_tiers' AND column_name = 'is_test_package'"
+            );
+            $this->hasTestPackageColumn = ((int) $stmt->fetchColumn()) > 0;
+        }
+        return $this->hasTestPackageColumn;
     }
 
     /**
@@ -258,5 +300,100 @@ class LoyaltyTier
         );
         $stmt->execute([':tenant_id' => $tenantId]);
         return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * Ensure the €0.01 test package exists for this tenant.
+     * Idempotent: does nothing if a test package is already present.
+     * No-op when the is_test_package column does not exist yet (pre-migration).
+     *
+     * Called by the superadmin toggle lifecycle when Test Modus is enabled.
+     */
+    public function ensureTestPackage(int $tenantId): void
+    {
+        if (!$this->hasTestPackageColumn()) {
+            error_log('ensureTestPackage: is_test_package column missing — run /migrate first');
+            return;
+        }
+
+        // Idempotency: skip if a test package already exists for this tenant
+        $stmt = $this->db->prepare(
+            'SELECT COUNT(*) FROM `loyalty_tiers`
+             WHERE `tenant_id` = :tid AND `is_test_package` = 1'
+        );
+        $stmt->execute([':tid' => $tenantId]);
+        if ((int) $stmt->fetchColumn() > 0) {
+            return;
+        }
+
+        $includeBonusCents = $this->hasBonusCentsColumn();
+
+        $cols = '`tenant_id`, `name`, `min_deposit_cents`, `topup_amount_cents`,
+                 `model_type`, `bonus_percentage`, `alcohol_discount_perc`,
+                 `food_discount_perc`, `points_multiplier`, `is_active`, `sort_order`,
+                 `is_test_package`';
+        // sort_order = 0 → test package shows prominently during testing
+        $vals = ':tenant_id, :name, 0, :topup_amount_cents,
+                 :model_type, 0.00, 0.00,
+                 0.00, 1.00, 1, 0,
+                 1';
+
+        $params = [
+            ':tenant_id'          => $tenantId,
+            ':name'               => self::TEST_PACKAGE_NAME,
+            ':topup_amount_cents' => self::TEST_PACKAGE_TOPUP_CENTS,
+            ':model_type'         => self::MODEL_BONUS,
+        ];
+
+        if ($includeBonusCents) {
+            $cols .= ', `bonus_cents`';
+            $vals .= ', :bonus_cents';
+            $params[':bonus_cents'] = self::TEST_PACKAGE_BONUS_CENTS;
+        }
+
+        $stmt = $this->db->prepare("INSERT INTO `loyalty_tiers` ({$cols}) VALUES ({$vals})");
+        $stmt->execute($params);
+
+        error_log("ensureTestPackage: created test package for tenant {$tenantId}");
+    }
+
+    /**
+     * Remove ALL auto-managed test packages for this tenant.
+     * No-op when the is_test_package column does not exist yet.
+     *
+     * Called by the superadmin toggle lifecycle when Test Modus is disabled.
+     * Combined with the defensive read-filter this is double protection:
+     * even if deletion fails, the package stays invisible to guests.
+     *
+     * @return int Number of test packages deleted
+     */
+    public function removeTestPackages(int $tenantId): int
+    {
+        if (!$this->hasTestPackageColumn()) {
+            return 0;
+        }
+        $stmt = $this->db->prepare(
+            'DELETE FROM `loyalty_tiers`
+             WHERE `tenant_id` = :tid AND `is_test_package` = 1'
+        );
+        $stmt->execute([':tid' => $tenantId]);
+        $count = $stmt->rowCount();
+        if ($count > 0) {
+            error_log("removeTestPackages: removed {$count} test package(s) for tenant {$tenantId}");
+        }
+        return $count;
+    }
+
+    /**
+     * Check whether a given tier is an auto-managed test package.
+     * Used to allow €0.01 test deposits and to block admin edits/deletes.
+     */
+    public function isTestPackage(int $tierId, int $tenantId): bool
+    {
+        if (!$this->hasTestPackageColumn()) {
+            return false;
+        }
+        $tier = $this->findById($tierId, $tenantId);
+        return $tier !== null && ((int) ($tier['is_test_package'] ?? 0)) === 1;
     }
 }

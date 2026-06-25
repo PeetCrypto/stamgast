@@ -118,10 +118,24 @@ class WalletService
      */
     public function createDeposit(int $userId, int $tenantId, int $amountCents, ?int $tierId = null): array
     {
+        // ── Test package exception ──────────────────────────────────────────
+        // A test package (€0.01) bypasses the normal minimum deposit so a live
+        // Mollie payment can be tested end-to-end. Only allowed when BOTH:
+        //   1) a tier_id is provided that is flagged as a test package, AND
+        //   2) the tenant is confirmed to be in Test Modus (is_test = 1).
+        // This keeps the €100 minimum intact for all real deposits.
+        $effectiveMinCents = DEPOSIT_MIN_CENTS;
+        if ($tierId !== null) {
+            $tierCheck = new LoyaltyTier($this->db);
+            if ($tierCheck->isTestPackage($tierId, $tenantId) && $this->tenantModel->isTest($tenantId)) {
+                $effectiveMinCents = 1;
+            }
+        }
+
         // Validate amount
-        if ($amountCents < DEPOSIT_MIN_CENTS) {
+        if ($amountCents < $effectiveMinCents) {
             throw new \InvalidArgumentException(
-                'Minimum opwaardering is €' . centsToEuro(DEPOSIT_MIN_CENTS)
+                'Minimum opwaardering is €' . centsToEuro($effectiveMinCents)
             );
         }
         if ($amountCents > DEPOSIT_MAX_CENTS) {

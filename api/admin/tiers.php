@@ -37,6 +37,7 @@ if ($method === 'GET') {
             'points_multiplier'     => (float) $tier['points_multiplier'],
             'is_active'             => (int) $tier['is_active'],
             'sort_order'            => (int) $tier['sort_order'],
+            'is_test_package'       => (int) ($tier['is_test_package'] ?? 0),
         ];
     }, $tiers);
 
@@ -75,6 +76,10 @@ if ($method === 'GET') {
     }
 
     if ($action === 'create') {
+        // Test packages are auto-managed via Test Modus — admins cannot create them
+        if (isset($input['is_test_package'])) {
+            Response::error('Het aanmaken van testpakketten is niet toegestaan', 'TEST_PACKAGE_LOCKED', 403);
+        }
         $name               = trim($input['name'] ?? '');
         $minDepositCents    = (int) ($input['min_deposit_cents'] ?? 0);
         $topupAmountCents   = (int) ($input['topup_amount_cents'] ?? LoyaltyTier::MIN_TOPUP_CENTS);
@@ -191,6 +196,11 @@ if ($method === 'GET') {
             Response::error('Pakket niet gevonden', 'NOT_FOUND', 404);
         }
 
+        // Test packages are auto-managed via Test Modus — admins cannot edit them
+        if (!empty($tier['is_test_package'])) {
+            Response::error('Het testpakket wordt automatisch beheerd via de Test Modus en kan niet worden bewerkt.', 'TEST_PACKAGE_LOCKED', 403);
+        }
+
         $data = [];
         if (isset($input['name'])) {
             $data['name'] = trim($input['name']);
@@ -302,6 +312,11 @@ if ($method === 'GET') {
             Response::error('Pakket niet gevonden', 'NOT_FOUND', 404);
         }
 
+        // Test packages are auto-managed via Test Modus — admins cannot toggle them
+        if (!empty($tier['is_test_package'])) {
+            Response::error('Het testpakket wordt automatisch beheerd via de Test Modus en kan niet worden bewerkt.', 'TEST_PACKAGE_LOCKED', 403);
+        }
+
         $tierModel->toggle($tierId, $tenantId, $active);
 
         try {
@@ -328,6 +343,11 @@ if ($method === 'GET') {
         $tier = $tierModel->findById($tierId, $tenantId);
         if (!$tier) {
             Response::error('Pakket niet gevonden', 'NOT_FOUND', 404);
+        }
+
+        // Test packages are auto-managed via Test Modus — admins cannot delete them
+        if (!empty($tier['is_test_package'])) {
+            Response::error('Het testpakket wordt automatisch beheerd via de Test Modus en kan niet worden verwijderd.', 'TEST_PACKAGE_LOCKED', 403);
         }
 
         $tierModel->delete($tierId, $tenantId);

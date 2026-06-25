@@ -10,6 +10,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/../../models/LoyaltyTier.php';
+require_once __DIR__ . '/../../models/Tenant.php';
 
 $userId   = currentUserId();
 $tenantId = currentTenantId();
@@ -21,8 +22,13 @@ if ($userId === null || $tenantId === null) {
 $db = Database::getInstance()->getConnection();
 $tierModel = new LoyaltyTier($db);
 
+// Show the auto-managed €0.01 test package ONLY when the tenant is in Test Modus.
+// The defensive filter inside getActiveByTenant() keeps it hidden otherwise.
+$tenant = (new Tenant($db))->findById($tenantId);
+$isTest = $tenant !== null && (bool) ($tenant['is_test'] ?? false);
+
 // Only return active packages
-$tiers = $tierModel->getActiveByTenant($tenantId);
+$tiers = $tierModel->getActiveByTenant($tenantId, $isTest);
 
 $packages = array_map(function ($tier) {
     return [
@@ -35,6 +41,7 @@ $packages = array_map(function ($tier) {
         'alcohol_discount_perc' => (float) $tier['alcohol_discount_perc'],
         'food_discount_perc'    => (float) $tier['food_discount_perc'],
         'points_multiplier'     => (float) $tier['points_multiplier'],
+        'is_test_package'       => (int) ($tier['is_test_package'] ?? 0),
     ];
 }, $tiers);
 

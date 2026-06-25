@@ -192,7 +192,9 @@ $feeStats = $feeService->getTenantFeeStats($tenantId);
                                     <?= ($tenant['is_test'] ?? false) ? 'Test tenant' : 'Productie' ?>
                                 </span>
                             </label>
-                            <p class="text-sm text-secondary" style="margin-top:4px;">Schakel in om test-data te kunnen wissen (gasten, pakketten, saldo).</p>
+                            <p class="text-sm text-secondary" style="margin-top:4px;">
+                                Schakel in om test-data te kunnen wissen (gasten, pakketten, saldo) en om automatisch een <strong>testpakket (€0,01 → €10 bonus)</strong> toe te voegen voor het testen van live betalingen via Mollie. Bij uitschakelen verdwijnt het testpakket automatisch.
+                            </p>
                         </div>
                     </div>
 
