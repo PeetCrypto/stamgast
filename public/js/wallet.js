@@ -95,7 +95,17 @@
                 window.REGULR.showSuccess(msg);
                 await loadWalletData();
             } else if (response.success && response.data.checkout_url) {
-                // Test/Live mode - redirect to Mollie checkout
+                // Test/Live mode - redirect to Mollie checkout.
+                // Persist the pending payment in sessionStorage so the PWA can
+                // resume polling when the guest returns from the external payment
+                // (iOS opens Mollie in Safari; the PWA keeps running in the
+                // background and detects the return via visibilitychange).
+                REGULR.PaymentTracker.start({
+                    payment_id:     response.data.payment_id,
+                    transaction_id: response.data.transaction_id,
+                    amount_cents:   amountCents,
+                    balance_before: walletData ? walletData.balance_cents : 0
+                });
                 window.location.href = response.data.checkout_url;
             } else {
                 throw new Error(response.error || 'Deposit failed');
@@ -344,51 +354,104 @@
     }
 
     // ============================================
-    // PAYMENT RETURN (race condition handling)
+    // PAYMENT RETURN (race condition handling + PWA resume)
     // ============================================
 
     /**
-     * When guest returns from Mollie payment (URL has ?from_payment=1),
-     * the webhook may not have processed yet. Poll the balance every 2s
-     * for up to 10 seconds to detect the updated balance.
+     * Tracks a pending Mollie deposit so the wallet can resume polling when the
+     * guest returns — either via a URL flag (?from_payment=1) or, crucially for
+     * iOS PWAs, when the app regains visibility after the external payment.
+     *
+     * On iOS, the PWA keeps running in the background while Mollie opens in
+     * Safari. When the guest switches back to the app, visibilitychange fires
+     * and we resume polling to pick up the webhook-credited balance.
      */
-    function handlePaymentReturn() {
-        var params = new URLSearchParams(window.location.search);
-        if (!params.get('from_payment')) return;
+    var pollTimer = null;
 
-        // Clean URL to avoid re-triggering on refresh
-        window.history.replaceState({}, document.title, window.location.pathname);
+    function startBalancePolling(initialBalance, label) {
+        if (pollTimer) clearInterval(pollTimer);
 
-        // Show processing message
-        window.REGULR.showSuccess('Betaling ontvangen! Je saldo wordt bijgewerkt...');
+        if (label && window.REGULR && window.REGULR.showSuccess) {
+            window.REGULR.showSuccess(label);
+        }
 
-        // Poll balance every 2 seconds, max 5 attempts
         var attempts = 0;
-        var maxAttempts = 5;
-        var initialBalance = walletData ? walletData.balance_cents : 0;
+        var maxAttempts = 12; // 12 × 2.5s = 30s window
+        var baseline = (initialBalance != null) ? initialBalance
+                       : (walletData ? walletData.balance_cents : 0);
 
-        var pollInterval = setInterval(async function() {
+        pollTimer = setInterval(async function() {
             attempts++;
             try {
                 var freshData = await loadWalletData();
-                if (freshData && freshData.balance_cents > initialBalance) {
-                    // Balance updated — webhook has processed
-                    clearInterval(pollInterval);
+                if (freshData && freshData.balance_cents > baseline) {
+                    stopBalancePolling();
                     window.REGULR.showSuccess('Saldo bijgewerkt!');
-                    // Reload history too
                     var historyData = await loadTransactionHistory();
                     if (historyData) renderTransactionHistory(historyData.transactions);
+                    REGULR.PaymentTracker.clear();
                 }
             } catch (e) {
                 console.error('Poll error:', e);
             }
             if (attempts >= maxAttempts) {
-                clearInterval(pollInterval);
-                // Final refresh attempt
-                await loadWalletData();
+                stopBalancePolling();
+                await loadWalletData(); // final refresh attempt
             }
-        }, 2000);
+        }, 2500);
     }
+
+    function stopBalancePolling() {
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    }
+
+    /**
+     * Handle return from Mollie payment. Two entry points:
+     *  1. URL has ?from_payment=1 (inline browser context — payment_return.php
+     *     redirected here because the guest was still logged in).
+     *  2. PWA resumed (visibilitychange) with a tracked pending payment in
+     *     sessionStorage.
+     */
+    function handlePaymentReturn() {
+        var params = new URLSearchParams(window.location.search);
+        var fromUrl = !!params.get('from_payment');
+
+        if (fromUrl) {
+            // Clean URL to avoid re-triggering on refresh
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+
+        var pending = REGULR.PaymentTracker.get();
+        if (!fromUrl && !pending) return;
+
+        var baseline = (pending && pending.balance_before != null)
+                       ? pending.balance_before
+                       : (walletData ? walletData.balance_cents : 0);
+
+        startBalancePolling(baseline, 'Betaling ontvangen! Je saldo wordt bijgewerkt...');
+    }
+
+    /**
+     * On iOS, when the PWA (standalone) regains visibility after an external
+     * payment in Safari, resume polling if there's a tracked pending payment.
+     * This is the key fix: the guest doesn't have to do anything — the balance
+     * updates automatically the moment they switch back to the app.
+     */
+    document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState !== 'visible') return;
+
+        var pending = REGULR.PaymentTracker.get();
+        if (!pending) return;
+
+        // Stale guard: drop payments older than 1 hour.
+        var ageMs = Date.now() - (pending.started_at || 0);
+        if (ageMs > 3600000) { REGULR.PaymentTracker.clear(); return; }
+
+        // Don't double-start if already polling.
+        if (pollTimer) return;
+
+        startBalancePolling(pending.balance_before || 0, 'Betaling controleren...');
+    });
 
     // ============================================
     // INITIALIZATION

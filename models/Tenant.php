@@ -132,6 +132,47 @@ class Tenant
     }
 
     /**
+     * Get all "live" tenants — productie modus + active Mollie Connect.
+     *
+     * A tenant qualifies as "live" when BOTH conditions are met:
+     *   - is_test = 0  (Test Modus = Productie, NIET test tenant)
+     *   - mollie_connect_status = 'active'  (Mollie Connect aan, account live)
+     *
+     * Only these tenants' data may appear in fees & invoices overviews,
+     * because fees are only collected on real (productie) payments.
+     *
+     * @return array<int, array>
+     */
+    public function getLiveTenants(): array
+    {
+        $stmt = $this->db->prepare(
+            "SELECT * FROM `tenants`
+             WHERE `is_test` = 0
+               AND `mollie_connect_status` = 'active'
+               AND `is_active` = 1
+             ORDER BY `name` ASC"
+        );
+        $stmt->execute();
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * Get IDs of all live tenants (for IN() clauses).
+     *
+     * @return array<int, int>
+     */
+    public function getLiveTenantIds(): array
+    {
+        $stmt = $this->db->query(
+            "SELECT `id` FROM `tenants`
+             WHERE `is_test` = 0
+               AND `mollie_connect_status` = 'active'
+               AND `is_active` = 1"
+        );
+        return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    /**
      * Get all tenants with user count per tenant
      */
     public function getAllWithUserCount(): array

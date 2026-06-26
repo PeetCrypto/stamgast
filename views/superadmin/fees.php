@@ -122,7 +122,7 @@ $defaultEnd = date('Y-m-t');
                                 <td style="padding: var(--space-sm); text-align: right; font-weight: 600; color: #4CAF50;">&euro; <?= number_format($fee / 100, 2, ',', '.') ?></td>
                                 <td style="padding: var(--space-sm); text-align: right;"><?= number_format($feePerc, 2, ',', '.') ?>%</td>
                                 <td style="padding: var(--space-sm);">
-                                    <a href="<?= BASE_URL ?>/superadmin/tenant/<?= (int) $row['tenant_id'] ?>" class="btn btn-secondary btn-sm" style="padding: 2px 8px; font-size: 12px;">Detail</a>
+                                    <button class="btn btn-secondary btn-sm fee-detail-btn" data-tenant-id="<?= (int) $row['tenant_id'] ?>" data-tenant-name="<?= sanitize($row['tenant_name']) ?>" data-fee-perc="<?= number_format((float) ($row['platform_fee_percentage'] ?? 0), 2, '.', '') ?>" style="padding: 2px 8px; font-size: 12px;">Detail</button>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
@@ -141,6 +141,51 @@ $defaultEnd = date('Y-m-t');
                 </table>
             </div>
         <?php endif; ?>
+    </div>
+</div>
+
+<!-- Fee Detail Modal -->
+<div id="fee-detail-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:9999; justify-content:center; align-items:flex-start; padding-top:40px; overflow-y:auto;">
+    <div class="glass-card" style="width:95%; max-width:1000px; padding:var(--space-xl); margin-bottom:40px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:var(--space-lg);">
+            <div>
+                <h2 id="modal-tenant-name" style="margin:0;">Fee Details</h2>
+                <p id="modal-tenant-subtitle" class="text-sm text-secondary" style="margin-top:4px;"></p>
+            </div>
+            <button id="modal-close" class="btn btn-secondary" style="padding:4px 12px;">&times; Sluiten</button>
+        </div>
+
+        <!-- Summary cards inside modal -->
+        <div id="modal-summary" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:var(--space-md); margin-bottom:var(--space-lg);">
+        </div>
+
+        <!-- Loading indicator -->
+        <div id="modal-loading" style="text-align:center; padding:var(--space-xl);">
+            <p class="text-secondary">Transacties laden...</p>
+        </div>
+
+        <!-- Transaction table -->
+        <div id="modal-table-wrapper" style="display:none; overflow-x:auto;">
+            <table style="width:100%; border-collapse:collapse; min-width:800px;">
+                <thead>
+                    <tr style="border-bottom:1px solid rgba(255,255,255,0.1);">
+                        <th style="text-align:left; padding:var(--space-sm); color:var(--text-secondary);">Datum</th>
+                        <th style="text-align:left; padding:var(--space-sm); color:var(--text-secondary);">Gast</th>
+                        <th style="text-align:right; padding:var(--space-sm); color:var(--text-secondary);">Bruto (deposit)</th>
+                        <th style="text-align:right; padding:var(--space-sm); color:var(--text-secondary);">Fee %</th>
+                        <th style="text-align:right; padding:var(--space-sm); color:var(--text-secondary);">Fee bedrag</th>
+                        <th style="text-align:right; padding:var(--space-sm); color:var(--text-secondary);">Netto (naar tenant)</th>
+                        <th style="text-align:left; padding:var(--space-sm); color:var(--text-secondary);">Mollie ID</th>
+                        <th style="text-align:left; padding:var(--space-sm); color:var(--text-secondary);">Status</th>
+                    </tr>
+                </thead>
+                <tbody id="modal-tbody"></tbody>
+                <tfoot>
+                    <tr id="modal-totals-row" style="border-top:2px solid rgba(255,255,255,0.2); font-weight:700;"></tr>
+                </tfoot>
+            </table>
+            <p id="modal-pagination" class="text-sm text-secondary" style="margin-top:var(--space-md);"></p>
+        </div>
     </div>
 </div>
 
@@ -205,7 +250,7 @@ function renderPerTenantTable(tenants) {
             <td style="padding:var(--space-sm);text-align:right;">&euro; ${formatCents(gross)}</td>
             <td style="padding:var(--space-sm);text-align:right;font-weight:600;color:#4CAF50;">&euro; ${formatCents(fee)}</td>
             <td style="padding:var(--space-sm);text-align:right;">${perc.toFixed(2).replace('.', ',')}%</td>
-            <td style="padding:var(--space-sm);"><a href="${BASE}/superadmin/tenant/${row.tenant_id}" class="btn btn-secondary btn-sm" style="padding:2px 8px;font-size:12px;">Detail</a></td>
+            <td style="padding:var(--space-sm);"><button class="btn btn-secondary btn-sm fee-detail-btn" data-tenant-id="${row.tenant_id}" data-tenant-name="${escapeHtml(row.tenant_name)}" data-fee-perc="${perc}" style="padding:2px 8px;font-size:12px;">Detail</button></td>
         </tr>`;
     });
 
@@ -229,6 +274,162 @@ function escapeHtml(str) {
     const div = document.createElement('div');
     div.appendChild(document.createTextNode(str));
     return div.innerHTML;
+}
+
+// ── Fee Detail Modal ─────────────────────────────────────────────────────────
+
+let modalCurrentPage = 1;
+let modalTotalFees = 0;
+let modalTenantId = null;
+
+document.addEventListener('click', function(e) {
+    const btn = e.target.closest('.fee-detail-btn');
+    if (!btn) return;
+
+    modalTenantId = btn.dataset.tenantId;
+    const tenantName = btn.dataset.tenantName;
+    const feePerc = parseFloat(btn.dataset.feePerc) || 0;
+
+    document.getElementById('modal-tenant-name').textContent = 'Fee Details — ' + tenantName;
+    document.getElementById('modal-tenant-subtitle').textContent = 'Platform fee percentage: ' + feePerc.toFixed(2).replace('.', ',') + '%';
+    document.getElementById('fee-detail-modal').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+
+    modalCurrentPage = 1;
+    loadFeeDetail(modalTenantId, modalCurrentPage);
+});
+
+document.getElementById('modal-close')?.addEventListener('click', closeModal);
+document.getElementById('fee-detail-modal')?.addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+});
+
+function closeModal() {
+    document.getElementById('fee-detail-modal').style.display = 'none';
+    document.body.style.overflow = '';
+}
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeModal();
+});
+
+async function loadFeeDetail(tenantId, page) {
+    document.getElementById('modal-loading').style.display = 'block';
+    document.getElementById('modal-table-wrapper').style.display = 'none';
+
+    try {
+        const res = await fetch(BASE + '/api/superadmin/fees?action=tenant_fees&tenant_id=' + tenantId + '&page=' + page + '&limit=50', {
+            headers: { 'X-CSRF-Token': CSRF }
+        });
+        const result = await res.json();
+        if (!result.success) {
+            alert('Kon fee details niet laden');
+            return;
+        }
+
+        const data = result.data;
+        const fees = data.fees || [];
+        const total = data.total || 0;
+        const limit = data.limit || 50;
+        modalTotalFees = total;
+
+        // Build summary cards
+        let grossSum = 0, feeSum = 0, netSum = 0;
+        fees.forEach(f => {
+            grossSum += parseInt(f.gross_amount_cents) || 0;
+            feeSum += parseInt(f.fee_amount_cents) || 0;
+            netSum += parseInt(f.net_amount_cents) || 0;
+        });
+
+        document.getElementById('modal-summary').innerHTML = `
+            <div class="glass-card" style="padding:var(--space-md); text-align:center;">
+                <p class="text-secondary text-sm">Transacties totaal</p>
+                <p style="font-size:22px; font-weight:700;">${total}</p>
+            </div>
+            <div class="glass-card" style="padding:var(--space-md); text-align:center;">
+                <p class="text-secondary text-sm">Volume (deze pagina)</p>
+                <p style="font-size:22px; font-weight:700;">&euro; ${formatCents(grossSum)}</p>
+            </div>
+            <div class="glass-card" style="padding:var(--space-md); text-align:center;">
+                <p class="text-secondary text-sm">Platform fee (deze pagina)</p>
+                <p style="font-size:22px; font-weight:700; color:#4CAF50;">&euro; ${formatCents(feeSum)}</p>
+            </div>
+            <div class="glass-card" style="padding:var(--space-md); text-align:center;">
+                <p class="text-secondary text-sm">Netto naar tenant (deze pagina)</p>
+                <p style="font-size:22px; font-weight:700;">&euro; ${formatCents(netSum)}</p>
+            </div>
+        `;
+
+        // Build transaction rows
+        let tbodyHtml = '';
+        if (fees.length === 0) {
+            tbodyHtml = '<tr><td colspan="8" style="padding:var(--space-lg); text-align:center;" class="text-secondary">Geen transacties gevonden.</td></tr>';
+        } else {
+            fees.forEach(f => {
+                const date = f.created_at ? new Date(f.created_at).toLocaleString('nl-NL', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—';
+                const guest = escapeHtml(((f.first_name || '') + ' ' + (f.last_name || '')).trim() || f.email || 'Onbekend');
+                const statusColors = {
+                    collected: 'rgba(76,175,80,0.2);color:#4CAF50',
+                    invoiced: 'rgba(33,150,243,0.2);color:#2196F3',
+                    settled: 'rgba(158,158,158,0.2);color:#9e9e9e'
+                };
+                const sc = statusColors[f.status] || statusColors.collected;
+                const statusLabels = { collected: 'Verzameld', invoiced: 'Gefactureerd', settled: 'Vereffend' };
+
+                tbodyHtml += `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+                    <td style="padding:var(--space-sm); font-size:13px;">${date}</td>
+                    <td style="padding:var(--space-sm);">${guest}</td>
+                    <td style="padding:var(--space-sm);text-align:right;">&euro; ${formatCents(parseInt(f.gross_amount_cents) || 0)}</td>
+                    <td style="padding:var(--space-sm);text-align:right;">${parseFloat(f.fee_percentage || 0).toFixed(2).replace('.', ',')}%</td>
+                    <td style="padding:var(--space-sm);text-align:right;font-weight:600;color:#4CAF50;">&euro; ${formatCents(parseInt(f.fee_amount_cents) || 0)}</td>
+                    <td style="padding:var(--space-sm);text-align:right;">&euro; ${formatCents(parseInt(f.net_amount_cents) || 0)}</td>
+                    <td style="padding:var(--space-sm); font-size:12px; font-family:monospace;">${escapeHtml(f.mollie_payment_id || '—')}</td>
+                    <td style="padding:var(--space-sm);"><span class="badge" style="background:${sc};">${statusLabels[f.status] || f.status}</span></td>
+                </tr>`;
+            });
+        }
+        document.getElementById('modal-tbody').innerHTML = tbodyHtml;
+
+        // Totals row
+        document.getElementById('modal-totals-row').innerHTML = `
+            <td style="padding:var(--space-sm);" colspan="2">Subtotaal (deze pagina)</td>
+            <td style="padding:var(--space-sm);text-align:right;">&euro; ${formatCents(grossSum)}</td>
+            <td></td>
+            <td style="padding:var(--space-sm);text-align:right;color:#4CAF50;">&euro; ${formatCents(feeSum)}</td>
+            <td style="padding:var(--space-sm);text-align:right;">&euro; ${formatCents(netSum)}</td>
+            <td colspan="2"></td>
+        `;
+
+        // Pagination
+        const totalPages = Math.ceil(total / limit);
+        let paginationHtml = '';
+        if (totalPages > 1) {
+            paginationHtml += `Pagina ${page} van ${totalPages} (${total} transacties) — `;
+            if (page > 1) {
+                paginationHtml += `<button class="btn btn-sm btn-secondary modal-page-btn" data-page="${page - 1}" style="padding:2px 8px;font-size:12px;">&laquo; Vorige</button> `;
+            }
+            if (page < totalPages) {
+                paginationHtml += `<button class="btn btn-sm btn-secondary modal-page-btn" data-page="${page + 1}" style="padding:2px 8px;font-size:12px;">Volgende &raquo;</button>`;
+            }
+        } else if (total > 0) {
+            paginationHtml = `${total} transacties`;
+        }
+        document.getElementById('modal-pagination').innerHTML = paginationHtml;
+
+        // Bind pagination buttons
+        document.querySelectorAll('.modal-page-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                modalCurrentPage = parseInt(this.dataset.page);
+                loadFeeDetail(modalTenantId, modalCurrentPage);
+            });
+        });
+
+        document.getElementById('modal-loading').style.display = 'none';
+        document.getElementById('modal-table-wrapper').style.display = 'block';
+    } catch (err) {
+        alert('Er is een netwerkfout opgetreden bij het laden van fee details');
+        document.getElementById('modal-loading').style.display = 'none';
+    }
 }
 </script>
 

@@ -21,12 +21,13 @@ $db = Database::getInstance()->getConnection();
 $invoiceModel = new PlatformInvoice($db);
 $feeModel = new PlatformFee($db);
 $feeService = new PlatformFeeService($db);
+$tenantModel = new Tenant($db);
 
 $method = $_SERVER['REQUEST_METHOD'];
 
 switch ($method) {
     case 'GET':
-        handleGet($invoiceModel);
+        handleGet($invoiceModel, $tenantModel);
         break;
 
     case 'POST':
@@ -35,7 +36,7 @@ switch ($method) {
 
         switch ($action) {
             case 'generate':
-                handleGenerate($feeService, $input);
+                handleGenerate($feeService, $input, $tenantModel);
                 break;
 
             case 'generate_all':
@@ -63,8 +64,11 @@ switch ($method) {
 
 /**
  * GET: list invoices or get single invoice detail
+ *
+ * SECURITY: Only invoices from LIVE tenants (mollie_status='live' + mollie_connect_status='active')
+ *           are returned. Non-live tenant invoices are hidden.
  */
-function handleGet(PlatformInvoice $invoiceModel): void
+function handleGet(PlatformInvoice $invoiceModel, Tenant $tenantModel): void
 {
     $invoiceId = (int) ($_GET['id'] ?? 0);
 
@@ -75,6 +79,19 @@ function handleGet(PlatformInvoice $invoiceModel): void
             Response::notFound('Factuur niet gevonden');
         }
 
+        // Defense in depth: verify invoice belongs to a live tenant
+        $tenant = $tenantModel->findById((int) $invoice['tenant_id']);
+        $isLive = $tenant
+            && ($tenant['mollie_status'] ?? '') === 'live'
+            && ($tenant['mollie_connect_status'] ?? '') === 'active';
+        if (!$isLive) {
+            Response::error(
+                'Deze factuur behoort tot een niet-live tenant en kan niet worden bekeken',
+                'TENANT_NOT_LIVE',
+                403
+            );
+        }
+
         $fees = $invoiceModel->getFees($invoiceId);
 
         Response::success([
@@ -82,14 +99,14 @@ function handleGet(PlatformInvoice $invoiceModel): void
             'fees'    => $fees,
         ]);
     } else {
-        // List all invoices
+        // List all invoices (model already filters to live tenants)
         $page = (int) ($_GET['page'] ?? 1);
         $limit = (int) ($_GET['limit'] ?? 50);
         $status = $_GET['status'] ?? null;
 
         $result = $invoiceModel->getAll($page, $limit, $status);
 
-        // Also include totals
+        // Also include totals (model already filters to live tenants)
         $totals = $invoiceModel->getTotals();
 
         Response::success([
@@ -109,7 +126,7 @@ function handleGet(PlatformInvoice $invoiceModel): void
  * Required: tenant_id, period_start, period_end
  * Optional: period_type (defaults to tenant's invoice_period)
  */
-function handleGenerate(PlatformFeeService $feeService, array $input): void
+function handleGenerate(PlatformFeeService $feeService, array $input, Tenant $tenantModel): void
 {
     $tenantId = (int) ($input['tenant_id'] ?? 0);
     $periodStart = $input['period_start'] ?? '';
@@ -126,6 +143,21 @@ function handleGenerate(PlatformFeeService $feeService, array $input): void
     }
     if ($periodStart > $periodEnd) {
         Response::error('period_start must be before period_end', 'INVALID_PERIOD_RANGE', 400);
+    }
+
+    // SECURITY: Only live tenants can be invoiced
+    $tenant = $tenantModel->findById($tenantId);
+    if (!$tenant) {
+        Response::error('Tenant niet gevonden', 'TENANT_NOT_FOUND', 404);
+    }
+    $isLive = ($tenant['mollie_status'] ?? '') === 'live'
+           && ($tenant['mollie_connect_status'] ?? '') === 'active';
+    if (!$isLive) {
+        Response::error(
+            'Facturen kunnen alleen worden gegenereerd voor live tenants (productie modus + actieve Mollie Connect)',
+            'TENANT_NOT_LIVE',
+            403
+        );
     }
 
     try {

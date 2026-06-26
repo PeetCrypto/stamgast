@@ -138,15 +138,15 @@ class PlatformInvoice
         $limit = min(max(1, $limit), MAX_PAGE_SIZE);
         $offset = ($page - 1) * $limit;
 
-        $where = '1=1';
+        $where = " t.`mollie_status` = 'live' AND t.`mollie_connect_status` = 'active' AND t.`is_active` = 1 ";
         $params = [];
 
         if ($status !== null && in_array($status, ['draft', 'sent', 'paid', 'overdue', 'cancelled'], true)) {
-            $where .= ' AND `status` = :status';
+            $where .= ' AND pi.`status` = :status';
             $params[':status'] = $status;
         }
 
-        $countSql = "SELECT COUNT(*) FROM `platform_invoices` WHERE {$where}";
+        $countSql = "SELECT COUNT(*) FROM `platform_invoices` pi INNER JOIN `tenants` t ON t.`id` = pi.`tenant_id` WHERE {$where}";
         $stmt = $this->db->prepare($countSql);
         $stmt->execute($params);
         $total = (int) $stmt->fetchColumn();
@@ -267,12 +267,17 @@ class PlatformInvoice
      */
     public function getTotals(): array
     {
+        // Only count invoices from LIVE tenants: mollie_status='live' + mollie_connect_status='active'
         $stmt = $this->db->query(
             "SELECT
-                COALESCE(SUM(CASE WHEN `status` IN ('draft','sent','overdue') THEN `total_incl_btw_cents` ELSE 0 END), 0) AS outstanding,
-                COALESCE(SUM(CASE WHEN `status` = 'paid' THEN `total_incl_btw_cents` ELSE 0 END), 0) AS collected,
-                COALESCE(SUM(CASE WHEN `status` != 'cancelled' AND `created_at` >= DATE_FORMAT(CURDATE(), '%Y-%m-01') THEN `total_incl_btw_cents` ELSE 0 END), 0) AS this_month
-             FROM `platform_invoices`"
+                COALESCE(SUM(CASE WHEN pi.`status` IN ('draft','sent','overdue') THEN pi.`total_incl_btw_cents` ELSE 0 END), 0) AS outstanding,
+                COALESCE(SUM(CASE WHEN pi.`status` = 'paid' THEN pi.`total_incl_btw_cents` ELSE 0 END), 0) AS collected,
+                COALESCE(SUM(CASE WHEN pi.`status` != 'cancelled' AND pi.`created_at` >= DATE_FORMAT(CURDATE(), '%Y-%m-01') THEN pi.`total_incl_btw_cents` ELSE 0 END), 0) AS this_month
+             FROM `platform_invoices` pi
+             INNER JOIN `tenants` t ON t.`id` = pi.`tenant_id`
+             WHERE t.`mollie_status` = 'live'
+               AND t.`mollie_connect_status` = 'active'
+               AND t.`is_active` = 1"
         );
         $row = $stmt->fetch();
 

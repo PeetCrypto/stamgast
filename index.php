@@ -802,6 +802,8 @@ function handleViewRoute(string $route, string $method): void
         'reset-password'  => 'shared/reset-password.php',
         'setup-password'  => 'shared/setup-password.php',
         'push-test'       => 'shared/push-test.php',
+        // Public Mollie payment return (handles PWA↔Safari context — see views/shared/payment_return.php)
+        'payment/return'  => 'shared/payment_return.php',
 
         // Guest
         'dashboard' => 'guest/dashboard.php',
@@ -913,7 +915,15 @@ function handleViewRoute(string $route, string $method): void
     }
 
     // Enforce auth for protected views
-    $publicViews = ['shared/login.php', 'shared/register.php', 'shared/setup-password.php'];
+    // NOTE: 'shared/payment_return.php' is public on purpose — it handles the
+    // iOS PWA→Safari payment context where the guest is NOT logged in inside
+    // Safari (separate cookie jar). See views/shared/payment_return.php.
+    $publicViews = [
+        'shared/login.php',
+        'shared/register.php',
+        'shared/setup-password.php',
+        'shared/payment_return.php',
+    ];
     if (!in_array($viewFile, $publicViews) && !isLoggedIn()) {
         redirect(getGuestLoginUrl());
     }

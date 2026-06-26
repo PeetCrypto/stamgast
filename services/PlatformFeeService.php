@@ -263,13 +263,18 @@ class PlatformFeeService
      */
     public function getPlatformTotals(): array
     {
+        // Only count fees from LIVE tenants: is_test=0 (Productie) + mollie_connect_status='active'
         $sql = "
             SELECT
-                COALESCE(SUM(CASE WHEN DATE(`created_at`) = CURDATE() THEN `fee_amount_cents` ELSE 0 END), 0) AS today,
-                COALESCE(SUM(CASE WHEN `created_at` >= DATE_FORMAT(CURDATE(), '%Y-%m-01') THEN `fee_amount_cents` ELSE 0 END), 0) AS month,
-                COALESCE(SUM(`fee_amount_cents`), 0) AS all_time
-            FROM `platform_fees`
-            WHERE `status` IN ('collected', 'invoiced', 'settled')
+                COALESCE(SUM(CASE WHEN DATE(pf.`created_at`) = CURDATE() THEN pf.`fee_amount_cents` ELSE 0 END), 0) AS today,
+                COALESCE(SUM(CASE WHEN pf.`created_at` >= DATE_FORMAT(CURDATE(), '%Y-%m-01') THEN pf.`fee_amount_cents` ELSE 0 END), 0) AS month,
+                COALESCE(SUM(pf.`fee_amount_cents`), 0) AS all_time
+            FROM `platform_fees` pf
+            INNER JOIN `tenants` t ON t.`id` = pf.`tenant_id`
+            WHERE pf.`status` IN ('collected', 'invoiced', 'settled')
+              AND t.`is_test` = 0
+              AND t.`mollie_connect_status` = 'active'
+              AND t.`is_active` = 1
         ";
         $stmt = $this->db->query($sql);
         $row = $stmt->fetch();
@@ -291,10 +296,15 @@ class PlatformFeeService
         $where = '';
         $params = [];
 
+        // Only show LIVE tenants: is_test=0 (Productie) + mollie_connect_status='active'
+        $liveCondition = " t.`is_test` = 0 AND t.`mollie_connect_status` = 'active' AND t.`is_active` = 1 ";
+
         if ($periodStart && $periodEnd) {
-            $where = ' WHERE pf.`created_at` >= :start AND pf.`created_at` < :end + INTERVAL 1 DAY ';
+            $where = ' WHERE ' . $liveCondition . ' AND pf.`created_at` >= :start AND pf.`created_at` < :end + INTERVAL 1 DAY ';
             $params[':start'] = $periodStart;
             $params[':end'] = $periodEnd;
+        } else {
+            $where = ' WHERE ' . $liveCondition . ' ';
         }
 
         $sql = "

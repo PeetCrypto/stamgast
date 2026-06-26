@@ -276,15 +276,20 @@ class PlatformFee
      */
     public function getPlatformOverview(): array
     {
+        // Only count fees from LIVE tenants: mollie_status='live' + mollie_connect_status='active'
         $sql = "
             SELECT
-                COALESCE(SUM(CASE WHEN DATE(`created_at`) = CURDATE() THEN `fee_amount_cents` ELSE 0 END), 0) AS today_fee,
-                COALESCE(SUM(CASE WHEN DATE(`created_at`) = CURDATE() THEN `gross_amount_cents` ELSE 0 END), 0) AS today_gross,
-                COALESCE(SUM(CASE WHEN `created_at` >= DATE_FORMAT(CURDATE(), '%Y-%m-01') THEN `fee_amount_cents` ELSE 0 END), 0) AS month_fee,
-                COALESCE(SUM(CASE WHEN `created_at` >= DATE_FORMAT(CURDATE(), '%Y-%m-01') THEN `gross_amount_cents` ELSE 0 END), 0) AS month_gross,
-                COALESCE(SUM(`fee_amount_cents`), 0) AS all_fee,
-                COALESCE(SUM(`gross_amount_cents`), 0) AS all_gross
-            FROM `platform_fees`
+                COALESCE(SUM(CASE WHEN DATE(pf.`created_at`) = CURDATE() THEN pf.`fee_amount_cents` ELSE 0 END), 0) AS today_fee,
+                COALESCE(SUM(CASE WHEN DATE(pf.`created_at`) = CURDATE() THEN pf.`gross_amount_cents` ELSE 0 END), 0) AS today_gross,
+                COALESCE(SUM(CASE WHEN pf.`created_at` >= DATE_FORMAT(CURDATE(), '%Y-%m-01') THEN pf.`fee_amount_cents` ELSE 0 END), 0) AS month_fee,
+                COALESCE(SUM(CASE WHEN pf.`created_at` >= DATE_FORMAT(CURDATE(), '%Y-%m-01') THEN pf.`gross_amount_cents` ELSE 0 END), 0) AS month_gross,
+                COALESCE(SUM(pf.`fee_amount_cents`), 0) AS all_fee,
+                COALESCE(SUM(pf.`gross_amount_cents`), 0) AS all_gross
+            FROM `platform_fees` pf
+            INNER JOIN `tenants` t ON t.`id` = pf.`tenant_id`
+            WHERE t.`mollie_status` = 'live'
+              AND t.`mollie_connect_status` = 'active'
+              AND t.`is_active` = 1
         ";
 
         $stmt = $this->db->query($sql);
@@ -316,10 +321,15 @@ class PlatformFee
         $where = '';
         $params = [];
 
+        // Only show LIVE tenants: mollie_status='live' + mollie_connect_status='active'
+        $liveCondition = " AND t.`mollie_status` = 'live' AND t.`mollie_connect_status` = 'active' AND t.`is_active` = 1 ";
+
         if ($periodStart !== null && $periodEnd !== null) {
-            $where = ' WHERE pf.`created_at` >= :start AND pf.`created_at` < :end + INTERVAL 1 DAY ';
+            $where = ' WHERE pf.`created_at` >= :start AND pf.`created_at` < :end + INTERVAL 1 DAY ' . $liveCondition;
             $params[':start'] = $periodStart;
             $params[':end'] = $periodEnd;
+        } else {
+            $where = ' WHERE 1=1 ' . $liveCondition;
         }
 
         $sql = "

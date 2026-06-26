@@ -183,9 +183,23 @@ class WalletService
         // Uses getTrustedBaseUrl() which respects APP_URL from .env.
         $baseUrl = getTrustedBaseUrl();
 
-        // Redirect back to wallet with from_payment flag so the frontend knows to
-        // poll for balance updates (race condition: webhook may not have processed yet)
-        $redirectUrl = $baseUrl . '/wallet?from_payment=1';
+        // ── Payment return URL (PWA-aware) ───────────────────────────────────
+        // On iOS, a PWA in "standalone" mode opens the external Mollie checkout
+        // in Safari. After payment, Mollie's redirect lands in Safari (NOT the
+        // PWA), where the guest has no session (separate cookie jar).
+        //
+        // /payment/return is a PUBLIC page that detects the landing context:
+        //  - Same session (browser tab) → redirect straight to /wallet
+        //  - No session (PWA→Safari)    → friendly "return to app" interstitial
+        //
+        // The PWA itself resumes polling the wallet balance via a
+        // visibilitychange handler in wallet.js when the guest switches back.
+        //
+        // We append ?slug=<tenant slug> so the PUBLIC return page can resolve
+        // the tenant branding (name + colors) without a session — iOS Safari
+        // has a separate cookie jar from the PWA, so the guest is logged-out
+        // here and the page would otherwise fall back to "REGULR.vip".
+        $redirectUrl = $baseUrl . '/payment/return?slug=' . urlencode($tenant['slug'] ?? '');
 
         // Build webhook URL with secret token for authentication
         // SECURITY: The webhook validates this token to prevent unauthorized calls.

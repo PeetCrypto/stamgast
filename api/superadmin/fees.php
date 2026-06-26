@@ -17,6 +17,7 @@ require_once __DIR__ . '/../../services/PlatformFeeService.php';
 $db = Database::getInstance()->getConnection();
 $feeModel = new PlatformFee($db);
 $feeService = new PlatformFeeService($db);
+$tenantModel = new Tenant($db);
 
 $method = $_SERVER['REQUEST_METHOD'];
 
@@ -36,11 +37,11 @@ switch ($action) {
         break;
 
     case 'tenant_fees':
-        handleTenantFees($feeModel);
+        handleTenantFees($feeModel, $tenantModel);
         break;
 
     case 'tenant_summary':
-        handleTenantSummary($feeService);
+        handleTenantSummary($feeService, $tenantModel);
         break;
 
     default:
@@ -90,12 +91,30 @@ function handlePerTenant(PlatformFeeService $feeService): void
  * Paginated fee list for a single tenant
  * Required: ?tenant_id=X
  * Optional: ?status=collected|invoiced|settled & ?page=1 & ?limit=50
+ *
+ * SECURITY: Only LIVE tenants (mollie_status='live' + mollie_connect_status='active')
+ *           may expose fee details. Non-live tenants return an error.
  */
-function handleTenantFees(PlatformFee $feeModel): void
+function handleTenantFees(PlatformFee $feeModel, Tenant $tenantModel): void
 {
     $tenantId = (int) ($_GET['tenant_id'] ?? 0);
     if ($tenantId <= 0) {
         Response::error('tenant_id is required', 'MISSING_FIELD', 400);
+    }
+
+    // Defense in depth: verify tenant is live before exposing fee data
+    $tenant = $tenantModel->findById($tenantId);
+    if (!$tenant) {
+        Response::error('Tenant niet gevonden', 'TENANT_NOT_FOUND', 404);
+    }
+    $isLive = ($tenant['mollie_status'] ?? '') === 'live'
+           && ($tenant['mollie_connect_status'] ?? '') === 'active';
+    if (!$isLive) {
+        Response::error(
+            'Fee details zijn alleen beschikbaar voor live tenants (productie modus + actieve Mollie Connect)',
+            'TENANT_NOT_LIVE',
+            403
+        );
     }
 
     $status = $_GET['status'] ?? null;
@@ -110,12 +129,30 @@ function handleTenantFees(PlatformFee $feeModel): void
 /**
  * Fee summary stats for a specific tenant (for tenant detail view)
  * Required: ?tenant_id=X
+ *
+ * SECURITY: Only LIVE tenants (mollie_status='live' + mollie_connect_status='active')
+ *           may expose fee summary. Non-live tenants return an error.
  */
-function handleTenantSummary(PlatformFeeService $feeService): void
+function handleTenantSummary(PlatformFeeService $feeService, Tenant $tenantModel): void
 {
     $tenantId = (int) ($_GET['tenant_id'] ?? 0);
     if ($tenantId <= 0) {
         Response::error('tenant_id is required', 'MISSING_FIELD', 400);
+    }
+
+    // Defense in depth: verify tenant is live before exposing fee data
+    $tenant = $tenantModel->findById($tenantId);
+    if (!$tenant) {
+        Response::error('Tenant niet gevonden', 'TENANT_NOT_FOUND', 404);
+    }
+    $isLive = ($tenant['mollie_status'] ?? '') === 'live'
+           && ($tenant['mollie_connect_status'] ?? '') === 'active';
+    if (!$isLive) {
+        Response::error(
+            'Fee gegevens zijn alleen beschikbaar voor live tenants (productie modus + actieve Mollie Connect)',
+            'TENANT_NOT_LIVE',
+            403
+        );
     }
 
     $stats = $feeService->getTenantFeeStats($tenantId);

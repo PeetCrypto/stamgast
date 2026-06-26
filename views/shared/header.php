@@ -8,10 +8,12 @@ declare(strict_types=1);
 $csrfToken = generateCSRFToken();
 $userRole  = currentUserRole() ?? 'anonymous';
 $userName  = $_SESSION['first_name'] ?? 'Gast';
-$tenantName = $_SESSION['tenant_name'] ?? APP_NAME;
-$brandColor = $_SESSION['brand_color'] ?? '#FFC107';
-$secondaryColor = $_SESSION['secondary_color'] ?? '#FF9800';
-$tenantLogo = $_SESSION['tenant_logo'] ?? ''; // Tenant uploaded logo URL
+// Allow a view to override tenant branding BEFORE including the header
+// (e.g. payment_return.php resolves the tenant from ?slug= without a session).
+$tenantName = $tenantName ?? ($_SESSION['tenant_name'] ?? APP_NAME);
+$brandColor = $brandColor ?? ($_SESSION['brand_color'] ?? '#FFC107');
+$secondaryColor = $secondaryColor ?? ($_SESSION['secondary_color'] ?? '#FF9800');
+$tenantLogo = $tenantLogo ?? ($_SESSION['tenant_logo'] ?? ''); // Tenant uploaded logo URL
 ?>
 <!DOCTYPE html>
 <html lang="nl">
@@ -108,7 +110,9 @@ $tenantLogo = $_SESSION['tenant_logo'] ?? ''; // Tenant uploaded logo URL
 </head>
 <body class="<?= isset($bodyClass) ? sanitize($bodyClass) : '' ?>">
 
-<?php require VIEWS_PATH . 'shared/pwa-install-banner.php'; ?>
+<?php // PWA install banner — suppressed on pages that set $suppressPwaBanner
+      // (e.g. the transient payment-return screen) to avoid nagging there. ?>
+<?php if (empty($suppressPwaBanner)) require VIEWS_PATH . 'shared/pwa-install-banner.php'; ?>
 
 <?php if (isViewingAs()): ?>
 <div id="viewing-as-banner" style="background:linear-gradient(135deg,#FF9800,#F44336);color:#000;padding:8px 16px;text-align:center;font-size:14px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:12px;position:sticky;top:0;z-index:9999;">

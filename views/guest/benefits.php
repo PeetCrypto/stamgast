@@ -443,6 +443,17 @@ require __DIR__ . '/../shared/header.php';
             if (response.success && response.data.status === 'mock') {
                 window.REGULR.showSuccess('\u20AC' + (amountCents / 100).toFixed(2) + ' toegevoegd aan je wallet!');
             } else if (response.success && response.data.checkout_url) {
+                // Track the pending payment so the PWA can resume balance-polling
+                // when the guest returns from the external Mollie checkout
+                // (iOS opens Mollie in Safari; the PWA resumes polling via
+                // visibilitychange when the guest switches back to the app).
+                if (window.REGULR && window.REGULR.PaymentTracker) {
+                    window.REGULR.PaymentTracker.start({
+                        payment_id:     response.data.payment_id,
+                        transaction_id: response.data.transaction_id,
+                        amount_cents:   amountCents
+                    });
+                }
                 window.location.href = response.data.checkout_url;
             } else {
                 throw new Error(response.error || 'Deposit failed');

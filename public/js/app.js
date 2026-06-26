@@ -223,6 +223,7 @@
     const SERVER_RENDERED_PAGES = [
         '/dashboard', '/wallet', '/qr', '/inbox',
         '/scan', '/payment',
+        '/payment/return', // public Mollie return page — must NOT trigger JS login redirect
         '/admin', '/admin/users', '/admin/tiers', '/admin/settings', '/admin/marketing',
         '/superadmin', '/superadmin/tenants'
     ];
@@ -466,9 +467,77 @@
         
         // Periodic session check
         setInterval(checkSession, APP_CONFIG.SESSION_CHECK_INTERVAL);
-        
+
+        // PWA payment resume: when the app regains visibility with a tracked
+        // pending deposit, ensure we land on /wallet so wallet.js can poll the
+        // balance. This covers pages that don't load wallet.js themselves
+        // (e.g. /benefits, /dashboard). On /wallet, wallet.js handles polling
+        // directly — we only redirect when not already there.
+        setupPaymentResume();
+
         log('REGULR.vip App initialized');
     }
+
+    /**
+     * Resume a pending payment when the PWA becomes visible again.
+     * On iOS, after the guest completes the external Mollie payment in Safari
+     * and switches back to the installed app, this fires and routes them to
+     * /wallet where balance polling picks up the webhook-credited amount.
+     */
+    function setupPaymentResume() {
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState !== 'visible') return;
+            const pending = PaymentTracker.get();
+            if (!pending) return;
+
+            const path = window.location.pathname.replace(/\/+$/, '');
+            // wallet.js handles polling on /wallet itself — don't interfere.
+            if (path === '/wallet' || path.endsWith('/wallet')) return;
+
+            // Route to /wallet so the guest sees the updated balance.
+            // The browser cache-bust prevents a stale cached wallet page.
+            window.location.href = (window.__BASE_URL || '') + '/wallet?from_payment=1';
+        });
+    }
+
+    // ============================================
+    // PAYMENT TRACKER (PWA Mollie resume support)
+    // ============================================
+    // Persists a pending Mollie deposit in sessionStorage so the wallet can
+    // resume balance-polling when the guest returns from the external payment.
+    // Critical for iOS PWAs: the Mollie checkout opens in Safari, the PWA keeps
+    // running in the background, and resumes polling on visibilitychange.
+    const PAYMENT_KEY = 'regulr_pending_payment';
+
+    const PaymentTracker = {
+        start(info) {
+            try {
+                const record = Object.assign({}, info, { started_at: Date.now() });
+                sessionStorage.setItem(PAYMENT_KEY, JSON.stringify(record));
+            } catch (e) {
+                log('PaymentTracker.start failed (storage unavailable):', e);
+            }
+        },
+        get() {
+            try {
+                const raw = sessionStorage.getItem(PAYMENT_KEY);
+                if (!raw) return null;
+                const data = JSON.parse(raw);
+                if (!data || typeof data !== 'object') return null;
+                // Stale guard: drop payments older than 1 hour.
+                if (data.started_at && (Date.now() - data.started_at > 3600000)) {
+                    this.clear();
+                    return null;
+                }
+                return data;
+            } catch (e) {
+                return null;
+            }
+        },
+        clear() {
+            try { sessionStorage.removeItem(PAYMENT_KEY); } catch (e) {}
+        }
+    };
 
     // ============================================
     // EXPORTS
@@ -501,6 +570,9 @@
         
         // Routing
         handleRoute,
+        
+        // Payment (PWA Mollie resume support)
+        PaymentTracker,
         
         // Config
         config: APP_CONFIG

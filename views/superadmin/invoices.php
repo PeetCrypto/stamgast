@@ -46,7 +46,8 @@ $page = max(1, (int) ($_GET['page'] ?? 1));
 $statusFilter = $_GET['status'] ?? null;
 $invoiceData = $invoiceModel->getAll($page, 50, $statusFilter);
 $invoiceTotals = $invoiceModel->getTotals();
-$tenants = $tenantModel->getAll();
+// Only LIVE tenants can be invoiced (mollie_status='live' + mollie_connect_status='active')
+$tenants = $tenantModel->getLiveTenants();
 
 // Default period for generation: previous month
 $defaultPeriodStart = date('Y-m-01', strtotime('first day of last month'));
@@ -83,7 +84,7 @@ $defaultPeriodEnd = date('Y-m-t', strtotime('last month'));
         <h2 style="margin-bottom: var(--space-md);">Factuur Genereren</h2>
         <div style="display: flex; gap: var(--space-md); align-items: flex-end; flex-wrap: wrap;">
             <div class="form-group" style="margin-bottom: 0;">
-                <label class="text-sm text-secondary">Tenant</label>
+                <label class="text-sm text-secondary">Tenant <?php if (empty($tenants)): ?><span style="color:#FF9800;">(geen live tenants)</span><?php else: ?><span class="text-sm text-secondary" style="font-weight:400;">(alleen live tenants)</span><?php endif; ?></label>
                 <select id="gen-tenant" class="form-input">
                     <option value="">-- Selecteer --</option>
                     <?php foreach ($tenants as $t): ?>
