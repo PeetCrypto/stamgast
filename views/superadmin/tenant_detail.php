@@ -255,7 +255,35 @@ $feeStats = $feeService->getTenantFeeStats($tenantId);
                     <div class="form-group">
                         <label class="text-sm text-secondary">Interne Notitie</label>
                         <textarea id="fee-note" class="form-input" rows="2" placeholder="Notitie voor superadmin (niet zichtbaar voor tenant)"><?= sanitize($feeConfig['note'] ?? '') ?></textarea>
+</div>
+                     
+                    <!-- Deposit Limits per Tenant -->
+                    <div style="border-top: 1px solid var(--glass-border); padding-top: var(--space-md); margin-top: var(--space-md);">
+                        <div class="form-group">
+                            <label class="text-sm text-secondary" style="font-weight: 600; color: var(--accent-primary);">Minimale Opwaardering</label>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-sm);">
+                                <div>
+                                    <input type="number" id="fee-deposit-min" class="form-input" value="<?= (($tenant['deposit_min_cents'] ?? 10000) / 100) ?>" min="1" max="1000" step="1">
+                                </div>
+                                <div style="display: flex; align-items: center; color: var(--text-secondary); font-size: 14px;">
+                                    euro
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-group" style="margin-top: var(--space-sm);">
+                            <label class="text-sm text-secondary" style="font-weight: 600; color: var(--accent-primary);">Maximale Opwaardering</label>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-sm);">
+                                <div>
+                                    <input type="number" id="fee-deposit-max" class="form-input" value="<?= (($tenant['deposit_max_cents'] ?? 50000) / 100) ?>" min="100" max="5000" step="1">
+                                </div>
+                                <div style="display: flex; align-items: center; color: var(--text-secondary); font-size: 14px;">
+                                    euro
+                                </div>
+                            </div>
+                        </div>
+                        <p class="text-sm text-secondary" style="margin-top:4px;">Stel in per tenant. Nieuwe tenants krijgen standaardwaarden: min €100, max €500.</p>
                     </div>
+                    
                     <button type="submit" class="btn btn-primary" style="width:100%;">Fee Config Opslaan</button>
                     <p id="fee-status" class="text-sm" style="margin-top:var(--space-sm);text-align:center;"></p>
                 </form>
@@ -769,6 +797,16 @@ document.getElementById('fee-form')?.addEventListener('submit', async (e) => {
     data.btw_number = document.getElementById('fee-btw-number').value.trim();
     data.invoice_email = document.getElementById('fee-invoice-email').value.trim();
     data.platform_fee_note = document.getElementById('fee-note').value.trim();
+    
+    // Deposit limits in cents (stored as cents, input is in euros)
+    const depositMinEuros = parseFloat(document.getElementById('fee-deposit-min').value);
+    const depositMaxEuros = parseFloat(document.getElementById('fee-deposit-max').value);
+    if (!isNaN(depositMinEuros) && depositMinEuros >= 1 && depositMinEuros <= 1000) {
+        data.deposit_min_cents = Math.round(depositMinEuros * 100);
+    }
+    if (!isNaN(depositMaxEuros) && depositMaxEuros >= 100 && depositMaxEuros <= 5000) {
+        data.deposit_max_cents = Math.round(depositMaxEuros * 100);
+    }
 
     try {
         const res = await fetch((window.__BASE_URL || '') + '/api/superadmin/tenants', {

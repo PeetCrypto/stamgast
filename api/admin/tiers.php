@@ -59,6 +59,8 @@ if ($method === 'GET') {
     Response::success([
         'tiers' => $result,
         'tier_model_type' => $lockedModel,
+        'deposit_min_cents' => (int) ($tenant['deposit_min_cents'] ?? DEPOSIT_MIN_CENTS),
+        'deposit_max_cents' => (int) ($tenant['deposit_max_cents'] ?? DEPOSIT_MAX_CENTS),
     ]);
 
 } elseif ($method === 'POST') {
@@ -124,11 +126,16 @@ if ($method === 'GET') {
                 Response::error('Er bestaat al een pakket met de naam "' . htmlspecialchars($name) . '"', 'DUPLICATE_NAME', 422);
             }
         }
-        if ($topupAmountCents < LoyaltyTier::MIN_TOPUP_CENTS) {
-            Response::error('Opwaardeerbedrag moet minimaal €' . (LoyaltyTier::MIN_TOPUP_CENTS / 100) . ' zijn', 'VALIDATION_ERROR', 422);
+        
+        // Get tenant-specific deposit limits
+        $tenantDepositMinCents = (int) ($tenant['deposit_min_cents'] ?? DEPOSIT_MIN_CENTS);
+        $tenantDepositMaxCents = (int) ($tenant['deposit_max_cents'] ?? DEPOSIT_MAX_CENTS);
+        
+        if ($topupAmountCents < $tenantDepositMinCents) {
+            Response::error('Opwaardeerbedrag moet minimaal €' . ($tenantDepositMinCents / 100) . ' zijn', 'VALIDATION_ERROR', 422);
         }
-        if ($topupAmountCents > DEPOSIT_MAX_CENTS) {
-            Response::error('Opwaardeerbedrag mag maximaal €' . (DEPOSIT_MAX_CENTS / 100) . ' zijn', 'VALIDATION_ERROR', 422);
+        if ($topupAmountCents > $tenantDepositMaxCents) {
+            Response::error('Opwaardeerbedrag mag maximaal €' . ($tenantDepositMaxCents / 100) . ' zijn', 'VALIDATION_ERROR', 422);
         }
 
         // Model-specific validation
@@ -201,6 +208,10 @@ if ($method === 'GET') {
             Response::error('Het testpakket wordt automatisch beheerd via de Test Modus en kan niet worden bewerkt.', 'TEST_PACKAGE_LOCKED', 403);
         }
 
+        // Get tenant-specific deposit max for validation
+        $tenant = (new Tenant($db))->findById($tenantId);
+        $tenantDepositMaxCents = (int) ($tenant['deposit_max_cents'] ?? DEPOSIT_MAX_CENTS);
+
         $data = [];
         if (isset($input['name'])) {
             $data['name'] = trim($input['name']);
@@ -225,8 +236,8 @@ if ($method === 'GET') {
             if ($val < LoyaltyTier::MIN_TOPUP_CENTS) {
                 Response::error('Opwaardeerbedrag moet minimaal €' . (LoyaltyTier::MIN_TOPUP_CENTS / 100) . ' zijn', 'VALIDATION_ERROR', 422);
             }
-            if ($val > DEPOSIT_MAX_CENTS) {
-                Response::error('Opwaardeerbedrag mag maximaal €' . (DEPOSIT_MAX_CENTS / 100) . ' zijn', 'VALIDATION_ERROR', 422);
+            if ($val > $tenantDepositMaxCents) {
+                Response::error('Opwaardeerbedrag mag maximaal €' . ($tenantDepositMaxCents / 100) . ' zijn', 'VALIDATION_ERROR', 422);
             }
             $data['topup_amount_cents'] = $val;
         }

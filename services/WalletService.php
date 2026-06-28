@@ -118,16 +118,25 @@ class WalletService
      */
     public function createDeposit(int $userId, int $tenantId, int $amountCents, ?int $tierId = null): array
     {
+        // Get tenant FIRST to determine tenant-specific limits
+        $tenant = $this->tenantModel->findById($tenantId);
+        if ($tenant === null) {
+            throw new \RuntimeException('Tenant niet gevonden');
+        }
+
         // ── Test package exception ──────────────────────────────────────────
         // A test package (€0.01) bypasses the normal minimum deposit so a live
         // Mollie payment can be tested end-to-end. Only allowed when BOTH:
         //   1) a tier_id is provided that is flagged as a test package, AND
         //   2) the tenant is confirmed to be in Test Modus (is_test = 1).
         // This keeps the €100 minimum intact for all real deposits.
-        $effectiveMinCents = DEPOSIT_MIN_CENTS;
+        $tenantDepositMinCents = (int) ($tenant['deposit_min_cents'] ?? DEPOSIT_MIN_CENTS);
+        $tenantDepositMaxCents = (int) ($tenant['deposit_max_cents'] ?? DEPOSIT_MAX_CENTS);
+        
+        $effectiveMinCents = $tenantDepositMinCents;
         if ($tierId !== null) {
             $tierCheck = new LoyaltyTier($this->db);
-            if ($tierCheck->isTestPackage($tierId, $tenantId) && $this->tenantModel->isTest($tenantId)) {
+            if ($tierCheck->isTestPackage($tierId, $tenantId) && !empty($tenant['is_test'])) {
                 $effectiveMinCents = 1;
             }
         }
@@ -138,9 +147,9 @@ class WalletService
                 'Minimum opwaardering is €' . centsToEuro($effectiveMinCents)
             );
         }
-        if ($amountCents > DEPOSIT_MAX_CENTS) {
+        if ($amountCents > $tenantDepositMaxCents) {
             throw new \InvalidArgumentException(
-                'Maximum opwaardering is €' . centsToEuro(DEPOSIT_MAX_CENTS)
+                'Maximum opwaardering is €' . centsToEuro($tenantDepositMaxCents)
             );
         }
 
@@ -151,12 +160,6 @@ class WalletService
             throw new \InvalidArgumentException(
                 'Je account is nog niet geactiveerd. Laat je ID zien bij de bar.'
             );
-        }
-
-        // Get tenant
-        $tenant = $this->tenantModel->findById($tenantId);
-        if ($tenant === null) {
-            throw new \RuntimeException('Tenant niet gevonden');
         }
 
         $mollieMode = $tenant['mollie_status'] ?? 'mock';

@@ -132,12 +132,17 @@ function getMigrations(): array
             'check' => fn(PDO $db): bool => columnExists($db, 'users', 'account_status')
                 && tableExists($db, 'verification_attempts'),
         ],
-        [
+[
             'name'  => 'Verification Toggle (verification_required)',
             'file'  => 'verification_toggle_migration.sql',
             'check' => fn(PDO $db): bool => columnExists($db, 'tenants', 'verification_required'),
         ],
-    ];
+        [
+            'name'  => 'Deposit Max per Tenant',
+            'file'  => 'deposit_max_migration.sql',
+            'check' => fn(PDO $db): bool => columnExists($db, 'tenants', 'deposit_max_cents'),
+        ],
+    ]
 }
 
 // ── Main logic ──────────────────────────────────────────────────────────────
@@ -207,6 +212,7 @@ $requiredColumns = [
         'verification_soft_limit', 'verification_hard_limit',
         'verification_cooldown_sec', 'verification_max_attempts',
         'verification_required',
+        'deposit_min_cents', 'deposit_max_cents',
     ],
     'users' => [
         'tenant_id', 'email', 'password_hash', 'role', 'first_name', 'last_name',

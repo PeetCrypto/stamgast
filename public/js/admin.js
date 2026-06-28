@@ -534,6 +534,8 @@
 // TIERS / PACKAGES MANAGEMENT
 // ============================================
 let tiersLockedModel = null; // Set from API response — null = not chosen yet
+let tiersDepositMinCents = 10000; // Default €100, updated from API response
+let tiersDepositMaxCents = 50000; // Default €500, updated from API response
 
 async function loadTiers() {
     const grid = document.getElementById('packages-grid');
@@ -543,6 +545,9 @@ async function loadTiers() {
         if (response.success) {
             tiersData = response.data.tiers;
             tiersLockedModel = response.data.tier_model_type || null;
+            // Store deposit limits for client-side validation
+            tiersDepositMinCents = response.data.deposit_min_cents || 10000;
+            tiersDepositMaxCents = response.data.deposit_max_cents || 50000;
 
             // Client-side self-heal: if tiers exist but model not locked, infer from first tier
             // and replace the model selector UI with the locked banner + add button
@@ -802,12 +807,17 @@ async function saveTier() {
         window.REGULR.showError('Er bestaat al een pakket met de naam "' + tierName + '"');
         return;
     }
-    if (!topupEur || topupEur < 100) {
-        window.REGULR.showError('Opwaardeerbedrag moet minimaal €100 zijn');
+    
+    // Dynamic deposit limits from tenant settings
+    const depositMinEur = tiersDepositMinCents / 100;
+    const depositMaxEur = tiersDepositMaxCents / 100;
+    
+    if (!topupEur || topupEur < depositMinEur) {
+        window.REGULR.showError('Opwaardeerbedrag moet minimaal €' + depositMinEur + ' zijn');
         return;
     }
-    if (topupEur > 500) {
-        window.REGULR.showError('Opwaardeerbedrag mag maximaal €500 zijn');
+    if (topupEur > depositMaxEur) {
+        window.REGULR.showError('Opwaardeerbedrag mag maximaal €' + depositMaxEur + ' zijn');
         return;
     }
 

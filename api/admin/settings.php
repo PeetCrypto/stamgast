@@ -54,6 +54,8 @@ if ($method === 'GET') {
         'tip_amount_1_cents'        => (int) ($tenant['tip_amount_1_cents'] ?? 100),
         'tip_amount_2_cents'        => (int) ($tenant['tip_amount_2_cents'] ?? 250),
         'tip_amount_3_cents'        => (int) ($tenant['tip_amount_3_cents'] ?? 500),
+        // Deposit max per tenant (super-admin configurable, shown read-only to admin)
+        'deposit_max_cents'        => (int) ($tenant['deposit_max_cents'] ?? 50000),
     ]);
 
 } elseif ($method === 'POST') {

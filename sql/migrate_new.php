@@ -181,6 +181,15 @@ $migrations = [
         },
     ],
     [
+        'name'   => 'Deposit Limits per Tenant',
+        'file'   => 'deposit_max_migration.sql',
+        'type'   => 'alter',
+        'check'  => function (PDO $db): bool {
+            return columnExists($db, 'tenants', 'deposit_min_cents')
+                && columnExists($db, 'tenants', 'deposit_max_cents');
+        },
+    ],
+    [
         'name'   => 'Tier Model Type (discount/bonus)',
         'file'   => 'model_type_migration.sql',
         'type'   => 'alter',
@@ -815,8 +824,12 @@ function runVerification(PDO $db): void
             'verification_cooldown_sec', 'verification_max_attempts',
             // Verification toggle migration
             'verification_required',
+            // Deposit limits per tenant migration
+            'deposit_min_cents', 'deposit_max_cents',
             // Points toggle migration
             'points_enabled',
+            // Deposit max per tenant migration
+            'deposit_max_cents',
             // Test tenant migration
             'is_test',
             // Tier model lock migration
