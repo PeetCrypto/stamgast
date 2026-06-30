@@ -437,8 +437,10 @@ class Tenant
     {
         $tenants = $this->db->query('SELECT COUNT(*) FROM `tenants`')->fetchColumn();
         $users = $this->db->query('SELECT COUNT(*) FROM `users`')->fetchColumn();
-        $revenue = $this->db->query("SELECT COALESCE(SUM(`final_total_cents`), 0) FROM `transactions` WHERE `type` = 'payment'")->fetchColumn();
-        $deposits = $this->db->query("SELECT COALESCE(SUM(`final_total_cents`), 0) FROM `transactions` WHERE `type` = 'deposit'")->fetchColumn();
+        // Only count paid transactions — pending/failed/expired/cancelled
+        // must not inflate revenue or deposit totals.
+        $revenue = $this->db->query("SELECT COALESCE(SUM(`final_total_cents`), 0) FROM `transactions` WHERE `type` = 'payment' AND `status` = 'paid'")->fetchColumn();
+        $deposits = $this->db->query("SELECT COALESCE(SUM(`final_total_cents`), 0) FROM `transactions` WHERE `type` = 'deposit' AND `status` = 'paid'")->fetchColumn();
 
         return [
             'total_tenants' => (int) $tenants,
@@ -453,20 +455,20 @@ class Tenant
      */
     public function getTenantStats(int $tenantId): array
     {
-        // Revenue from payments
+        // Revenue from payments (only paid — exclude pending/failed/expired/cancelled)
         $stmt = $this->db->prepare(
             "SELECT COALESCE(SUM(`final_total_cents`), 0)
              FROM `transactions`
-             WHERE `tenant_id` = :tid AND `type` = 'payment'"
+             WHERE `tenant_id` = :tid AND `type` = 'payment' AND `status` = 'paid'"
         );
         $stmt->execute([':tid' => $tenantId]);
         $revenue = (int) $stmt->fetchColumn();
 
-        // Total deposits
+        // Total deposits (only paid)
         $stmt = $this->db->prepare(
             "SELECT COALESCE(SUM(`final_total_cents`), 0)
              FROM `transactions`
-             WHERE `tenant_id` = :tid AND `type` = 'deposit'"
+             WHERE `tenant_id` = :tid AND `type` = 'deposit' AND `status` = 'paid'"
         );
         $stmt->execute([':tid' => $tenantId]);
         $deposits = (int) $stmt->fetchColumn();
@@ -519,11 +521,11 @@ class Tenant
         $stmt->execute([':tid' => $tenantId]);
         $todayTransactions = (int) $stmt->fetchColumn();
 
-        // Revenue today
+        // Revenue today (only paid)
         $stmt = $this->db->prepare(
             "SELECT COALESCE(SUM(`final_total_cents`), 0)
              FROM `transactions`
-             WHERE `tenant_id` = :tid AND `type` = 'payment' AND DATE(`created_at`) = CURDATE()"
+             WHERE `tenant_id` = :tid AND `type` = 'payment' AND `status` = 'paid' AND DATE(`created_at`) = CURDATE()"
         );
         $stmt->execute([':tid' => $tenantId]);
         $todayRevenue = (int) $stmt->fetchColumn();
@@ -599,8 +601,9 @@ class Tenant
         $placeholders = implode(',', array_fill(0, count($guestIds), '?'));
 
         // Delete related data in correct order (foreign keys)
+        // NOTE: notifications are wiped tenant-wide below (covers admin/bartender
+        // and orphan rows too), so they are NOT in this user-scoped list.
         $relatedTables = [
-            'notifications',
             'push_subscriptions',
             'password_resets',
             'verification_attempts',
@@ -617,6 +620,18 @@ class Tenant
                 // Table might not exist or might not have user_id — skip silently
                 error_log("purgeGuests: skip {$table}: " . $e->getMessage());
             }
+        }
+
+        // Wipe ALL notifications (inbox berichten) for the entire test tenant.
+        // Deleting only guest-user notifications left admin/bartender and orphan
+        // rows behind, so "berichten" survived a test-data wipe.
+        try {
+            $stmt = $this->db->prepare(
+                'DELETE FROM `notifications` WHERE `tenant_id` = :tid'
+            );
+            $stmt->execute([':tid' => $tenantId]);
+        } catch (\Throwable $e) {
+            error_log("purgeGuests: skip notifications (tenant-wide): " . $e->getMessage());
         }
 
         // Delete email_queue entries for these users
