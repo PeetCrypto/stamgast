@@ -253,6 +253,11 @@ $sessionTenantName = $_SESSION['tenant_name'] ?? APP_NAME;
             <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
             <input type="hidden" id="tenant_slug" value="<?= sanitize($tenantSlug) ?>">
 
+            <!-- Honeypot: hidden from real users, bots auto-fill this -->
+            <input type="text" name="website" id="website" tabindex="-1" autocomplete="off"
+                   style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;opacity:0;"
+                   aria-hidden="true" value="">
+
             <!-- Name Fields -->
             <div class="form-row">
                 <div class="form-group">
@@ -438,14 +443,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     'Content-Type': 'application/json',
                     'X-CSRF-Token': csrfToken
                 },
-                body: JSON.stringify({
-                    first_name: firstName,
-                    last_name: lastName,
-                    email: email,
-                    birthdate: birthdate,
-                    password: password,
-                    tenant_slug: tenantSlug   // ← KEY: tenant context via slug
-                })
+                 body: JSON.stringify({
+                     first_name: firstName,
+                     last_name: lastName,
+                     email: email,
+                     birthdate: birthdate,
+                     password: password,
+                     tenant_slug: tenantSlug,   // ← KEY: tenant context via slug
+                     website: document.getElementById('website').value
+                 })
             });
 
             const data = await response.json();

@@ -146,6 +146,14 @@ function handleChangePassword(User $userModel, array $input, PDO $db): void
     $hash = password_hash($newPassword . APP_PEPPER, PASSWORD_DEFAULT);
     $userModel->updatePassword($userId, $hash);
 
+    // SECURITY (H-1): Clear the force_password_reset flag — password has been changed
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+    if (!empty($_SESSION['force_password_reset'])) {
+        unset($_SESSION['force_password_reset']);
+    }
+
     // Audit log
     $audit = new Audit($db);
     $audit->log(

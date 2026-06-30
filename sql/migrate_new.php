@@ -588,6 +588,27 @@ $migrations = [
             return tableExists($db, 'sessions');
         },
     ],
+    [
+        'name'   => 'Fix: Remove E-mail bevestiging button from guest_confirmation',
+        'file'   => 'fix_guest_confirmation_no_button.sql',
+        'type'   => 'sql',
+        'check'  => function (PDO $db): bool {
+            // Check if ANY guest_confirmation template still contains
+            // a button/link with "Bevestig" text or verification_link as href
+            $stmt = $db->prepare(
+                "SELECT COUNT(*) FROM `email_templates`
+                 WHERE `type` = 'guest_confirmation'
+                 AND (
+                     `content` LIKE '%Bevestig%'
+                     OR `content` LIKE '%verify%'
+                     OR `content` LIKE '%verification_link%href%'
+                 )"
+            );
+            $stmt->execute();
+            // Applied = 0 templates still have a button
+            return (int) $stmt->fetchColumn() === 0;
+        },
+    ],
 ];
 
 // ── Helper functions ────────────────────────────────────────────────────────

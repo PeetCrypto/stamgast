@@ -7,7 +7,11 @@
 RewriteEngine On
 
 # --- FORCE HTTPS (safe for .test/.local dev domains) ---
+# NOTE: On Hostinger (and other hosts behind a reverse proxy), %{HTTPS} is
+# always "off" even for HTTPS requests because SSL terminates at the proxy.
+# We also check X-Forwarded-Proto to avoid an infinite redirect loop.
 RewriteCond %{HTTPS} off
+RewriteCond %{HTTP:X-Forwarded-Proto} !https
 RewriteCond %{HTTP_HOST} !^localhost [NC]
 RewriteCond %{HTTP_HOST} !\.local$ [NC]
 RewriteCond %{HTTP_HOST} !\.test$ [NC]

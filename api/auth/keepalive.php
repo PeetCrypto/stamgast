@@ -47,10 +47,16 @@ if ($role === 'guest') {
     }
 
     // Vernieuw cookie lifetime voor gast (60 dagen vanaf nu)
+    // SECURITY (H-3): Array-vorm bewaart SameSite=Lax flag.
     $params = session_get_cookie_params();
-    setcookie(session_name(), session_id(), time() + SESSION_COOKIE_LIFETIME_GUEST,
-        $params['path'], $params['domain'], $params['secure'], $params['httponly']
-    );
+    setcookie(session_name(), session_id(), [
+        'expires'  => time() + SESSION_COOKIE_LIFETIME_GUEST,
+        'path'     => $params['path'],
+        'domain'   => $params['domain'],
+        'secure'   => $params['secure'],
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
 }
 
 Response::success([

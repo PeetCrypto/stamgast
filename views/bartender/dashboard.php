@@ -30,7 +30,7 @@ $firstName = $_SESSION['first_name'] ?? 'Bartender';
             <!-- Alcohol amount -->
             <div class="payment-field glass-card" style="padding:1rem;margin-bottom:0.75rem;">
                 <div class="payment-field__label">Alcohol (21%)</div>
-                <input type="number" id="alc-input" inputmode="decimal" class="form-input" placeholder="0.00" step="0.01" min="0"
+                <input type="text" id="alc-input" inputmode="decimal" class="form-input" placeholder="0,00" data-amount-input
                     style="text-align:center;font-size:28px;font-weight:700;color:var(--accent-primary);background:transparent;border:1px dashed var(--border-color);border-radius:8px;padding:0.25rem 0.5rem;width:100%;">
                 <div style="display:flex;gap:0.25rem;margin-top:0.5rem;flex-wrap:wrap;justify-content:center;">
                     <button class="btn btn-secondary btn-sm alc-quick" data-amount="400" style="width:auto;padding:0.35rem 0.6rem;font-size:13px;">+4</button>
@@ -43,11 +43,11 @@ $firstName = $_SESSION['first_name'] ?? 'Bartender';
             <!-- Food amount -->
             <div class="payment-field glass-card" style="padding:1rem;margin-bottom:0.75rem;">
                 <div class="payment-field__label">Non-Alcohol (9%)</div>
-                <input type="number" id="food-input" inputmode="decimal" class="form-input" placeholder="0.00" step="0.01" min="0"
+                <input type="text" id="food-input" inputmode="decimal" class="form-input" placeholder="0,00" data-amount-input
                     style="text-align:center;font-size:28px;font-weight:700;color:var(--accent-primary);background:transparent;border:1px dashed var(--border-color);border-radius:8px;padding:0.25rem 0.5rem;width:100%;">
                 <div style="display:flex;gap:0.25rem;margin-top:0.5rem;flex-wrap:wrap;justify-content:center;">
                     <button class="btn btn-secondary btn-sm food-quick" data-amount="500" style="width:auto;padding:0.35rem 0.6rem;font-size:13px;">+5</button>
-                    <button class="btn btn-secondary btn-sm food-quick" data-amount="750" style="width:auto;padding:0.35rem 0.6rem;font-size:13px;">+7.50</button>
+                    <button class="btn btn-secondary btn-sm food-quick" data-amount="750" style="width:auto;padding:0.35rem 0.6rem;font-size:13px;">+7,50</button>
                     <button class="btn btn-secondary btn-sm food-quick" data-amount="1000" style="width:auto;padding:0.35rem 0.6rem;font-size:13px;">+10</button>
                     <button class="btn btn-secondary btn-sm food-quick" data-amount="1500" style="width:auto;padding:0.35rem 0.6rem;font-size:13px;">+15</button>
                 </div>
@@ -262,14 +262,41 @@ $firstName = $_SESSION['first_name'] ?? 'Bartender';
         $('#btn-generate-qr').disabled = total <= 0;
     }
 
-    /** Read current value from an input field and sync to cents */
+    /**
+     * Read current value from an input field and sync to cents.
+     * Accepts BOTH Dutch (4,00) and English (4.00) notation, even mixed (4.000,00).
+     */
     function readInputToCents(inputEl) {
-        return Math.round((parseFloat(inputEl.value) || 0) * 100);
+        var raw = (inputEl.value || '').trim();
+        if (!raw) return 0;
+        // Strip everything except digits, comma and dot
+        raw = raw.replace(/[^0-9,.]/g, '');
+        if (!raw) return 0;
+        var normalized;
+        if (raw.indexOf(',') > -1 && raw.indexOf('.') > -1) {
+            // Both present: last separator = decimal, others = thousands
+            if (raw.lastIndexOf(',') > raw.lastIndexOf('.')) {
+                // comma is decimal -> remove dots, replace comma with dot
+                normalized = raw.replace(/\./g, '').replace(',', '.');
+            } else {
+                // dot is decimal -> remove commas
+                normalized = raw.replace(/,/g, '');
+            }
+        } else if (raw.indexOf(',') > -1) {
+            // Only comma: treat as decimal separator (Dutch)
+            normalized = raw.replace(',', '.');
+        } else {
+            // Only dot or plain digits
+            normalized = raw;
+        }
+        var euros = parseFloat(normalized);
+        if (isNaN(euros) || euros < 0) return 0;
+        return Math.round(euros * 100);
     }
 
-    /** Write cents value to an input field (euro format) */
+    /** Write cents value to an input field in Dutch format (comma as decimal). */
     function writeCentsToInput(inputEl, cents) {
-        inputEl.value = (cents / 100).toFixed(2);
+        inputEl.value = (cents / 100).toFixed(2).replace('.', ',');
     }
 
     function setupQuickAmounts() {
@@ -305,10 +332,22 @@ $firstName = $_SESSION['first_name'] ?? 'Bartender';
                 alcCents = readInputToCents(alcInput);
                 updateAmountUI();
             });
+            // Normalize to Dutch comma format when leaving the field
+            alcInput.addEventListener('blur', function() {
+                alcCents = readInputToCents(alcInput);
+                writeCentsToInput(alcInput, alcCents);
+                updateAmountUI();
+            });
         }
         if (foodInput) {
             foodInput.addEventListener('input', function() {
                 foodCents = readInputToCents(foodInput);
+                updateAmountUI();
+            });
+            // Normalize to Dutch comma format when leaving the field
+            foodInput.addEventListener('blur', function() {
+                foodCents = readInputToCents(foodInput);
+                writeCentsToInput(foodInput, foodCents);
                 updateAmountUI();
             });
         }

@@ -10,7 +10,6 @@ require_once __DIR__ . '/../../services/AuthService.php';
 require_once __DIR__ . '/../../models/User.php';
 require_once __DIR__ . '/../../models/Tenant.php';
 require_once __DIR__ . '/../../utils/validator.php';
-require_once __DIR__ . '/../../services/AuthService.php';
 require_once __DIR__ . '/../../utils/audit.php';
 require_once __DIR__ . '/../../services/Email/email_helpers.php';
 
@@ -31,6 +30,56 @@ $birthdate  = trim($input['birthdate'] ?? '');
 $tenantId   = isset($input['tenant_id']) ? (int) $input['tenant_id'] : null;
 $tenantSlug = trim($input['tenant_slug'] ?? '');
 
+// ─────────────────────────────────────────────────────────────────
+// REGISTRATION PROTECTION: Honeypot
+// A hidden field that bots auto-fill but humans never see.
+// If filled → silently reject (fake success to avoid tipping off bots).
+// ─────────────────────────────────────────────────────────────────
+$honeypot = trim($input['website'] ?? '');
+if (!empty($honeypot)) {
+    error_log('Registration honeypot triggered: email=' . $email . ' ip=' . getClientIP());
+    // Fake success — don't reveal the honeypot exists
+    Response::success([
+        'user_id'  => 0,
+        'redirect' => '/dashboard',
+    ], 201);
+    exit;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// REGISTRATION PROTECTION: Per-email rate limit
+// Max 5 registration attempts per email per hour.
+// NOTE: Per-IP limiting is NOT used because hospitality venues share
+// a single public IP (WiFi) — per-IP would block legitimate guests.
+// ─────────────────────────────────────────────────────────────────
+$db = Database::getInstance()->getConnection();
+$regRateCheck = $db->prepare(
+    "SELECT COUNT(*) FROM `audit_log`
+     WHERE `action` = 'auth.register_attempt'
+     AND LOWER(JSON_UNQUOTE(JSON_EXTRACT(`metadata`, '$.email'))) = :email
+     AND `created_at` >= (NOW() - INTERVAL 1 HOUR)"
+);
+$regRateCheck->execute([':email' => strtolower($email)]);
+if ((int) $regRateCheck->fetchColumn() >= 5) {
+    Response::error(
+        'Te veel registratiepogingen voor dit e-mailadres. Probeer het over een uur opnieuw.',
+        'REGISTRATION_RATE_LIMITED',
+        429
+    );
+    exit;
+}
+
+// Log this attempt (before validation — counts both successes and failures)
+$auditReg = new Audit($db);
+$auditReg->log(
+    $tenantId ?? null,
+    null,
+    'auth.register_attempt',
+    'user',
+    null,
+    ['email' => $email, 'ip' => getClientIP()]
+);
+
 // Validate required fields
 if (empty($email) || empty($password) || empty($firstName) || empty($lastName)) {
     Response::error('Alle verplichte velden moeten ingevuld zijn', 'MISSING_FIELDS', 400);
@@ -38,7 +87,7 @@ if (empty($email) || empty($password) || empty($firstName) || empty($lastName)) 
 
 // Resolve tenant_id — strategy: slug > explicit id > session
 if (!empty($tenantSlug)) {
-    $tenantModel = new Tenant(Database::getInstance()->getConnection());
+    $tenantModel = new Tenant($db);
     $tenantBySlug = $tenantModel->findBySlug($tenantSlug);
     if ($tenantBySlug === null) {
         Response::error('Ongeldige locatie', 'INVALID_TENANT', 400);
@@ -70,7 +119,6 @@ if (!empty($birthdate)) {
 $validator->validate();
 
 // Load dependencies
-$db = Database::getInstance()->getConnection();
 $authService = new AuthService($db);
 
 // Attempt registration
@@ -86,16 +134,16 @@ if (!$result['success']) {
     Response::error($result['error'], 'REGISTRATION_FAILED', 400);
 }
 
-// Auto-login after registration: start session
-$userModel = new User($db);
-$user = $userModel->findById($result['user_id']);
-
-if ($user !== null) {
-    $authService->startSession($user);
-}
-
-// ── Already registered: send "you already have an account" email ──
+// ─────────────────────────────────────────────────────────────────
+// SECURITY (C-1 FIX): Already-registered accounts must NOT be
+// auto-logged-in. Previously startSession() ran for ALL results
+// (including already_registered), allowing full account takeover
+// with just an email address + public tenant slug.
+// Now: existing users are redirected to the login page WITHOUT
+// a session. Only newly created accounts get auto-logged-in below.
+// ─────────────────────────────────────────────────────────────────
 if (!empty($result['already_registered'])) {
+    // Send "you already have an account" email (non-blocking)
     try {
         $tenantModel = new Tenant($db);
         $tenant      = $tenantModel->findById($tenantId);
@@ -114,14 +162,23 @@ if (!empty($result['already_registered'])) {
         error_log('Guest already-registered email failed: ' . $e->getMessage());
     }
 
-    // Redirect to tenant login page (user is already auto-logged in,
-    // so index.php will forward to /dashboard automatically)
-    $redirect = '/j/' . $tenantSlug;
+    // Redirect to login page — do NOT start a session
+    $redirect = !empty($tenantSlug)
+        ? '/j/' . $tenantSlug . '/login'
+        : '/login';
 
     Response::success([
-        'user_id'  => $result['user_id'],
-        'redirect' => $redirect,
-    ], 201);
+        'already_registered' => true,
+        'redirect'           => $redirect,
+    ], 200);
+}
+
+// New user only: auto-login after registration (safe — account was just created)
+$userModel = new User($db);
+$user = $userModel->findById($result['user_id']);
+
+if ($user !== null) {
+    $authService->startSession($user);
 }
 
 // Log registration

@@ -212,6 +212,11 @@ $csrfToken  = generateCSRFToken();
             <!-- CSRF Token -->
             <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
 
+            <!-- Honeypot: hidden from real users, bots auto-fill this -->
+            <input type="text" name="website" id="website" tabindex="-1" autocomplete="off"
+                   style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;opacity:0;"
+                   aria-hidden="true" value="">
+
             <!-- Name Fields -->
             <div class="form-row">
                 <div class="form-group">
@@ -437,21 +442,22 @@ document.addEventListener('DOMContentLoaded', () => {
         registerText.textContent = 'Bezig...';
         registerIcon.style.display = 'block';
 
-        try {
-            const response = await fetch((window.__BASE_URL || '') + '/api/auth/register', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': csrfToken
-                },
-                body: JSON.stringify({
-                    first_name: firstName,
-                    last_name: lastName,
-                    email: email,
-                    birthdate: birthdate,
-                    password: password
-                })
-            });
+         try {
+             const response = await fetch((window.__BASE_URL || '') + '/api/auth/register', {
+                 method: 'POST',
+                 headers: {
+                     'Content-Type': 'application/json',
+                     'X-CSRF-Token': csrfToken
+                 },
+                 body: JSON.stringify({
+                     first_name: firstName,
+                     last_name: lastName,
+                     email: email,
+                     birthdate: birthdate,
+                     password: password,
+                     website: document.getElementById('website').value
+                 })
+             });
 
             const data = await response.json();
 

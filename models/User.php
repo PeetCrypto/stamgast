@@ -481,10 +481,15 @@ class User
             'UPDATE `password_resets` SET `used_at` = NOW() WHERE `user_id` = :user_id AND `used_at` IS NULL'
         )->execute([':user_id' => $userId]);
 
-        // Generate a secure token
+        // Generate a secure token (256 bits of entropy)
         $token = bin2hex(random_bytes(32));
 
-        // Store the token with 1-hour expiry
+        // SECURITY (H-4): Store SHA-256 HASH of the token, never the token itself.
+        // Veilig omdat het token 256 bits entropy heeft — brute-force is onmogelijk.
+        // Bij een DB-lek komen dan geen bruikbare reset-links binnen.
+        $tokenHash = hash('sha256', $token);
+
+        // Store the hash with 1-hour expiry
         $stmt = $this->db->prepare(
             'INSERT INTO `password_resets` (`user_id`, `email`, `tenant_id`, `token`, `expires_at`)
              VALUES (:user_id, :email, :tenant_id, :token, DATE_ADD(NOW(), INTERVAL 1 HOUR))'
@@ -493,7 +498,7 @@ class User
             ':user_id'   => $userId,
             ':email'     => $email,
             ':tenant_id' => $tenantId,
-            ':token'     => $token,
+            ':token'     => $tokenHash,
         ]);
 
         return $token;
@@ -501,31 +506,52 @@ class User
 
     /**
      * Find a valid (non-expired, non-used) reset token
+     * 
+     * BACKWARD COMPATIBLE: probeert eerst de gehashte token (H-4 fix,
+     * nieuwe stijl), dan de raw token (oude stijl, vóór H-4).
+     * Dit voorkomt dat bestaande reset-links breken na de security update.
+     * 
      * @return array|null Token record with user info, or null
      */
     public function findValidResetToken(string $token): ?array
     {
-        $stmt = $this->db->prepare(
-            'SELECT pr.*, u.first_name, u.last_name, u.role
-             FROM `password_resets` pr
-             JOIN `users` u ON u.id = pr.user_id
-             WHERE pr.token = :token
-               AND pr.used_at IS NULL
-               AND pr.expires_at > NOW()
-             LIMIT 1'
-        );
-        $stmt->execute([':token' => $token]);
+        $sql = 'SELECT pr.*, u.first_name, u.last_name, u.role
+                 FROM `password_resets` pr
+                 JOIN `users` u ON u.id = pr.user_id
+                 WHERE pr.token = :token
+                   AND pr.used_at IS NULL
+                   AND pr.expires_at > NOW()
+                 LIMIT 1';
+        $stmt = $this->db->prepare($sql);
+
+        // Poging 1: gehashte token (H-4, nieuwe stijl)
+        $tokenHash = hash('sha256', $token);
+        $stmt->execute([':token' => $tokenHash]);
         $result = $stmt->fetch();
+
+        // Poging 2: raw token (oude stijl, vóór H-4 deploy)
+        if (!$result) {
+            $stmt->execute([':token' => $token]);
+            $result = $stmt->fetch();
+        }
+
         return $result ?: null;
     }
 
     /**
      * Mark a reset token as used
+     * 
+     * BACKWARD COMPATIBLE: markeer zowel hashed als raw versies als used.
      */
     public function consumeResetToken(string $token): void
     {
-        $this->db->prepare(
-            'UPDATE `password_resets` SET `used_at` = NOW() WHERE `token` = :token'
-        )->execute([':token' => $token]);
+        $tokenHash = hash('sha256', $token);
+        $stmt = $this->db->prepare(
+            'UPDATE `password_resets` SET `used_at` = NOW() WHERE `token` = :token AND used_at IS NULL'
+        );
+        // Hashed (nieuwe stijl)
+        $stmt->execute([':token' => $tokenHash]);
+        // Raw (oude stijl)
+        $stmt->execute([':token' => $token]);
     }
 }

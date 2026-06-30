@@ -328,9 +328,12 @@ if (str_starts_with($joinRoute, 'j/')) {
     }
 
     // Already logged in at this tenant → go to dashboard
-    // EXCEPTION: skip redirect for /verify route (email verification page)
-    // to avoid redirect loop when dashboard redirects unverified users to /verify
-    if (!$isVerify && isLoggedIn() && currentTenantId() === (int) $tenant['id']) {
+    // EXCEPTION: skip redirect for /verify, /reset-password, /forgot-password routes
+    // — user may be logged in (60-day cookie) but still need to reset password
+    //   or verify email. Without this exception, clicking a reset link while
+    //   logged in bounces to dashboard instead of showing the reset form.
+    if (!$isVerify && !$isResetPassword && !$isForgotPassword
+        && isLoggedIn() && currentTenantId() === (int) $tenant['id']) {
         redirect('/dashboard');
     }
 
@@ -393,9 +396,9 @@ function handleApiRoute(string $route, string $method): void
     $action = $segments[1] ?? '';
 
     // Require CSRF check for state-changing requests
-    // Skip CSRF for: auth (public endpoints), upload (multipart/form-data sends token as form field),
-    // mollie (webhook called by Mollie servers without CSRF token)
-    if (!in_array($group, ['auth', 'upload', 'mollie'], true)) {
+    // Skip CSRF for: auth (public endpoints), mollie (webhook called by Mollie servers without CSRF token)
+    // NOTE: upload is NOT skipped — the frontend sends _csrf_token in FormData (admin.js:970)
+    if (!in_array($group, ['auth', 'mollie'], true)) {
         require_once __DIR__ . '/middleware/csrf.php';
         csrfCheck();
     }
@@ -731,10 +734,13 @@ function handleApiRoute(string $route, string $method): void
 
         // --- UPLOAD ---
         case 'upload':
-            // Direct session check - skip auth middleware (which includes CSRF check)
-            if (session_status() === PHP_SESSION_NONE) {
-                session_start();
-            }
+            // SECURITY (H-2): Require admin role — guests/bartenders must not
+            // be able to overwrite tenant branding. CSRF is enforced via the
+            // csrfCheck() above (frontend sends _csrf_token in FormData).
+            require_once __DIR__ . '/middleware/auth_check.php';
+            authCheck();
+            require_once __DIR__ . '/middleware/role_check.php';
+            requireAdmin();
             $tenantId = currentTenantId();
             if (!$tenantId) {
                 Response::error('Niet ingelogd', 'NO_SESSION', 401);

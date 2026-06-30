@@ -185,10 +185,18 @@ class AuthService
 
         // Voor gasten: stel cookie lifetime in op 60 dagen
         if ($user['role'] === 'guest') {
+            // SECURITY (H-3): Array-vorm bewaart SameSite=Lax flag.
+            // De oude positional call dropte SameSite, waardoor op oudere
+            // browsers SameSite=None als default gold — dat verzwakt CSRF.
             $params = session_get_cookie_params();
-            setcookie(session_name(), session_id(), time() + SESSION_COOKIE_LIFETIME_GUEST,
-                $params['path'], $params['domain'], $params['secure'], $params['httponly']
-            );
+            setcookie(session_name(), session_id(), [
+                'expires'  => time() + SESSION_COOKIE_LIFETIME_GUEST,
+                'path'     => $params['path'],
+                'domain'   => $params['domain'],
+                'secure'   => $params['secure'],
+                'httponly' => true,
+                'samesite' => 'Lax',
+            ]);
         }
 
         // Set core session data
